@@ -1,12 +1,12 @@
 from __future__ import annotations
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete as sa_delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator.models import Memory
-from memory_orchestrator.scoring import hybrid_score
+from memory_orchestrator.scoring import hybrid_score, truncate_by_budget
 
 
 class MemoryRepository:
@@ -132,6 +132,64 @@ class MemoryRepository:
                 .execution_options(synchronize_session="fetch")
             )
         return hits
+
+    async def build_context(
+        self,
+        *,
+        project_id: str,
+        budget_tokens: int = 1500,
+    ) -> str:
+        """Return a markdown snippet ready to inject into the system prompt."""
+        stmt = select(Memory).where(Memory.superseded_by.is_(None))
+        result = await self.session.execute(
+            stmt.where(
+                ((Memory.project_id == "*") & (Memory.type == "user"))
+                | (
+                    (Memory.project_id == project_id)
+                    & (Memory.type == "feedback")
+                    & (Memory.importance >= 3)
+                )
+                | (
+                    (Memory.project_id == project_id)
+                    & (Memory.type == "project")
+                    & (Memory.updated_at >= datetime.now(timezone.utc) - timedelta(days=14))
+                )
+            )
+        )
+        mems = list(result.scalars().all())
+
+        def estimate(m: Memory) -> int:
+            return max(1, int(len(m.name + m.description + (m.content or "")) / 3.5))
+
+        items = [
+            {
+                "memory": m,
+                "name": m.name,
+                "importance": m.importance,
+                "tokens": estimate(m),
+                "updated_at": m.updated_at,
+            }
+            for m in mems
+        ]
+        kept = truncate_by_budget(items, budget=budget_tokens)
+
+        if not kept:
+            return ""
+
+        lines = ["## Remembered context", ""]
+        for item in kept:
+            m: Memory = item["memory"]
+            lines.append(f"### [{m.type}] {m.name}")
+            lines.append(m.description)
+            if m.content:
+                lines.append("")
+                lines.append(m.content)
+            if m.why:
+                lines.append(f"\n**Why:** {m.why}")
+            if m.how_to_apply:
+                lines.append(f"**How to apply:** {m.how_to_apply}")
+            lines.append("")
+        return "\n".join(lines)
 
     async def delete(self, memory_id: uuid.UUID, *, hard: bool = False) -> None:
         if hard:

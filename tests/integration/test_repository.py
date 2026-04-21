@@ -114,3 +114,33 @@ async def test_vector_search_updates_hit_count(session):
     after = await repo.get(saved.id)
     assert after.hit_count == 1
     assert after.last_hit_at is not None
+
+
+@pytest.mark.asyncio
+async def test_build_context_includes_global_user(session):
+    repo = MemoryRepository(session)
+    await repo.save(
+        type="user", name="role", description="senior Go dev",
+        content="senior Go dev, new to Python", project_id="*", source="explicit",
+    )
+    md = await repo.build_context(project_id="github.com/a/b", budget_tokens=2000)
+    assert "role" in md
+    assert "senior Go dev" in md
+
+
+@pytest.mark.asyncio
+async def test_build_context_scopes_project_memories(session):
+    repo = MemoryRepository(session)
+    await repo.save(
+        type="feedback", name="no-mocks", description="integration tests no mocks",
+        content="tests must hit real DB", why="past incident", how_to_apply="all test work",
+        project_id="github.com/a/b", source="explicit", importance=5,
+    )
+    await repo.save(
+        type="feedback", name="other", description="other project rule",
+        content="x", why="x", how_to_apply="x",
+        project_id="github.com/c/d", source="explicit", importance=5,
+    )
+    md = await repo.build_context(project_id="github.com/a/b", budget_tokens=2000)
+    assert "no-mocks" in md
+    assert "other" not in md
