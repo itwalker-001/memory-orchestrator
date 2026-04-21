@@ -57,6 +57,32 @@ class MemoryRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_duplicates(
+        self,
+        *,
+        type: str,
+        project_id: str,
+        embedding: list[float],
+        threshold: float = 0.92,
+        limit: int = 5,
+    ) -> list[Memory]:
+        # pgvector cosine_distance = 1 - cosine_similarity
+        max_distance = 1.0 - threshold
+        stmt = (
+            select(Memory)
+            .where(
+                Memory.superseded_by.is_(None),
+                Memory.type == type,
+                Memory.project_id == project_id,
+                Memory.embedding.isnot(None),
+                Memory.embedding.cosine_distance(embedding) <= max_distance,
+            )
+            .order_by(Memory.embedding.cosine_distance(embedding))
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def delete(self, memory_id: uuid.UUID, *, hard: bool = False) -> None:
         if hard:
             await self.session.execute(

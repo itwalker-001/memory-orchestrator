@@ -37,3 +37,35 @@ async def test_delete_soft_supersedes_self(session):
     # record still exists
     raw = await repo.get(saved.id, include_superseded=True)
     assert raw.superseded_by == raw.id
+
+
+@pytest.mark.asyncio
+async def test_find_duplicates_by_embedding(session):
+    repo = MemoryRepository(session)
+    v1 = [1.0] + [0.0] * 511
+    # v1_near: [1.0, 0.3, 0, 0, ...] — cosine with v1 = 1/sqrt(1.09) ≈ 0.958 > 0.92
+    v1_near = [1.0, 0.3] + [0.0] * 510
+    await repo.save(
+        type="user", name="a", description="x", content="x",
+        project_id="*", source="explicit", embedding=v1,
+    )
+    dups = await repo.find_duplicates(
+        type="user", project_id="*", embedding=v1_near, threshold=0.92
+    )
+    assert len(dups) == 1
+    assert dups[0].name == "a"
+
+
+@pytest.mark.asyncio
+async def test_find_duplicates_respects_threshold(session):
+    repo = MemoryRepository(session)
+    v = [1.0] + [0.0] * 511
+    orthogonal = [0.0, 1.0] + [0.0] * 510  # cosine with v = 0, below any positive threshold
+    await repo.save(
+        type="user", name="a", description="x", content="x",
+        project_id="*", source="explicit", embedding=v,
+    )
+    dups = await repo.find_duplicates(
+        type="user", project_id="*", embedding=orthogonal, threshold=0.92
+    )
+    assert dups == []
