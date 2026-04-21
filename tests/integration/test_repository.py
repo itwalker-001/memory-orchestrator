@@ -69,3 +69,48 @@ async def test_find_duplicates_respects_threshold(session):
         type="user", project_id="*", embedding=orthogonal, threshold=0.92
     )
     assert dups == []
+
+
+@pytest.mark.asyncio
+async def test_vector_search_returns_scored_results(session):
+    repo = MemoryRepository(session)
+    v1 = [1.0] + [0.0] * 511
+    v2 = [0.0, 1.0] + [0.0] * 510
+    await repo.save(
+        type="user", name="first", description="x", content="x",
+        project_id="*", source="explicit", embedding=v1,
+    )
+    await repo.save(
+        type="user", name="second", description="x", content="x",
+        project_id="*", source="explicit", embedding=v2,
+    )
+    hits = await repo.search(query_embedding=v1, project_ids=["*"], top_k=2)
+    assert len(hits) == 2
+    assert hits[0].memory.name == "first"
+    assert hits[0].score > hits[1].score
+
+
+@pytest.mark.asyncio
+async def test_vector_search_filters_project(session):
+    repo = MemoryRepository(session)
+    v = [1.0] + [0.0] * 511
+    await repo.save(type="user", name="g", description="x", content="x",
+                    project_id="*", source="explicit", embedding=v)
+    await repo.save(type="project", name="p", description="x", content="x",
+                    project_id="github.com/a/b", source="explicit", embedding=v)
+    hits = await repo.search(query_embedding=v, project_ids=["github.com/a/b"], top_k=5)
+    assert [h.memory.name for h in hits] == ["p"]
+
+
+@pytest.mark.asyncio
+async def test_vector_search_updates_hit_count(session):
+    repo = MemoryRepository(session)
+    v = [1.0] + [0.0] * 511
+    saved = await repo.save(
+        type="user", name="x", description="x", content="x",
+        project_id="*", source="explicit", embedding=v,
+    )
+    await repo.search(query_embedding=v, project_ids=["*"], top_k=1, record_hits=True)
+    after = await repo.get(saved.id)
+    assert after.hit_count == 1
+    assert after.last_hit_at is not None

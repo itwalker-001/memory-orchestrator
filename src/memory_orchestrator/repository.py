@@ -1,10 +1,12 @@
 from __future__ import annotations
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from sqlalchemy import delete as sa_delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator.models import Memory
+from memory_orchestrator.scoring import hybrid_score
 
 
 class MemoryRepository:
@@ -83,6 +85,54 @@ class MemoryRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def search(
+        self,
+        *,
+        query_embedding: list[float],
+        project_ids: list[str],
+        types: list[str] | None = None,
+        top_k: int = 8,
+        record_hits: bool = False,
+    ) -> list[Hit]:
+        distance = Memory.embedding.cosine_distance(query_embedding)
+        stmt = (
+            select(Memory, distance.label("distance"))
+            .where(
+                Memory.superseded_by.is_(None),
+                Memory.project_id.in_(project_ids),
+                Memory.embedding.isnot(None),
+            )
+            .order_by(distance)
+            .limit(top_k * 3)  # over-fetch, re-rank by hybrid score, then cut to top_k
+        )
+        if types:
+            stmt = stmt.where(Memory.type.in_(types))
+        result = await self.session.execute(stmt)
+        rows = result.all()
+
+        hits: list[Hit] = []
+        for mem, dist in rows:
+            sim = 1.0 - float(dist)
+            score = hybrid_score(
+                cosine_sim=sim, importance=mem.importance, updated_at=mem.updated_at
+            )
+            hits.append(Hit(memory=mem, score=score, cosine_sim=sim))
+        hits.sort(key=lambda h: -h.score)
+        hits = hits[:top_k]
+
+        if record_hits and hits:
+            ids = [h.memory.id for h in hits]
+            await self.session.execute(
+                update(Memory)
+                .where(Memory.id.in_(ids))
+                .values(
+                    hit_count=Memory.hit_count + 1,
+                    last_hit_at=datetime.now(timezone.utc),
+                )
+                .execution_options(synchronize_session="fetch")
+            )
+        return hits
+
     async def delete(self, memory_id: uuid.UUID, *, hard: bool = False) -> None:
         if hard:
             await self.session.execute(
@@ -94,3 +144,10 @@ class MemoryRepository:
                     superseded_by=memory_id, updated_at=datetime.now(timezone.utc)
                 )
             )
+
+
+@dataclass
+class Hit:
+    memory: Memory
+    score: float
+    cosine_sim: float
