@@ -88,11 +88,12 @@ memory-orchestrator/
 
 ## Task 1: 项目骨架
 
+> **环境前置(已完成)**:本机 PG 16 在 `localhost:5433`,用户 `postgres`/密码 `1234`,已建库 `memory_orchestrator`,已 `CREATE EXTENSION vector` (0.8.2) 和 `pgcrypto`。**不使用** docker-compose Postgres。
+
 **Files:**
 - Create: `pyproject.toml`
-- Create: `docker-compose.yml`
 - Create: `.env.example`
-- Create: `.gitignore`
+- Append: `.gitignore`(已存在)
 - Create: `src/memory_orchestrator/__init__.py`
 
 - [ ] **Step 1: 写 pyproject.toml**
@@ -146,34 +147,10 @@ line-length = 100
 target-version = "py311"
 ```
 
-- [ ] **Step 2: 写 docker-compose.yml**
-
-```yaml
-version: "3.9"
-services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_USER: mo
-      POSTGRES_PASSWORD: mo
-      POSTGRES_DB: memory_orchestrator
-    ports:
-      - "5435:5432"
-    volumes:
-      - mo_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mo -d memory_orchestrator"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-volumes:
-  mo_pgdata:
-```
-
-- [ ] **Step 3: 写 .env.example**
+- [ ] **Step 2: 写 .env.example**
 
 ```env
-MO_DB_DSN=postgresql+asyncpg://mo:mo@localhost:5435/memory_orchestrator
+MO_DB_DSN=postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator
 MO_HTTP_PORT=8765
 MO_EMBED_MODEL=BAAI/bge-m3
 MO_EMBED_DIM=1024
@@ -184,7 +161,9 @@ ANTHROPIC_BASE_URL=
 ANTHROPIC_AUTH_TOKEN=
 ```
 
-- [ ] **Step 4: 写 .gitignore**
+- [ ] **Step 3: 追加 .gitignore 条目(文件已存在)**
+
+在现有 `.gitignore` 末尾追加(不要重复已有行):
 
 ```
 .venv/
@@ -200,7 +179,7 @@ build/
 .env.local
 ```
 
-- [ ] **Step 5: 空 package init**
+- [ ] **Step 4: 空 package init**
 
 写 `src/memory_orchestrator/__init__.py`:
 
@@ -208,15 +187,15 @@ build/
 __version__ = "0.1.0"
 ```
 
-- [ ] **Step 6: 起 Postgres 验证**
+- [ ] **Step 5: 验证本机 PG 连通**
 
-Run: `docker compose up -d postgres && docker compose exec postgres pg_isready -U mo -d memory_orchestrator`
-Expected: `localhost:5432 - accepting connections`
+Run: `PGPASSWORD=1234 psql -h localhost -p 5433 -U postgres -d memory_orchestrator -c "SELECT extname FROM pg_extension WHERE extname IN ('vector','pgcrypto');"`
+Expected: 两行:`vector`、`pgcrypto`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add pyproject.toml docker-compose.yml .env.example .gitignore src/memory_orchestrator/__init__.py
+git add pyproject.toml .env.example .gitignore src/memory_orchestrator/__init__.py
 git commit -m "chore: scaffold memory-orchestrator project"
 ```
 
@@ -238,7 +217,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MO_", env_file=".env", extra="ignore")
 
-    db_dsn: str = Field(default="postgresql+asyncpg://mo:mo@localhost:5435/memory_orchestrator")
+    db_dsn: str = Field(default="postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator")
     http_port: int = 8765
     embed_model: str = "BAAI/bge-m3"
     embed_dim: int = 1024
@@ -512,7 +491,7 @@ Expected: `Running upgrade  -> 0001, initial schema`
 
 - [ ] **Step 5: 校验建表**
 
-Run: `docker compose exec postgres psql -U mo -d memory_orchestrator -c "\dt"`
+Run: `PGPASSWORD=1234 psql -h localhost -p 5433 -U postgres -d memory_orchestrator -c "\dt"`
 Expected: 看到 4 张表 + alembic_version
 
 - [ ] **Step 6: Commit**
@@ -2758,10 +2737,9 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-- [ ] **Step 2: 跑 smoke(需要 Postgres 已起,schema 已迁移)**
+- [ ] **Step 2: 跑 smoke(本机 PG 已跑,schema 已迁移)**
 
 ```bash
-docker compose up -d postgres
 alembic upgrade head
 python scripts/smoke_save_search.py
 ```
@@ -2915,8 +2893,9 @@ memories across all projects via MCP.
 ## Quickstart
 
 ```bash
-# 1. Start Postgres
-docker compose up -d postgres
+# 1. Ensure local Postgres 16 is running with pgvector installed
+#    (see scripts/README.md for Windows pgvector install)
+#    Default DSN expects: localhost:5433, user postgres, db memory_orchestrator
 
 # 2. Install
 pip install -e ".[dev]"
@@ -2940,7 +2919,7 @@ Env vars (prefixed `MO_`), or `.env` in CWD:
 
 | Var | Default |
 |---|---|
-| `MO_DB_DSN` | `postgresql+asyncpg://mo:mo@localhost:5435/memory_orchestrator` |
+| `MO_DB_DSN` | `postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator` |
 | `MO_HTTP_PORT` | `8765` |
 | `MO_EMBED_MODEL` | `BAAI/bge-m3` |
 | `MO_HAIKU_MODEL` | `claude-haiku-4-5` |
