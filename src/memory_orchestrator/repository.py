@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import select, update
+from sqlalchemy import delete as sa_delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator.models import Memory
@@ -32,7 +32,6 @@ class MemoryRepository:
         )
         self.session.add(m)
         await self.session.flush()
-        await self.session.commit()
         return m
 
     async def get(self, memory_id: uuid.UUID, include_superseded: bool = False) -> Memory | None:
@@ -61,7 +60,7 @@ class MemoryRepository:
     async def delete(self, memory_id: uuid.UUID, *, hard: bool = False) -> None:
         if hard:
             await self.session.execute(
-                update(Memory).where(Memory.id == memory_id).values(superseded_by=memory_id)
+                sa_delete(Memory).where(Memory.id == memory_id)
             )
         else:
             await self.session.execute(
@@ -69,4 +68,3 @@ class MemoryRepository:
                     superseded_by=memory_id, updated_at=datetime.now(timezone.utc)
                 )
             )
-        await self.session.commit()

@@ -24,20 +24,25 @@ async def engine():
     await eng.dispose()
 
 
+@pytest_asyncio.fixture(scope="session")
+async def txn_engine():
+    eng = create_async_engine(TEST_DSN)
+    yield eng
+    await eng.dispose()
+
+
 @pytest_asyncio.fixture
-async def session(engine):
-    transactional_engine = create_async_engine(TEST_DSN)
-    maker = async_sessionmaker(transactional_engine, expire_on_commit=False, class_=AsyncSession)
+async def session(txn_engine):
+    maker = async_sessionmaker(txn_engine, expire_on_commit=False, class_=AsyncSession)
     async with maker() as s:
         yield s
-        await s.rollback()
-    await transactional_engine.dispose()
+        await s.commit()
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def _truncate(engine):
-    yield
     async with engine.connect() as conn:
         await conn.exec_driver_sql(
             "TRUNCATE memories, memory_links, sessions, projects CASCADE"
         )
+    yield
