@@ -4,9 +4,9 @@
 
 **Goal:** 实现一个独立的跨项目记忆中心服务,Claude Code 通过 MCP 接入,实现"模型主动 + Stop hook 自动"两条写入路径,以及"预注入 + 按需检索"两层读取路径。
 
-**Architecture:** 单 Python 进程同时暴露 MCP stdio 和 FastAPI HTTP。数据落 PostgreSQL 16 + pgvector,向量由本地 bge-m3 (FastEmbed) 生成。会话归纳复用用户 `~/.claude/settings.json` 中的 Claude API 凭据调 Haiku。
+**Architecture:** 单 Python 进程同时暴露 MCP stdio 和 FastAPI HTTP。数据落 PostgreSQL 16 + pgvector,向量由本地 bge-small-zh-v1.5 (FastEmbed) 生成。会话归纳复用用户 `~/.claude/settings.json` 中的 Claude API 凭据调 Haiku。
 
-**Tech Stack:** Python 3.11+、FastAPI、mcp Python SDK、SQLAlchemy 2 + asyncpg、pgvector、FastEmbed (bge-m3)、Alembic、Docker Compose、pytest + testcontainers-pg。
+**Tech Stack:** Python 3.11+、FastAPI、mcp Python SDK、SQLAlchemy 2 + asyncpg、pgvector、FastEmbed (bge-small-zh-v1.5)、Alembic、Docker Compose、pytest + testcontainers-pg。
 
 **Source spec:** `docs/superpowers/specs/2026-04-21-memory-orchestrator-design.md`
 
@@ -63,7 +63,7 @@ memory-orchestrator/
 | `models.py` | SQLAlchemy ORM:Memory / Project / MemoryLink / Session |
 | `project_id.py` | 纯函数:git remote/路径 → 归一化 project_id |
 | `scoring.py` | 纯函数:混合打分、recency_decay、token 预算截断 |
-| `embedder.py` | FastEmbed 封装,bge-m3 单例,async wrapper |
+| `embedder.py` | FastEmbed 封装,bge-small-zh-v1.5 单例,async wrapper |
 | `repository.py` | 所有 SQL,包括 CRUD、去重、向量搜索、context 拼装 |
 | `ingestor.py` | 读 transcript 增量 → 调 Haiku → 走 repository 落盘 |
 | `mcp_server.py` | MCP tools 注册 + 分发 |
@@ -152,8 +152,8 @@ target-version = "py311"
 ```env
 MO_DB_DSN=postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator
 MO_HTTP_PORT=8765
-MO_EMBED_MODEL=BAAI/bge-m3
-MO_EMBED_DIM=1024
+MO_EMBED_MODEL=BAAI/bge-small-zh-v1.5
+MO_EMBED_DIM=512
 MO_HAIKU_MODEL=claude-haiku-4-5
 MO_LOG_LEVEL=INFO
 # 以下沿用 ~/.claude/settings.json 同名值
@@ -219,8 +219,8 @@ class Settings(BaseSettings):
 
     db_dsn: str = Field(default="postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator")
     http_port: int = 8765
-    embed_model: str = "BAAI/bge-m3"
-    embed_dim: int = 1024
+    embed_model: str = "BAAI/bge-small-zh-v1.5"
+    embed_dim: int = 512
     haiku_model: str = "claude-haiku-4-5"
     log_level: str = "INFO"
 
@@ -238,7 +238,7 @@ def get_settings() -> Settings:
 ```bash
 python -c "from memory_orchestrator.config import get_settings; s = get_settings(); print(s.http_port, s.embed_model)"
 ```
-Expected: `8765 BAAI/bge-m3`
+Expected: `8765 BAAI/bge-small-zh-v1.5`
 
 - [ ] **Step 3: Commit**
 
@@ -772,13 +772,13 @@ def ensure_loaded() -> None:
 - [ ] **Step 2: 冒烟测试(手动,不算正式测试用例)**
 
 Run: `python -c "import asyncio; from memory_orchestrator.embedder import embed_one; v = asyncio.run(embed_one('hello')); print(len(v))"`
-Expected: `1024` (首次会下载 bge-m3,可能需 1-2 分钟)
+Expected: `512` (首次会下载 bge-small-zh-v1.5 (~90MB), 从 Google Cloud Storage 镜像, 快)
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/memory_orchestrator/embedder.py
-git commit -m "feat(embedder): bge-m3 via FastEmbed with async wrapper"
+git commit -m "feat(embedder): bge-small-zh-v1.5 via FastEmbed with async wrapper"
 ```
 
 ---
@@ -2921,7 +2921,7 @@ Env vars (prefixed `MO_`), or `.env` in CWD:
 |---|---|
 | `MO_DB_DSN` | `postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator` |
 | `MO_HTTP_PORT` | `8765` |
-| `MO_EMBED_MODEL` | `BAAI/bge-m3` |
+| `MO_EMBED_MODEL` | `BAAI/bge-small-zh-v1.5` |
 | `MO_HAIKU_MODEL` | `claude-haiku-4-5` |
 
 `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` are reused from

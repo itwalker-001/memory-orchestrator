@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("why", sa.Text()),
         sa.Column("how_to_apply", sa.Text()),
-        sa.Column("embedding", Vector(1024)),
+        sa.Column("embedding", Vector(512)),
         sa.Column("importance", sa.SmallInteger(), nullable=False, server_default="3"),
         sa.Column("hit_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("last_hit_at", sa.DateTime(timezone=True)),

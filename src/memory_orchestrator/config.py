@@ -8,8 +8,8 @@ class Settings(BaseSettings):
 
     db_dsn: str = Field(default="postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator")
     http_port: int = 8765
-    embed_model: str = "BAAI/bge-m3"
-    embed_dim: int = 1024
+    embed_model: str = "BAAI/bge-small-zh-v1.5"
+    embed_dim: int = 512
     haiku_model: str = "claude-haiku-4-5"
     log_level: str = "INFO"
 
