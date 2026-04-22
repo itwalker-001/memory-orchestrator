@@ -85,3 +85,115 @@ def parse_extraction_response(raw: str) -> list[dict]:
             continue
         validated.append(item)
     return validated
+
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from anthropic import AsyncAnthropic
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from memory_orchestrator.config import get_settings
+from memory_orchestrator.embedder import embed_one
+from memory_orchestrator.models import Session as SessionRow
+from memory_orchestrator.repository import MemoryRepository
+
+
+@dataclass
+class IngestResult:
+    extracted: int
+    saved: int
+    skipped: int
+
+
+async def ingest_session(
+    *,
+    db: AsyncSession,
+    session_id: str,
+    project_id: str,
+    transcript_path: str,
+) -> IngestResult:
+    settings = get_settings()
+
+    row = await db.get(SessionRow, session_id)
+    if row is None:
+        row = SessionRow(session_id=session_id, project_id=project_id, status="pending")
+        db.add(row)
+        await db.flush()
+
+    lines, new_offset = read_transcript_incremental(transcript_path, row.last_offset)
+    if not lines:
+        row.status = "done"
+        row.last_ingested_at = datetime.now(timezone.utc)
+        await db.commit()
+        return IngestResult(extracted=0, saved=0, skipped=0)
+
+    chunk = _render_chunk(lines)
+
+    client = AsyncAnthropic(
+        base_url=settings.anthropic_base_url or None,
+        api_key=settings.anthropic_auth_token or None,
+    )
+    try:
+        resp = await client.messages.create(
+            model=settings.haiku_model,
+            max_tokens=2048,
+            system=EXTRACTION_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": build_extraction_prompt(chunk, project_id)}],
+        )
+        raw = resp.content[0].text if resp.content else ""
+    except Exception as e:
+        row.status = "failed"
+        row.last_error = str(e)[:500]
+        await db.commit()
+        raise
+
+    candidates = parse_extraction_response(raw)
+
+    repo = MemoryRepository(db)
+    saved = 0
+    skipped = 0
+    for cand in candidates:
+        embedding = await embed_one(cand["content"])
+        pid = cand.get("project_id") or (project_id if cand["type"] != "user" else "*")
+        dups = await repo.find_duplicates(
+            type=cand["type"],
+            project_id=pid,
+            embedding=embedding,
+        )
+        if dups:
+            skipped += 1
+            continue
+        await repo.save(
+            type=cand["type"],
+            name=cand["name"],
+            description=cand["description"],
+            content=cand["content"],
+            why=cand.get("why"),
+            how_to_apply=cand.get("how_to_apply"),
+            importance=int(cand.get("importance", 3)),
+            project_id=pid,
+            source="auto_extracted",
+            embedding=embedding,
+        )
+        saved += 1
+
+    row.last_offset = new_offset
+    row.last_ingested_at = datetime.now(timezone.utc)
+    row.status = "done"
+    row.last_error = None
+    await db.commit()
+
+    return IngestResult(extracted=len(candidates), saved=saved, skipped=skipped)
+
+
+def _render_chunk(lines: list[dict]) -> str:
+    out: list[str] = []
+    for obj in lines:
+        role = obj.get("role") or obj.get("type") or "unknown"
+        content = obj.get("content") or obj.get("text") or ""
+        if isinstance(content, list):
+            content = "\n".join(
+                c.get("text", "") for c in content if isinstance(c, dict)
+            )
+        out.append(f"[{role}] {content}")
+    return "\n\n".join(out)
