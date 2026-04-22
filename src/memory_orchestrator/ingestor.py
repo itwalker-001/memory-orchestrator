@@ -1,7 +1,17 @@
 from __future__ import annotations
 import json
 import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+
+from anthropic import AsyncAnthropic
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from memory_orchestrator.config import get_settings
+from memory_orchestrator.embedder import embed_one
+from memory_orchestrator.models import Session as SessionRow
+from memory_orchestrator.repository import MemoryRepository
 
 
 def read_transcript_incremental(path: str, offset: int) -> tuple[list[dict], int]:
@@ -87,17 +97,6 @@ def parse_extraction_response(raw: str) -> list[dict]:
     return validated
 
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from anthropic import AsyncAnthropic
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from memory_orchestrator.config import get_settings
-from memory_orchestrator.embedder import embed_one
-from memory_orchestrator.models import Session as SessionRow
-from memory_orchestrator.repository import MemoryRepository
-
-
 @dataclass
 class IngestResult:
     extracted: int
@@ -152,30 +151,36 @@ async def ingest_session(
     repo = MemoryRepository(db)
     saved = 0
     skipped = 0
-    for cand in candidates:
-        embedding = await embed_one(cand["content"])
-        pid = cand.get("project_id") or (project_id if cand["type"] != "user" else "*")
-        dups = await repo.find_duplicates(
-            type=cand["type"],
-            project_id=pid,
-            embedding=embedding,
-        )
-        if dups:
-            skipped += 1
-            continue
-        await repo.save(
-            type=cand["type"],
-            name=cand["name"],
-            description=cand["description"],
-            content=cand["content"],
-            why=cand.get("why"),
-            how_to_apply=cand.get("how_to_apply"),
-            importance=int(cand.get("importance", 3)),
-            project_id=pid,
-            source="auto_extracted",
-            embedding=embedding,
-        )
-        saved += 1
+    try:
+        for cand in candidates:
+            embedding = await embed_one(cand["content"])
+            pid = cand.get("project_id") or (project_id if cand["type"] != "user" else "*")
+            dups = await repo.find_duplicates(
+                type=cand["type"],
+                project_id=pid,
+                embedding=embedding,
+            )
+            if dups:
+                skipped += 1
+                continue
+            await repo.save(
+                type=cand["type"],
+                name=cand["name"],
+                description=cand["description"],
+                content=cand["content"],
+                why=cand.get("why"),
+                how_to_apply=cand.get("how_to_apply"),
+                importance=int(cand.get("importance", 3)),
+                project_id=pid,
+                source="auto_extracted",
+                embedding=embedding,
+            )
+            saved += 1
+    except Exception as e:
+        row.status = "failed"
+        row.last_error = str(e)[:500]
+        await db.commit()
+        raise
 
     row.last_offset = new_offset
     row.last_ingested_at = datetime.now(timezone.utc)
