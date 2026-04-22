@@ -3,8 +3,11 @@ from memory_orchestrator.ingestor import build_extraction_prompt, parse_extracti
 
 
 def test_prompt_mentions_four_types():
-    p = build_extraction_prompt(transcript_chunk="dummy", project_id="x")
-    assert "user" in p and "feedback" in p and "project" in p and "reference" in p
+    from memory_orchestrator.ingestor import EXTRACTION_SYSTEM_PROMPT
+    assert "user" in EXTRACTION_SYSTEM_PROMPT
+    assert "feedback" in EXTRACTION_SYSTEM_PROMPT
+    assert "project" in EXTRACTION_SYSTEM_PROMPT
+    assert "reference" in EXTRACTION_SYSTEM_PROMPT
 
 
 def test_parse_valid_json_array():

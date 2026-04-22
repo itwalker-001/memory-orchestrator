@@ -54,7 +54,6 @@ Output ONLY the JSON array. No prose, no code fence."""
 
 def build_extraction_prompt(transcript_chunk: str, project_id: str) -> str:
     return (
-        f"{EXTRACTION_SYSTEM_PROMPT}\n\n"
         f"Project: {project_id}\n\n"
         f"Transcript chunk:\n<transcript>\n{transcript_chunk}\n</transcript>\n\n"
         f"Extract memories now."
