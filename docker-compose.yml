@@ -1,0 +1,43 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: memory_orchestrator
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${MO_DB_PASSWORD:-mo_secret}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    command: >
+      sh -c "alembic upgrade head"
+    environment:
+      MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    ports:
+      - "${MO_HTTP_PORT:-8765}:8765"
+    environment:
+      MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
+      MO_HTTP_PORT: "8765"
+      MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL:-}
+      MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL:-gpt-4o-mini}
+      MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY:-}
+      HF_HUB_OFFLINE: "1"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:
