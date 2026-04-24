@@ -10,11 +10,11 @@ class Settings(BaseSettings):
     http_port: int = 8765
     embed_model: str = "BAAI/bge-small-zh-v1.5"
     embed_dim: int = 512
-    haiku_model: str = "claude-haiku-4-5"
-    log_level: str = "INFO"
+    log_level: str = "DEBUG"
 
-    anthropic_base_url: str = Field(default="", validation_alias="ANTHROPIC_BASE_URL")
-    anthropic_auth_token: str = Field(default="", validation_alias="ANTHROPIC_AUTH_TOKEN")
+    extraction_base_url: str = Field(default="", validation_alias="MO_EXTRACTION_BASE_URL")
+    extraction_model: str = Field(default="gpt-4o-mini", validation_alias="MO_EXTRACTION_MODEL")
+    extraction_api_key: str = Field(default="local", validation_alias="MO_EXTRACTION_API_KEY")
 
 
 @lru_cache(maxsize=1)

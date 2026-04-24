@@ -1,16 +1,16 @@
 from __future__ import annotations
 import json
 import re
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator.config import get_settings
 from memory_orchestrator.embedder import embed_one
-from memory_orchestrator.models import Session as SessionRow
+from memory_orchestrator.models import GLOBAL_PROJECT_ID, Session as SessionRow
 from memory_orchestrator.repository import MemoryRepository
 
 
@@ -108,10 +108,15 @@ async def ingest_session(
     *,
     db: AsyncSession,
     session_id: str,
-    project_id: str,
+    project_id: uuid.UUID,
     transcript_path: str,
 ) -> IngestResult:
-    settings = get_settings()
+    _env = get_settings()
+    repo = MemoryRepository(db)
+    _cfg = await repo.get_settings()
+    extraction_base_url = _cfg.get("extraction_base_url") or _env.extraction_base_url or None
+    extraction_model = _cfg.get("extraction_model") or _env.extraction_model
+    extraction_api_key = _cfg.get("extraction_api_key") or _env.extraction_api_key or "local"
 
     row = await db.get(SessionRow, session_id)
     if row is None:
@@ -128,18 +133,21 @@ async def ingest_session(
 
     chunk = _render_chunk(lines)
 
-    client = AsyncAnthropic(
-        base_url=settings.anthropic_base_url or None,
-        api_key=settings.anthropic_auth_token or None,
-    )
     try:
-        resp = await client.messages.create(
-            model=settings.haiku_model,
-            max_tokens=2048,
-            system=EXTRACTION_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": build_extraction_prompt(chunk, project_id)}],
+        from openai import AsyncOpenAI
+        oc = AsyncOpenAI(
+            base_url=extraction_base_url,
+            api_key=extraction_api_key,
         )
-        raw = resp.content[0].text if resp.content else ""
+        resp = await oc.chat.completions.create(
+            model=extraction_model,
+            max_tokens=2048,
+            messages=[
+                {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                {"role": "user", "content": build_extraction_prompt(chunk, str(project_id))},
+            ],
+        )
+        raw = resp.choices[0].message.content or ""
     except Exception as e:
         row.status = "failed"
         row.last_error = str(e)[:500]
@@ -148,18 +156,13 @@ async def ingest_session(
 
     candidates = parse_extraction_response(raw)
 
-    repo = MemoryRepository(db)
     saved = 0
     skipped = 0
     try:
         for cand in candidates:
             embedding = await embed_one(cand["content"])
-            pid = cand.get("project_id") or (project_id if cand["type"] != "user" else "*")
-            dups = await repo.find_duplicates(
-                type=cand["type"],
-                project_id=pid,
-                embedding=embedding,
-            )
+            cand_pid = GLOBAL_PROJECT_ID if cand["type"] == "user" else project_id
+            dups = await repo.find_duplicates(type=cand["type"], project_id=cand_pid, embedding=embedding)
             if dups:
                 skipped += 1
                 continue
@@ -171,7 +174,7 @@ async def ingest_session(
                 why=cand.get("why"),
                 how_to_apply=cand.get("how_to_apply"),
                 importance=int(cand.get("importance", 3)),
-                project_id=pid,
+                project_id=cand_pid,
                 source="auto_extracted",
                 embedding=embedding,
             )

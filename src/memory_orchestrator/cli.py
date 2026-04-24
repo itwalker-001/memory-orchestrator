@@ -40,10 +40,47 @@ def serve() -> None:
 @main.command(name="serve-http")
 def serve_http() -> None:
     """Run only HTTP API."""
+    import logging.config
     import uvicorn
     from memory_orchestrator.http_app import create_app
     settings = get_settings()
-    uvicorn.run(create_app(), host="127.0.0.1", port=settings.http_port, log_level=settings.log_level.lower())
+
+    log_dir = Path(__file__).parent.parent.parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_file = str(log_dir / "http.log")
+
+    logging.config.dictConfig({
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
+        },
+        "handlers": {
+            "console": {"class": "logging.StreamHandler", "formatter": "default"},
+            "file": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "filename": log_file,
+                "maxBytes": 10 * 1024 * 1024,
+                "backupCount": 3,
+                "encoding": "utf-8",
+                "formatter": "default",
+            },
+        },
+        "root": {"handlers": ["console", "file"], "level": settings.log_level},
+        "loggers": {
+            "uvicorn": {"handlers": ["console", "file"], "level": settings.log_level, "propagate": False},
+            "uvicorn.access": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"handlers": ["console", "file"], "level": "DEBUG", "propagate": False},
+        },
+    })
+
+    uvicorn.run(
+        create_app(),
+        host="127.0.0.1",
+        port=settings.http_port,
+        log_level=settings.log_level.lower(),
+        log_config=None,
+    )
 
 
 @main.command(name="serve-mcp")
@@ -87,31 +124,46 @@ def doctor() -> None:
     sys.exit(0 if ok else 1)
 
 
-@main.command(name="install-hooks")
+@main.command(name="setup")
 @click.option("--scope", type=click.Choice(["user", "project"]), default="user")
 def install_hooks(scope: str) -> None:
-    """Wire hooks and mcpServers into Claude settings.json."""
+    """Wire hooks, mcpServers, and skill into Claude settings.json."""
     path = (Path.home() if scope == "user" else Path.cwd()) / ".claude" / "settings.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     cfg = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     hooks_dir = (Path(__file__).parent.parent.parent / "hooks").resolve()
     cfg.setdefault("hooks", {})
-    cfg["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": f"python {hooks_dir / 'user_prompt_submit.py'}"}]}]
-    cfg["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": f"python {hooks_dir / 'stop.py'}"}]}]
+    project_dir = (Path(__file__).parent.parent.parent).resolve().as_posix()
+    ups = (hooks_dir / "user_prompt_submit.py").as_posix()
+    stp = (hooks_dir / "stop.py").as_posix()
+    cfg["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": f"uv run --project {project_dir} python {ups}"}]}]
+    cfg["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": f"uv run --project {project_dir} python {stp}"}]}]
+
+    project_dir = (Path(__file__).parent.parent.parent).resolve().as_posix()
     cfg.setdefault("mcpServers", {})
     cfg["mcpServers"]["memory-orchestrator"] = {
-        "command": sys.executable,
-        "args": ["-m", "memory_orchestrator.cli", "serve-mcp"],
-        "env": {"MO_HTTP_PORT": str(get_settings().http_port), "MO_DB_DSN": get_settings().db_dsn},
+        "type": "stdio",
+        "command": "uv",
+        "args": ["run", "--project", project_dir, "mo", "serve-mcp"],
     }
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     click.echo(f"wrote {path}")
 
+    # install skill into ~/.claude/skills/memory-orchestrator/
+    skill_src = (Path(__file__).parent.parent.parent / "skills" / "memory-orchestrator" / "SKILL.md").resolve()
+    skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator" / "SKILL.md"
+    if skill_src.exists():
+        skill_dst.parent.mkdir(parents=True, exist_ok=True)
+        skill_dst.write_bytes(skill_src.read_bytes())
+        click.echo(f"installed skill → {skill_dst}")
+    else:
+        click.echo("skill file not found, skipping")
 
-@main.command(name="uninstall-hooks")
+
+@main.command(name="teardown")
 @click.option("--scope", type=click.Choice(["user", "project"]), default="user")
 def uninstall_hooks(scope: str) -> None:
-    """Remove hooks and mcpServers entry from Claude settings.json."""
+    """Remove hooks, mcpServers entry, and skill from Claude settings.json."""
     path = (Path.home() if scope == "user" else Path.cwd()) / ".claude" / "settings.json"
     if not path.exists():
         click.echo("nothing to remove")
@@ -122,3 +174,7 @@ def uninstall_hooks(scope: str) -> None:
     cfg.get("mcpServers", {}).pop("memory-orchestrator", None)
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     click.echo(f"cleaned {path}")
+
+
+if __name__ == "__main__":
+    main()

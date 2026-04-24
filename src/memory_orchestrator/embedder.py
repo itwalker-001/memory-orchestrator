@@ -8,6 +8,8 @@ from memory_orchestrator.config import get_settings
 
 @lru_cache(maxsize=1)
 def _model() -> TextEmbedding:
+    import os
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
     return TextEmbedding(model_name=get_settings().embed_model)
 
 

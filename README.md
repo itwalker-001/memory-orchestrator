@@ -15,16 +15,16 @@ memories across all projects via MCP and HTTP API.
 #    psql -U postgres -d memory_orchestrator_test -c "CREATE EXTENSION vector; CREATE EXTENSION pgcrypto;"
 
 # 3. Install
-pip install -e ".[dev]"
+uv sync
 
 # 4. Migrate DB
-alembic upgrade head
+uv run alembic upgrade head
 
 # 5. Wire hooks + MCP server into ~/.claude/settings.json
-mo install-hooks --scope user
+uv run mo setup --scope user
 
 # 6. Run the service (in another terminal)
-mo serve-http
+uv run mo serve-http
 ```
 
 Open Claude Code in any project. The UserPromptSubmit hook pre-injects
@@ -61,10 +61,10 @@ After `mo serve-http` is running:
 
 ```bash
 # Save/search roundtrip via MCP
-python scripts/smoke_save_search.py
+uv run python scripts/smoke_save_search.py
 
 # Ingest a fake transcript (requires ANTHROPIC_AUTH_TOKEN)
-python scripts/smoke_ingest.py
+uv run python scripts/smoke_ingest.py
 ```
 
 ## Docs

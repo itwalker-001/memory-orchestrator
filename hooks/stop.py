@@ -12,9 +12,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-_DEFAULT_PORT = int(os.environ.get("MO_HTTP_PORT", "8765"))
-_COOLDOWN_SEC = 600
-_MIN_TURNS = 3
+_DEFAULT_PORT = 8765
+_COOLDOWN_SEC = 300
+_MIN_TURNS = 1
 _STATE_DIR = Path.home() / ".claude" / "memory-orchestrator"
 _LOG_PATH = _STATE_DIR / "hook.log"
 
@@ -72,7 +72,7 @@ def _normalize_remote(remote: str) -> str | None:
     if not remote:
         return None
     remote = remote.strip()
-    ssh = re.match(r"^git@([^:]+):(.+?)(?:\.git)?/$", remote)
+    ssh = re.match(r"^git@([^:]+):(.+?)(?:\.git)?/?$", remote)
     if ssh:
         return f"{ssh.group(1).lower()}/{ssh.group(2).lower()}"
     http = re.match(r"^https?://(?:[^@]+@)?([^/]+)/(.+?)(?:\.git)?/?$", remote)
@@ -82,6 +82,7 @@ def _normalize_remote(remote: str) -> str | None:
 
 
 def _detect_project_id(cwd: str) -> str:
+    p = Path(cwd).resolve()
     try:
         out = subprocess.run(
             ["git", "-C", cwd, "config", "--get", "remote.origin.url"],
@@ -91,10 +92,16 @@ def _detect_project_id(cwd: str) -> str:
             n = _normalize_remote(out.stdout.strip())
             if n:
                 return n
+        root_out = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=1,
+        )
+        if root_out.returncode == 0:
+            p = Path(root_out.stdout.strip())
     except Exception:
         pass
-    h = hashlib.sha256(str(Path(cwd).resolve()).encode()).hexdigest()
-    return f"local:{h[:12]}"
+    short = hashlib.sha256(str(p).encode()).hexdigest()[:8]
+    return f"local:{p.name}-{short}"
 
 
 def main() -> int:
@@ -119,7 +126,7 @@ def main() -> int:
 
     body = json.dumps({
         "session_id": session_id,
-        "project_id": project_id,
+        "project_slug": project_id,
         "transcript_path": transcript_path,
     }).encode("utf-8")
     req = urllib.request.Request(
