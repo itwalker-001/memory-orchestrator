@@ -23,6 +23,7 @@ class Project(Base):
     root_paths: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    memory_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
 
 class Memory(Base):

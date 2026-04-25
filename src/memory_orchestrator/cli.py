@@ -136,18 +136,24 @@ def install_hooks(scope: str) -> None:
     project_dir = (Path(__file__).parent.parent.parent).resolve().as_posix()
     ups = (hooks_dir / "user_prompt_submit.py").as_posix()
     stp = (hooks_dir / "stop.py").as_posix()
-    cfg["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": f"uv run --project {project_dir} python {ups}"}]}]
-    cfg["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": f"uv run --project {project_dir} python {stp}"}]}]
+    cfg["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": f"uv run --no-sync --project {project_dir} python {ups}"}]}]
+    cfg["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": f"uv run --no-sync --project {project_dir} python {stp}"}]}]
 
-    project_dir = (Path(__file__).parent.parent.parent).resolve().as_posix()
-    cfg.setdefault("mcpServers", {})
-    cfg["mcpServers"]["memory-orchestrator"] = {
-        "type": "stdio",
-        "command": "uv",
-        "args": ["run", "--project", project_dir, "mo", "serve-mcp"],
-    }
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     click.echo(f"wrote {path}")
+
+    # Register MCP server via claude CLI
+    import subprocess as _sp
+    mcp_scope = "user" if scope == "user" else "project"
+    result = _sp.run(
+        ["claude", "mcp", "add", "--scope", mcp_scope, "memory-orchestrator",
+         "--", "uv", "run", "--no-sync", "--project", project_dir, "mo", "serve-mcp"],
+        capture_output=True, text=True,
+    )
+    if result.returncode == 0:
+        click.echo(f"mcp: {result.stdout.strip()}")
+    else:
+        click.echo(f"mcp add failed (run manually): claude mcp add --scope {mcp_scope} memory-orchestrator -- uv run --no-sync --project {project_dir} mo serve-mcp")
 
     # install skill into ~/.claude/skills/memory-orchestrator/
     skill_src = (Path(__file__).parent.parent.parent / "skills" / "memory-orchestrator" / "SKILL.md").resolve()

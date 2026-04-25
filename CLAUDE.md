@@ -79,7 +79,7 @@ All settings are editable at `/ui` → Settings without restart, except `db_dsn`
 
 - `hooks/user_prompt_submit.py` — reads `CLAUDE_PROJECT_DIR`, calls `/context`, writes markdown to stdout (Claude Code prepends it to system prompt).
 - `hooks/stop.py` — reads transcript JSONL to count new user turns; fires `/ingest` if cooldown and min-turns thresholds are met; persists state in `~/.claude/memory-orchestrator/stop-<session_id>.json`.
-- Hook commands use `uv run --project <abs-path> python <hook.py>` so they are isolated from the calling shell's Python.
+- Hook commands use `uv run --no-sync --project <abs-path> python <hook.py>` — `--no-sync` prevents uv from trying to reinstall the package, which would fail with a file-lock error when `mo serve-http` is already running.
 
 ### Frontend
 

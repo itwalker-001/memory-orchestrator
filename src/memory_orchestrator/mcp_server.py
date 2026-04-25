@@ -107,13 +107,22 @@ async def handle_delete_memory(*, session: AsyncSession, args: dict, **_) -> dic
 
 
 async def handle_promote_memory(*, session: AsyncSession, args: dict, **_) -> dict:
+    from memory_orchestrator.repository import _sync_project_count
+    memory_id = uuid.UUID(args["id"])
     values: dict = {}
     if "importance" in args:
         values["importance"] = int(args["importance"])
+    old_project_id = None
     if args.get("make_global"):
+        from sqlalchemy import select as sa_select
+        row = await session.execute(sa_select(Memory.project_id).where(Memory.id == memory_id))
+        old_project_id = row.scalar_one_or_none()
         values["project_id"] = GLOBAL_PROJECT_ID
     if values:
-        await session.execute(update(Memory).where(Memory.id == uuid.UUID(args["id"])).values(**values))
+        await session.execute(update(Memory).where(Memory.id == memory_id).values(**values))
+    if old_project_id and old_project_id != GLOBAL_PROJECT_ID:
+        await session.execute(_sync_project_count(old_project_id))
+        await session.execute(_sync_project_count(GLOBAL_PROJECT_ID))
     return {"updated": True, "changes": list(values.keys())}
 
 

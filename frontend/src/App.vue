@@ -61,7 +61,7 @@
           </svg>
           <select v-model="selectedProject" @change="load">
             <option value="">All Projects</option>
-            <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }}</option>
+            <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }} ({{ p.memory_count }})</option>
           </select>
         </div>
         <div class="select-wrap">
@@ -98,13 +98,12 @@
       <table>
         <colgroup>
           <col style="width:90px">
-          <col style="width:110px">
+          <col style="width:80px">
           <col style="width:160px">
           <col>
-          <col style="width:96px">
-          <col style="width:68px">
+          <col style="width:64px">
           <col style="width:140px">
-          <col style="width:36px">
+          <col style="width:52px">
         </colgroup>
         <thead>
           <tr>
@@ -112,7 +111,6 @@
             <th>Project</th>
             <th>Name</th>
             <th>Description</th>
-            <th>Importance</th>
             <th class="sortable" @click="toggleSort('hits')">
               Hits <span class="sort-icon" v-if="sortBy === 'hits'">{{ sortDesc ? '↓' : '↑' }}</span>
             </th>
@@ -124,31 +122,34 @@
         </thead>
         <tbody>
           <template v-for="m in paged" :key="m.id">
-            <tr @click="toggle(m.id)" :class="{ active: expanded === m.id }">
+            <tr @click="toggle(m.id)" :class="['type-' + m.type, { active: expanded === m.id }]">
               <td><span :class="['tag', m.type]">{{ m.type }}</span></td>
-              <td class="project-cell" @mouseenter="showTip($event, projectMap[m.project_id] || '—')" @mouseleave="hideTip">{{ projectMap[m.project_id] || '—' }}</td>
+              <td class="project-cell" @mouseenter="showTip($event, projectMap[m.project_id] || '—')" @mouseleave="hideTip">
+                <span v-if="projectMap[m.project_id]" :class="['project-badge', projectColorClass(m.project_id)]">{{ projectAbbr(m.project_id) }}</span>
+                <span v-else class="hit-zero">—</span>
+              </td>
               <td class="name" @mouseenter="showTip($event, m.name)" @mouseleave="hideTip">{{ m.name }}</td>
               <td><div class="desc" @mouseenter="showTip($event, m.description)" @mouseleave="hideTip">{{ m.description }}</div></td>
-              <td><div class="imp">
-                <div class="imp-track"><div class="imp-fill" :style="{ width: m.importance * 20 + '%', background: impColor(m.importance) }"></div></div>
-                <span class="imp-num">{{ m.importance }}</span>
-              </div></td>
               <td class="hit" :class="{ 'hit-active': m.hit_count > 0 }">
                 <span v-if="m.hit_count > 0" class="hit-pill">{{ m.hit_count }}</span>
                 <span v-else class="hit-zero">—</span>
               </td>
               <td class="date">{{ fmtDate(m.updated_at) }}</td>
               <td>
-                <button class="btn-del" @click.stop="del(m)" title="Soft delete" aria-label="Delete">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <div class="row-actions">
+                  <button class="btn-del" @click.stop="del(m)" title="Delete" aria-label="Delete">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                    </svg>
+                  </button>
+                  <svg class="row-chevron" :class="{open: expanded === m.id}" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
-                </button>
+                </div>
               </td>
             </tr>
             <tr v-if="expanded === m.id" class="detail-row">
-              <td colspan="8">
+              <td colspan="7">
                 <div class="detail">
                   <div class="content-block">
                     <div class="block-label">Content</div>
@@ -184,23 +185,28 @@
                     <span class="block-label">Move to project</span>
                     <select class="move-select" v-model="moveTarget[m.id]">
                       <option value="">— Select project —</option>
-                      <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }}</option>
+                      <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }} ({{ p.memory_count }})</option>
                     </select>
-                    <button class="btn-move" :disabled="!moveTarget[m.id]" @click.stop="moveMemory(m)">Move</button>
-                    <span class="copy-hint" v-if="moved === m.id">Moved</span>
+                    <button class="btn-move" :disabled="!moveTarget[m.id] || isMoving[m.id]" @click.stop="moveMemory(m)">
+                      {{ isMoving[m.id] ? 'Moving…' : 'Move' }}
+                    </button>
+                    <span class="copy-hint" v-if="moved === m.id">Moved ✓</span>
+                    <span class="save-hint err" v-if="moveError[m.id]">{{ moveError[m.id] }}</span>
                   </div>
                 </div>
               </td>
             </tr>
           </template>
           <tr v-if="paged.length === 0">
-            <td colspan="8" class="empty">
+            <td colspan="7" class="empty">
               <div class="empty-inner">
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" opacity="0.3">
-                  <circle cx="16" cy="16" r="14" stroke="#8b949e" stroke-width="1.5"/>
-                  <line x1="10" y1="16" x2="22" y2="16" stroke="#8b949e" stroke-width="1.5" stroke-linecap="round"/>
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.25">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M3 5v4c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+                  <path d="M3 9v4c0 1.66 4.03 3 9 3s9-1.34 9-3V9"/>
+                  <path d="M3 13v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4"/>
                 </svg>
-                <span>{{ searchText ? 'No matching memories' : 'No memories yet' }}</span>
+                <span>{{ searchText || selectedType || selectedProject ? 'No memories match the current filters' : 'No memories yet — start a Claude Code session to capture some' }}</span>
               </div>
             </td>
           </tr>
@@ -225,7 +231,7 @@
   </div>
   <Teleport to="body">
     <div v-if="tip.visible" class="tooltip-popup" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
-    <div v-if="settingsOpen" class="modal-overlay" @click.self="settingsOpen = false">
+    <div v-if="settingsOpen" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <span class="modal-title">Settings</span>
@@ -249,10 +255,35 @@
             </label>
             <label class="field-row">
               <span class="field-label" @mouseenter="showTip($event, 'Model name used to extract memories from session transcripts')" @mouseleave="hideTip">Model</span>
-              <input v-model="form.extraction_model" class="field-input" placeholder="gpt-4o-mini" list="model-list" />
-              <datalist id="model-list">
-                <option v-for="m in availableModels" :key="m" :value="m" />
-              </datalist>
+              <div class="combobox-wrap">
+                <input
+                  v-model="form.extraction_model"
+                  class="field-input combobox-input"
+                  placeholder="gpt-4o-mini"
+                  autocomplete="off"
+                  @focus="onModelFocus"
+                  @blur="onModelBlur"
+                  @input="modelHighlight = -1"
+                  @keydown="onModelKeydown"
+                />
+                <svg v-if="availableModels.length" class="combobox-chevron" :class="{open: modelDropOpen}" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div v-if="modelDropOpen && modelFilteredList.length" class="combobox-dropdown">
+                  <div
+                    v-for="(m, i) in modelFilteredList" :key="m"
+                    :class="['combobox-option', {highlighted: i === modelHighlight, selected: m === form.extraction_model}]"
+                    @mousedown.prevent="selectModel(m)"
+                  >
+                    <span class="combobox-check">
+                      <svg v-if="m === form.extraction_model" width="11" height="11" viewBox="0 0 11 11" fill="none">
+                        <path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </span>
+                    {{ m }}
+                  </div>
+                </div>
+              </div>
               <button class="btn-fetch-models" @click.prevent="fetchModels" :disabled="!form.extraction_base_url || isFetchingModels" type="button" title="Fetch models from Base URL">
                 <svg v-if="!isFetchingModels" width="11" height="11" viewBox="0 0 11 11" fill="none">
                   <path d="M10 5.5A4.5 4.5 0 1 1 5.5 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -317,6 +348,30 @@
         </div>
       </div>
     </div>
+    <div v-if="deleteTarget" class="modal-overlay">
+      <div class="modal modal-sm">
+        <div class="modal-header">
+          <span class="modal-title">Delete memory</span>
+          <button class="modal-close" @click="deleteTarget = null">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body delete-modal-body">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+          </svg>
+          <p class="delete-confirm-text">Delete <strong>{{ deleteTarget.name }}</strong>?</p>
+          <p class="delete-confirm-sub">This memory will be soft-deleted and removed from context injection.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="deleteTarget = null">Cancel</button>
+          <button class="btn-danger" @click="confirmDelete" :disabled="isDeleting">{{ isDeleting ? 'Deleting…' : 'Delete' }}</button>
+        </div>
+      </div>
+    </div>
   </Teleport>
 </template>
 
@@ -361,6 +416,8 @@ async function load() {
     if (selectedType.value) params.set('type', selectedType.value)
     if (searchText.value) params.set('q', searchText.value)
     params.set('limit', '200')
+    params.set('sort_by', sortBy.value)
+    params.set('sort_desc', sortDesc.value ? 'true' : 'false')
     const [mems, st] = await Promise.all([
       fetch(`${BASE}/memories?${params}`).then(r => r.json()),
       fetch(`${BASE}/stats${selectedProject.value ? '?project_slug=' + selectedProject.value : ''}`).then(r => r.json())
@@ -372,23 +429,22 @@ async function load() {
   }
 }
 
-async function del(m) {
-  if (!confirm(`Soft-delete "${m.name}"?`)) return
-  await fetch(`${BASE}/memories/${m.id}`, { method: 'DELETE' })
-  await load()
+const deleteTarget = ref(null)
+const isDeleting = ref(false)
+function del(m) { deleteTarget.value = m }
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  isDeleting.value = true
+  try {
+    await fetch(`${BASE}/memories/${deleteTarget.value.id}`, { method: 'DELETE' })
+    deleteTarget.value = null
+    await load()
+  } finally {
+    isDeleting.value = false
+  }
 }
 
-const sorted = computed(() => {
-  const list = [...memories.value]
-  if (sortBy.value === 'hits') {
-    return list.sort((a, b) => sortDesc.value ? b.hit_count - a.hit_count : a.hit_count - b.hit_count)
-  }
-  return list.sort((a, b) => sortDesc.value
-    ? new Date(b.updated_at) - new Date(a.updated_at)
-    : new Date(a.updated_at) - new Date(b.updated_at))
-})
-
-const filtered = computed(() => sorted.value)
+const filtered = computed(() => memories.value)
 
 let searchTimer = null
 watch(searchText, () => {
@@ -398,14 +454,28 @@ watch(searchText, () => {
 
 const moveTarget = ref({})
 const moved = ref(null)
+const isMoving = ref({})
+const moveError = ref({})
 async function moveMemory(m) {
   const slug = moveTarget.value[m.id]
   if (!slug) return
-  await fetch(`${BASE}/memories/${m.id}/move?project_slug=${encodeURIComponent(slug)}`, { method: 'PATCH' })
-  moved.value = m.id
-  setTimeout(() => { moved.value = null }, 1800)
-  moveTarget.value[m.id] = ''
-  await load()
+  isMoving.value[m.id] = true
+  moveError.value[m.id] = ''
+  try {
+    const r = await fetch(`${BASE}/memories/${m.id}/move?project_slug=${encodeURIComponent(slug)}`, { method: 'PATCH' })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      moveError.value[m.id] = `Failed: ${err.detail || r.statusText}`
+      setTimeout(() => { moveError.value[m.id] = '' }, 3000)
+      return
+    }
+    moved.value = m.id
+    setTimeout(() => { moved.value = null }, 1800)
+    moveTarget.value[m.id] = ''
+    await load()
+  } finally {
+    isMoving.value[m.id] = false
+  }
 }
 
 const page = ref(1)
@@ -430,8 +500,25 @@ function hideTip() { tip.value.visible = false }
 const IMP_COLORS = ['', '#f85149', '#d29922', '#e3b341', '#58a6ff', '#3fb950']
 function impColor(n) { return IMP_COLORS[Math.min(Math.max(n, 1), 5)] }
 
+const PROJECT_COLOR_CLASSES = ['project', 'feedback', 'user', 'reference']
+function projectColorClass(id) {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xff
+  return PROJECT_COLOR_CLASSES[h % PROJECT_COLOR_CLASSES.length]
+}
+function projectAbbr(id) {
+  const name = projectMap.value[id] || ''
+  if (!name) return '?'
+  const seg = name.split(/[/\\:]/).filter(Boolean).pop() || name
+  const words = seg.split(/[-_\s]+/).filter(Boolean)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  return seg.slice(0, 2).toUpperCase()
+}
+
 function toggleSort(col) {
   if (sortBy.value === col) { sortDesc.value = !sortDesc.value } else { sortBy.value = col; sortDesc.value = true }
+  page.value = 1
+  load()
 }
 function toggle(id) { expanded.value = expanded.value === id ? null : id }
 function resetFilters() {
@@ -478,7 +565,50 @@ const isSaving = ref(false)
 const saveHint = ref('')
 const availableModels = ref([])
 const isFetchingModels = ref(false)
+const modelDropOpen = ref(false)
+const modelHighlight = ref(-1)
 const form = ref({ extraction_base_url: '', extraction_model: '', extraction_api_key: '', embed_model: '', embed_dim: '', hook_cooldown_sec: '', hook_min_turns: '', hook_budget_tokens: '', search_top_k: '', dup_threshold: '', db_dsn: '', http_port: '' })
+
+const modelFilteredList = computed(() => {
+  if (!availableModels.value.length) return []
+  const q = (form.value.extraction_model || '').toLowerCase()
+  if (!q) return availableModels.value
+  return availableModels.value.filter(m => m.toLowerCase().includes(q))
+})
+function onModelFocus() {
+  if (availableModels.value.length) modelDropOpen.value = true
+  modelHighlight.value = -1
+}
+function onModelBlur() {
+  setTimeout(() => { modelDropOpen.value = false; modelHighlight.value = -1 }, 150)
+}
+function onModelKeydown(e) {
+  if (!modelDropOpen.value) {
+    if (e.key === 'ArrowDown' || e.key === 'Enter') { modelDropOpen.value = true; e.preventDefault() }
+    return
+  }
+  const list = modelFilteredList.value
+  if (e.key === 'ArrowDown') {
+    modelHighlight.value = Math.min(modelHighlight.value + 1, list.length - 1)
+    e.preventDefault()
+  } else if (e.key === 'ArrowUp') {
+    modelHighlight.value = Math.max(modelHighlight.value - 1, -1)
+    e.preventDefault()
+  } else if (e.key === 'Enter') {
+    if (modelHighlight.value >= 0 && list[modelHighlight.value]) {
+      selectModel(list[modelHighlight.value])
+    }
+    e.preventDefault()
+  } else if (e.key === 'Escape') {
+    modelDropOpen.value = false
+    modelHighlight.value = -1
+  }
+}
+function selectModel(m) {
+  form.value.extraction_model = m
+  modelDropOpen.value = false
+  modelHighlight.value = -1
+}
 
 async function fetchModels() {
   if (!form.value.extraction_base_url) return
@@ -491,6 +621,7 @@ async function fetchModels() {
       headers['X-Api-Key'] = key
     const models = await fetch(`${BASE}/models?${params}`, { headers }).then(r => r.ok ? r.json() : [])
     availableModels.value = models
+    if (models.length) modelDropOpen.value = true
   } finally {
     isFetchingModels.value = false
   }
@@ -502,6 +633,8 @@ async function openSettings() {
   const data = await fetch(`${BASE}/settings`).then(r => r.json())
   form.value = { ...data, extraction_api_key: data.extraction_api_key === '***' ? KEY_SENTINEL : (data.extraction_api_key || '') }
   availableModels.value = []
+  modelDropOpen.value = false
+  modelHighlight.value = -1
   settingsOpen.value = true
 }
 
@@ -631,8 +764,9 @@ body {
 
 .app {
   width: 100%;
-  max-width: 100%;
-  padding: 20px 12px 40px;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -644,6 +778,8 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .header-left { display: flex; flex-direction: column; gap: 10px; }
@@ -744,9 +880,9 @@ h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spaci
 
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
-thead { position: sticky; top: 0; z-index: 2; background: var(--surface); }
+thead { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: 0 1px 0 var(--border), 0 4px 14px -4px var(--shadow); }
 th {
-  padding: 10px 14px; text-align: left;
+  padding: 8px 12px; text-align: left;
   color: var(--text-muted); font-weight: 500; font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.04em;
   border-bottom: 1px solid var(--border);
@@ -758,10 +894,11 @@ tbody tr {
   cursor: pointer;
 }
 tbody tr:not(.detail-row):hover td { background: var(--surface); }
-tbody tr.active td { background: var(--surface-2); }
+tbody tr.active td { background: var(--accent-dim) !important; }
+tbody tr.active:hover td { background: var(--accent-dim) !important; }
 
 td {
-  padding: 10px 14px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
   text-align: left;
@@ -770,8 +907,8 @@ tbody tr:last-child td { border-bottom: none; }
 
 /* Type tags */
 .tag {
-  display: inline-block; padding: 2px 7px;
-  border-radius: 4px; font-size: 11px; font-weight: 600;
+  display: inline-block; padding: 2px 8px;
+  border-radius: 20px; font-size: 11px; font-weight: 600;
   letter-spacing: 0.02em; border: 1px solid transparent;
 }
 .tag.feedback { background: var(--green-dim); color: var(--green); border-color: var(--green-border); }
@@ -779,15 +916,15 @@ tbody tr:last-child td { border-bottom: none; }
 .tag.user      { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
 .tag.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
 
-.project-cell { color: var(--text-muted); font-size: 12px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-cell { max-width: 80px; }
 .name {
   font-weight: 500; max-width: 180px; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .desc {
   color: var(--text-secondary); max-width: 320px;
-  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.45;
 }
 
 /* Importance */
@@ -822,13 +959,15 @@ tbody tr:last-child td { border-bottom: none; }
 /* Delete button */
 .btn-del {
   display: flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; background: none; border: none;
-  color: var(--text-muted); cursor: pointer; border-radius: 4px;
-  transition: background var(--transition), color var(--transition);
-  opacity: 0;
+  width: 26px; height: 26px; background: none;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--text-muted); cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  opacity: 0; flex-shrink: 0;
 }
 tr:hover .btn-del { opacity: 1; }
-.btn-del:hover { background: var(--red-dim); color: var(--red); }
+.btn-del:hover { background: var(--red-dim); color: var(--red); border-color: rgba(207,34,46,0.25); }
+[data-theme="dark"] .btn-del:hover { border-color: rgba(248,81,73,0.3); }
 .btn-del:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; opacity: 1; }
 
 /* Detail row */
@@ -841,6 +980,11 @@ tr:hover .btn-del { opacity: 1; }
 .detail {
   padding: 16px 14px;
   display: flex; flex-direction: column; gap: 14px;
+  animation: detail-in 180ms ease-out;
+}
+@keyframes detail-in {
+  from { opacity: 0; transform: translateY(-5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .content-block { display: flex; flex-direction: column; gap: 6px; }
 
@@ -1000,16 +1144,23 @@ html, body { overflow-x: hidden; }
 }
 
 /* Modal */
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
 .modal-overlay {
   position: fixed; inset: 0; z-index: 1000;
   background: rgba(0,0,0,0.45);
   display: flex; align-items: center; justify-content: center;
+  animation: overlay-in 150ms ease;
 }
 .modal {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); width: 440px; max-width: 95vw;
-  box-shadow: 0 16px 48px var(--shadow);
+  box-shadow: 0 20px 60px var(--shadow);
   display: flex; flex-direction: column;
+  animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -1023,7 +1174,7 @@ html, body { overflow-x: hidden; }
   transition: background var(--transition), color var(--transition);
 }
 .modal-close:hover { background: var(--red-dim); color: var(--red); }
-.modal-body { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.modal-body { padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: calc(90vh - 120px); }
 .settings-group { display: flex; flex-direction: column; gap: 10px; }
 .settings-group-title {
   font-size: 10px; font-weight: 600; text-transform: uppercase;
@@ -1062,6 +1213,24 @@ html, body { overflow-x: hidden; }
 .btn-save:hover:not(:disabled) { opacity: 0.85; }
 .btn-save:disabled { opacity: 0.45; cursor: default; }
 
+.modal-sm { width: 360px; }
+.delete-modal-body {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 24px 20px 20px; text-align: center;
+}
+.delete-icon { color: var(--red); opacity: 0.7; }
+.delete-confirm-text { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.delete-confirm-text strong { color: var(--red); word-break: break-all; }
+.delete-confirm-sub { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.btn-danger {
+  background: var(--red); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  padding: 5px 16px; font-size: 12px; cursor: pointer; font-weight: 500;
+  transition: opacity var(--transition);
+}
+.btn-danger:hover:not(:disabled) { opacity: 0.85; }
+.btn-danger:disabled { opacity: 0.45; cursor: default; }
+
 .btn-fetch-models {
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; flex-shrink: 0;
@@ -1071,4 +1240,65 @@ html, body { overflow-x: hidden; }
 }
 .btn-fetch-models:hover:not(:disabled) { background: var(--accent-dim); color: var(--accent); border-color: var(--blue-border); }
 .btn-fetch-models:disabled { opacity: 0.35; cursor: default; }
+
+
+/* ── Project badge ── */
+.project-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 18px; padding: 0 4px;
+  border-radius: 4px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.04em; border: 1px solid transparent; cursor: default;
+}
+.project-badge.feedback { background: var(--green-dim); color: var(--green); border-color: var(--green-border); }
+.project-badge.project  { background: var(--blue-dim);  color: var(--blue);  border-color: var(--blue-border); }
+.project-badge.user     { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
+.project-badge.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
+
+/* ── Row actions + chevron ── */
+.row-actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+}
+.row-chevron {
+  flex-shrink: 0; color: var(--text-muted);
+  transition: transform var(--transition), opacity var(--transition);
+  opacity: 0;
+}
+tr:hover .row-chevron,
+tr.active .row-chevron { opacity: 1; }
+.row-chevron.open { transform: rotate(180deg); }
+
+/* ── Combobox ── */
+.combobox-wrap {
+  position: relative; flex: 1; display: flex; align-items: center;
+}
+.combobox-input { padding-right: 24px; }
+.combobox-chevron {
+  position: absolute; right: 7px; color: var(--text-muted);
+  pointer-events: none; transition: transform var(--transition);
+  flex-shrink: 0;
+}
+.combobox-chevron.open { transform: rotate(180deg); }
+.combobox-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 200;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px var(--shadow);
+  max-height: 200px; overflow-y: auto;
+  padding: 4px;
+}
+.combobox-option {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text-primary); cursor: pointer;
+  transition: background var(--transition);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.combobox-option:hover,
+.combobox-option.highlighted { background: var(--surface-2); }
+.combobox-option.selected { color: var(--accent); }
+.combobox-check {
+  width: 14px; height: 14px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+}
 </style>

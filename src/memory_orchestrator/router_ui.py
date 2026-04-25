@@ -3,7 +3,7 @@ import uuid
 import httpx
 from fastapi import APIRouter, Body, Header, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from memory_orchestrator.config import get_settings
@@ -51,10 +51,15 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         async with maker() as s:
             result = await s.execute(
                 select(Project)
-                .where(Project.id != GLOBAL_PROJECT_ID)
-                .order_by(Project.last_active_at.desc())
+                .order_by(
+                    (Project.id == GLOBAL_PROJECT_ID).desc(),
+                    Project.memory_count.desc(),
+                )
             )
-            return [{"id": str(p.id), "slug": p.slug, "display_name": p.display_name} for p in result.scalars().all()]
+            return [
+                {"id": str(p.id), "slug": p.slug, "display_name": p.display_name, "memory_count": p.memory_count}
+                for p in result.scalars().all()
+            ]
 
     @router.get("/stats")
     async def stats(project_slug: str | None = None) -> dict:
@@ -73,14 +78,14 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             return {"total": sum(by_type.values()), "by_type": by_type}
 
     @router.get("/memories")
-    async def memories(project_slug: str | None = None, type: str | None = None, q: str | None = None, limit: int = 100) -> list[dict]:
+    async def memories(project_slug: str | None = None, type: str | None = None, q: str | None = None, limit: int = 100, sort_by: str = "time", sort_desc: bool = True) -> list[dict]:
         async with maker() as s:
             repo = MemoryRepository(s)
             if project_slug:
                 pid = await repo.slug_to_id(project_slug)
-                mems = await repo.list(project_ids=[pid] if pid else [], type=type, q=q, limit=limit)
+                mems = await repo.list(project_ids=[pid] if pid else [], type=type, q=q, limit=limit, sort_by=sort_by, sort_desc=sort_desc)
             else:
-                mems = await repo.list(type=type, q=q, limit=limit)
+                mems = await repo.list(type=type, q=q, limit=limit, sort_by=sort_by, sort_desc=sort_desc)
             result = []
             for m in mems:
                 d = {
@@ -109,8 +114,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
 
     @router.patch("/memories/{memory_id}/move", status_code=200)
     async def move_memory(memory_id: uuid.UUID, project_slug: str) -> dict:
-        from sqlalchemy import update as sa_update
-        from memory_orchestrator.models import Memory
+        from memory_orchestrator.repository import _sync_project_count
         async with maker() as s:
             repo = MemoryRepository(s)
             m = await repo.get(memory_id)
@@ -119,7 +123,11 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             target_uuid = await repo.slug_to_id(project_slug)
             if not target_uuid:
                 raise HTTPException(status_code=404, detail=f"project not found: {project_slug}")
+            old_uuid = m.project_id
             await s.execute(sa_update(Memory).where(Memory.id == memory_id).values(project_id=target_uuid))
+            if old_uuid != target_uuid:
+                await s.execute(_sync_project_count(old_uuid))
+                await s.execute(_sync_project_count(target_uuid))
             await s.commit()
         return {"moved": True, "project_slug": project_slug}
 

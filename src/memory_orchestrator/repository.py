@@ -3,13 +3,26 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import delete as sa_delete, or_, select, update
+from sqlalchemy import delete as sa_delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _SETTINGS_CACHE: tuple[float, dict[str, str]] | None = None
 _SETTINGS_TTL = 60.0  # seconds
 
 from memory_orchestrator.models import GLOBAL_PROJECT_ID, Memory, Project, SystemSetting
+
+def _sync_project_count(project_id: uuid.UUID):
+    subq = (
+        select(func.count(Memory.id))
+        .where(Memory.project_id == project_id, Memory.superseded_by.is_(None))
+        .scalar_subquery()
+    )
+    return (
+        update(Project)
+        .where(Project.id == project_id)
+        .values(memory_count=subq)
+        .execution_options(synchronize_session=False)
+    )
 from memory_orchestrator.scoring import hybrid_score, truncate_by_budget
 
 
@@ -72,6 +85,7 @@ class MemoryRepository:
         )
         self.session.add(m)
         await self.session.flush()
+        await self.session.execute(_sync_project_count(project_id))
         return m
 
     async def get(self, memory_id: uuid.UUID, include_superseded: bool = False) -> Memory | None:
@@ -89,6 +103,8 @@ class MemoryRepository:
         type: str | None = None,
         q: str | None = None,
         limit: int = 50,
+        sort_by: str = "time",
+        sort_desc: bool = True,
     ) -> list[Memory]:
         stmt = select(Memory).where(Memory.superseded_by.is_(None))
         if project_ids is not None:
@@ -102,7 +118,8 @@ class MemoryRepository:
             stmt = stmt.where(
                 Memory.name.ilike(pattern) | Memory.description.ilike(pattern)
             )
-        stmt = stmt.order_by(Memory.updated_at.desc()).limit(limit)
+        col = Memory.hit_count if sort_by == "hits" else Memory.updated_at
+        stmt = stmt.order_by(col.desc() if sort_desc else col.asc()).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -212,6 +229,15 @@ class MemoryRepository:
         if not kept:
             return ""
 
+        ids = [item["memory"].id for item in kept]
+        await self.session.execute(
+            update(Memory)
+            .where(Memory.id.in_(ids))
+            .values(hit_count=Memory.hit_count + 1, last_hit_at=datetime.now(timezone.utc))
+            .execution_options(synchronize_session="fetch")
+        )
+        await self.session.commit()
+
         lines = ["## Remembered context", ""]
         for item in kept:
             m: Memory = item["memory"]
@@ -250,6 +276,8 @@ class MemoryRepository:
             await self.session.execute(stmt)
 
     async def delete(self, memory_id: uuid.UUID, *, hard: bool = False) -> None:
+        pid_row = await self.session.execute(select(Memory.project_id).where(Memory.id == memory_id))
+        project_id = pid_row.scalar_one_or_none()
         if hard:
             await self.session.execute(sa_delete(Memory).where(Memory.id == memory_id))
         else:
@@ -258,6 +286,8 @@ class MemoryRepository:
                     superseded_by=memory_id, updated_at=datetime.now(timezone.utc)
                 )
             )
+        if project_id:
+            await self.session.execute(_sync_project_count(project_id))
 
 
 @dataclass
