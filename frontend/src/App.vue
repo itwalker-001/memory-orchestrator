@@ -40,7 +40,7 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-        <button @click="load" class="btn-refresh" :class="{ loading: isLoading }" title="刷新">
+        <button @click="load" class="btn-refresh" :class="{ loading: isLoading }" title="Refresh">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" :class="{ spinning: isLoading }">
             <path d="M13 7A6 6 0 1 1 7 1a6 6 0 0 1 4.243 1.757L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <path d="M9 4h4V0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -55,7 +55,7 @@
         <span class="filter-label">Project</span>
         <div class="pill-group">
           <button :class="['pill', selectedProject === '' ? 'pill-active' : '']" @click="selectedProject = ''; load()">All</button>
-          <button v-for="p in projects" :key="p.id"
+          <button v-for="p in projects.filter(p => p.memory_count > 0)" :key="p.id"
             :class="['pill', selectedProject === p.slug ? 'pill-active' : '']"
             @click="selectedProject = p.slug; load()"
             :title="p.slug">
@@ -108,7 +108,7 @@
           <col>
           <col style="width:64px">
           <col style="width:140px">
-          <col style="width:52px">
+          <col style="width:80px">
         </colgroup>
         <thead>
           <tr>
@@ -128,7 +128,12 @@
         <tbody>
           <template v-for="m in paged" :key="m.id">
             <tr @click="toggle(m.id)" :class="['type-' + m.type, { active: expanded === m.id }]">
-              <td><span :class="['tag', m.type]">{{ m.type }}</span></td>
+              <td>
+                <div class="type-cell">
+                  <span :class="['tag', m.type]">{{ m.type }}</span>
+                  <span class="imp-dot" :style="{background: impColor(m.importance)}" :title="'Importance ' + m.importance"></span>
+                </div>
+              </td>
               <td class="project-cell" @mouseenter="showTip($event, projectMap[m.project_id] || '—')" @mouseleave="hideTip">
                 <span v-if="projectMap[m.project_id]" :class="['project-badge', projectColorClass(m.project_id)]">{{ projectAbbr(m.project_id) }}</span>
                 <span v-else class="hit-zero">—</span>
@@ -139,9 +144,14 @@
                 <span v-if="m.hit_count > 0" class="hit-pill">{{ m.hit_count }}</span>
                 <span v-else class="hit-zero">—</span>
               </td>
-              <td class="date">{{ fmtDate(m.updated_at) }}</td>
+              <td class="date"><span :title="fmtDate(m.updated_at)">{{ relTime(m.updated_at) }}</span></td>
               <td>
                 <div class="row-actions">
+                  <button class="btn-edit-quick" @click.stop="openEdit(m)" title="Edit" aria-label="Edit">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
                   <button class="btn-del" @click.stop="del(m)" title="Delete" aria-label="Delete">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
@@ -684,6 +694,16 @@ function _fmt(iso) {
 }
 function fmtDate(iso) { return _fmt(iso) }
 function fmtDateTime(iso) { return _fmt(iso) }
+function relTime(iso) {
+  if (!iso) return '—'
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return 'just now'
+  if (diff < 3600) return Math.floor(diff / 60) + 'm'
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h'
+  if (diff < 86400 * 7) return Math.floor(diff / 86400) + 'd'
+  if (diff < 86400 * 30) return Math.floor(diff / (86400 * 7)) + 'w'
+  return Math.floor(diff / (86400 * 30)) + 'mo'
+}
 
 const isDark = ref(localStorage.getItem('mo-theme') === 'dark')
 
@@ -1015,6 +1035,7 @@ h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spaci
 .ctx-project-select { min-width: 240px; }
 
 /* ── Table ── */
+.toolbar { padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px; }
 .table-wrap {
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   overflow: hidden; overflow-x: auto;
@@ -1099,6 +1120,22 @@ tbody tr:last-child td { border-bottom: none; }
 .sort-icon { display: inline-block; margin-left: 3px; color: var(--accent); }
 
 /* Delete button */
+.type-cell { display: flex; align-items: center; gap: 5px; }
+.imp-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  opacity: 0.75;
+}
+.btn-edit-quick {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; background: none;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--text-muted); cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  opacity: 0; flex-shrink: 0;
+}
+tr:hover .btn-edit-quick { opacity: 1; }
+.btn-edit-quick:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--blue-border); }
+.btn-edit-quick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; opacity: 1; }
 .btn-del {
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; background: none;
