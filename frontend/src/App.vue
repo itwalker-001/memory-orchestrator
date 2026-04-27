@@ -55,7 +55,7 @@
         <span class="filter-label">Project</span>
         <div class="pill-group">
           <button :class="['pill', selectedProject === '' ? 'pill-active' : '']" @click="selectedProject = ''; load()">All</button>
-          <button v-for="p in projects.filter(p => p.memory_count > 0)" :key="p.id"
+          <button v-for="p in projects" :key="p.id"
             :class="['pill', selectedProject === p.slug ? 'pill-active' : '']"
             @click="selectedProject = p.slug; load()"
             :title="p.slug">
@@ -436,7 +436,7 @@
           <div class="ctx-preview-controls">
             <select class="field-input ctx-project-select" v-model="ctxPreviewSlug" @change="loadContextPreview">
               <option value="">— Select project —</option>
-              <option v-for="p in projects.filter(p => p.id !== '00000000-0000-0000-0000-000000000000')" :key="p.id" :value="p.slug">
+              <option v-for="p in projects" :key="p.id" :value="p.slug">
                 {{ p.display_name || p.slug }}
               </option>
             </select>
@@ -824,7 +824,7 @@ onMounted(async () => {
   const tzInfo = await fetch(`${BASE}/timezone`).then(r => r.json()).catch(() => null)
   if (tzInfo?.iana) serverTz.value = tzInfo.iana
   if (tzInfo?.offset_minutes != null) serverOffsetMin.value = tzInfo.offset_minutes
-  projects.value = await fetch(`${BASE}/projects`).then(r => r.json())
+  projects.value = await fetch(`${BASE}/projects?hide_empty=true`).then(r => r.json())
   await load()
 })
 </script>

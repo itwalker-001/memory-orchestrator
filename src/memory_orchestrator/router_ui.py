@@ -56,15 +56,15 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 "label": f"UTC{sign}{hours:02d}:{minutes:02d}"}
 
     @router.get("/projects")
-    async def projects() -> list[dict]:
+    async def projects(hide_empty: bool = False) -> list[dict]:
         async with maker() as s:
-            result = await s.execute(
-                select(Project)
-                .order_by(
-                    (Project.id == GLOBAL_PROJECT_ID).desc(),
-                    Project.memory_count.desc(),
-                )
+            stmt = select(Project).order_by(
+                (Project.id == GLOBAL_PROJECT_ID).desc(),
+                Project.memory_count.desc(),
             )
+            if hide_empty:
+                stmt = stmt.where(Project.memory_count > 0)
+            result = await s.execute(stmt)
             return [
                 {"id": str(p.id), "slug": p.slug, "display_name": p.display_name, "memory_count": p.memory_count}
                 for p in result.scalars().all()
