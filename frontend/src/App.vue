@@ -91,14 +91,6 @@
           </svg>
           {{ t('Reset') }}
         </button>
-        <button class="btn-ctx-preview" @click="openContextPreview" :title="t('Context preview')">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/>
-            <line x1="6" y1="4" x2="6" y2="6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-            <circle cx="6" cy="8.2" r="0.65" fill="currentColor"/>
-          </svg>
-          {{ t('Context preview') }}
-        </button>
       </div>
     </div>
 
@@ -419,32 +411,6 @@
         </div>
       </div>
     </div>
-    <div v-if="ctxPreviewOpen" class="modal-overlay">
-      <div class="modal modal-lg">
-        <div class="modal-header">
-          <span class="modal-title">{{ t('Context preview') }}</span>
-          <button class="modal-close" @click="ctxPreviewOpen = false">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="ctx-preview-controls">
-            <select class="field-input ctx-project-select" v-model="ctxPreviewSlug" @change="loadContextPreview">
-              <option value="">{{ t('— Select project —') }}</option>
-              <option v-for="p in projects" :key="p.id" :value="p.slug">
-                {{ p.display_name || p.slug }}
-              </option>
-            </select>
-          </div>
-          <div v-if="!ctxPreviewSlug" class="empty-state" style="padding:32px 0">{{ t('Select a project to preview its injected context.') }}</div>
-          <div v-else-if="ctxPreviewLoading" class="empty-state">{{ t('Loading…') }}</div>
-          <pre v-else class="ctx-preview-pre">{{ ctxPreviewMd }}</pre>
-        </div>
-      </div>
-    </div>
   </Teleport>
 </template>
 
@@ -602,31 +568,6 @@ async function saveEdit() {
     await load()
   } finally {
     isEditSaving.value = false
-  }
-}
-
-const ctxPreviewOpen = ref(false)
-const ctxPreviewSlug = ref('')
-const ctxPreviewMd = ref('')
-const ctxPreviewLoading = ref(false)
-function openContextPreview() {
-  ctxPreviewOpen.value = true
-  ctxPreviewSlug.value = selectedProject.value || ''
-  ctxPreviewMd.value = ''
-  if (ctxPreviewSlug.value) loadContextPreview()
-}
-async function loadContextPreview() {
-  const slug = ctxPreviewSlug.value
-  if (!slug) return
-  ctxPreviewLoading.value = true
-  ctxPreviewMd.value = ''
-  try {
-    const r = await fetch(`${BASE}/context-preview?project_slug=${encodeURIComponent(slug)}`)
-    if (!r.ok) { ctxPreviewMd.value = '(error loading context)'; return }
-    const data = await r.json()
-    ctxPreviewMd.value = data.markdown || '*(no memories would be injected for this project)*'
-  } finally {
-    ctxPreviewLoading.value = false
   }
 }
 
@@ -1045,9 +986,6 @@ h1 { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spaci
 }
 .search-input::placeholder { color: var(--text-muted); }
 
-.ctx-preview-controls { margin-bottom: 12px; }
-.ctx-project-select { min-width: 240px; }
-
 /* ── Table ── */
 .toolbar { padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px; }
 .table-wrap {
@@ -1415,20 +1353,6 @@ html, body { overflow-x: hidden; }
   transition: background var(--transition), color var(--transition);
 }
 .btn-edit:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
-.btn-ctx-preview {
-  display: flex; align-items: center; gap: 5px;
-  background: transparent; color: var(--text-muted);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 4px 10px; font-size: 11px; cursor: pointer; font-weight: 500;
-  transition: background var(--transition), color var(--transition);
-}
-.btn-ctx-preview:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
-.ctx-preview-pre {
-  white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.6;
-  color: var(--text-primary); max-height: 60vh; overflow-y: auto;
-  background: var(--bg-secondary); border-radius: var(--radius); padding: 16px;
-  border: 1px solid var(--border); margin: 0;
-}
 .delete-modal-body {
   display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 24px 20px 20px; text-align: center;

@@ -142,16 +142,6 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"saved": len(updates)}
 
-    @router.get("/context-preview")
-    async def context_preview(project_slug: str, budget_tokens: int = 1500) -> dict:
-        async with maker() as s:
-            repo = MemoryRepository(s)
-            pid = await repo.slug_to_id(project_slug)
-            if not pid:
-                raise HTTPException(status_code=404, detail=f"project not found: {project_slug}")
-            markdown = await repo.build_context(project_id=pid, budget_tokens=budget_tokens)
-        return {"markdown": markdown, "empty": not markdown}
-
     @router.patch("/memories/{memory_id}/move", status_code=200)
     async def move_memory(memory_id: uuid.UUID, project_slug: str) -> dict:
         from memory_orchestrator.repository import _sync_project_count
