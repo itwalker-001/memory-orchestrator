@@ -15,6 +15,15 @@ SETTINGS_KEYS = ["extraction_base_url", "extraction_model", "extraction_api_key"
                  "search_top_k", "dup_threshold", "db_dsn", "http_port"]
 
 
+class MemoryPatch(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    content: str | None = None
+    why: str | None = None
+    how_to_apply: str | None = None
+    importance: int | None = None
+
+
 class SettingsPatch(BaseModel):
     extraction_base_url: str | None = None
     extraction_model: str | None = None
@@ -111,6 +120,37 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 raise HTTPException(status_code=404, detail="not found")
             await repo.delete(memory_id, hard=hard)
             await s.commit()
+
+    @router.patch("/memories/{memory_id}", status_code=200)
+    async def patch_memory(memory_id: uuid.UUID, body: MemoryPatch = Body(...)) -> dict:
+        from memory_orchestrator.embedder import embed_one
+        from datetime import datetime, timezone
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        if not updates:
+            return {"saved": 0}
+        async with maker() as s:
+            m = await s.get(Memory, memory_id)
+            if not m:
+                raise HTTPException(status_code=404, detail="not found")
+            for k, v in updates.items():
+                setattr(m, k, v)
+            m.updated_at = datetime.now(timezone.utc)
+            if "content" in updates:
+                m.embedding = await embed_one(updates["content"])
+            if "importance" in updates:
+                m.importance = max(1, min(5, updates["importance"]))
+            await s.commit()
+        return {"saved": len(updates)}
+
+    @router.get("/context-preview")
+    async def context_preview(project_slug: str, budget_tokens: int = 1500) -> dict:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            pid = await repo.slug_to_id(project_slug)
+            if not pid:
+                raise HTTPException(status_code=404, detail=f"project not found: {project_slug}")
+            markdown = await repo.build_context(project_id=pid, budget_tokens=budget_tokens)
+        return {"markdown": markdown, "empty": not markdown}
 
     @router.patch("/memories/{memory_id}/move", status_code=200)
     async def move_memory(memory_id: uuid.UUID, project_slug: str) -> dict:

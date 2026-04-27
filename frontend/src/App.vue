@@ -92,6 +92,14 @@
         </svg>
         Reset
       </button>
+      <button v-if="selectedProject" class="btn-ctx-preview" @click="showContextPreview(selectedProject)" title="Preview what would be injected into context">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="6" y1="4" x2="6" y2="6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <circle cx="6" cy="8.2" r="0.65" fill="currentColor"/>
+        </svg>
+        Context preview
+      </button>
     </div>
 
     <div class="table-wrap">
@@ -192,6 +200,9 @@
                     </button>
                     <span class="copy-hint" v-if="moved === m.id">Moved ✓</span>
                     <span class="save-hint err" v-if="moveError[m.id]">{{ moveError[m.id] }}</span>
+                  </div>
+                  <div class="action-row" @click.stop>
+                    <button class="btn-edit" @click.stop="openEdit(m)">Edit</button>
                   </div>
                 </div>
               </td>
@@ -372,6 +383,54 @@
         </div>
       </div>
     </div>
+    <div v-if="editTarget" class="modal-overlay">
+      <div class="modal modal-edit">
+        <div class="modal-header">
+          <span class="modal-title">Edit Memory</span>
+          <button class="modal-close" @click="editTarget = null">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="field-row"><label class="field-label">Name</label><input class="field-input" v-model="editForm.name" /></div>
+          <div class="field-row"><label class="field-label">Description</label><textarea class="field-input" v-model="editForm.description" rows="2" /></div>
+          <div class="field-row"><label class="field-label">Content</label><textarea class="field-input" v-model="editForm.content" rows="6" /></div>
+          <div class="field-row"><label class="field-label">Why</label><input class="field-input" v-model="editForm.why" /></div>
+          <div class="field-row"><label class="field-label">How to apply</label><input class="field-input" v-model="editForm.how_to_apply" /></div>
+          <div class="field-row field-row-inline">
+            <label class="field-label">Importance</label>
+            <select class="field-input field-select-sm" v-model.number="editForm.importance">
+              <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </div>
+          <p v-if="editError" class="save-hint err">{{ editError }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="editTarget = null">Cancel</button>
+          <button class="btn-save" :disabled="isEditSaving" @click="saveEdit">{{ isEditSaving ? 'Saving…' : 'Save' }}</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="ctxPreviewOpen" class="modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <span class="modal-title">Context preview — {{ ctxPreviewSlug }}</span>
+          <button class="modal-close" @click="ctxPreviewOpen = false">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div v-if="ctxPreviewLoading" class="empty-state">Loading…</div>
+          <pre v-else class="ctx-preview-pre">{{ ctxPreviewMd }}</pre>
+        </div>
+      </div>
+    </div>
   </Teleport>
 </template>
 
@@ -475,6 +534,63 @@ async function moveMemory(m) {
     await load()
   } finally {
     isMoving.value[m.id] = false
+  }
+}
+
+const editTarget = ref(null)
+const editForm = ref({})
+const isEditSaving = ref(false)
+const editError = ref('')
+function openEdit(m) {
+  editTarget.value = m
+  editForm.value = {
+    name: m.name,
+    description: m.description,
+    content: m.content,
+    why: m.why || '',
+    how_to_apply: m.how_to_apply || '',
+    importance: m.importance,
+  }
+  editError.value = ''
+}
+async function saveEdit() {
+  if (!editTarget.value) return
+  isEditSaving.value = true
+  editError.value = ''
+  try {
+    const r = await fetch(`${BASE}/memories/${editTarget.value.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editForm.value),
+    })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      editError.value = `Failed: ${err.detail || r.statusText}`
+      return
+    }
+    editTarget.value = null
+    await load()
+  } finally {
+    isEditSaving.value = false
+  }
+}
+
+const ctxPreviewOpen = ref(false)
+const ctxPreviewSlug = ref('')
+const ctxPreviewMd = ref('')
+const ctxPreviewLoading = ref(false)
+async function showContextPreview(slug) {
+  ctxPreviewSlug.value = slug
+  ctxPreviewOpen.value = true
+  ctxPreviewLoading.value = true
+  ctxPreviewMd.value = ''
+  try {
+    const r = await fetch(`${BASE}/context-preview?project_slug=${encodeURIComponent(slug)}`)
+    if (!r.ok) { ctxPreviewMd.value = '(error loading context)'; return }
+    const data = await r.json()
+    ctxPreviewMd.value = data.markdown || '*(no memories would be injected for this project)*'
+  } finally {
+    ctxPreviewLoading.value = false
   }
 }
 
@@ -1214,6 +1330,32 @@ html, body { overflow-x: hidden; }
 .btn-save:disabled { opacity: 0.45; cursor: default; }
 
 .modal-sm { width: 360px; }
+.modal-edit { width: 560px; }
+.modal-lg { width: 700px; }
+.field-row-inline { align-items: center; flex-direction: row; gap: 12px; }
+.field-select-sm { width: 80px !important; }
+.action-row { display: flex; gap: 8px; margin-top: 8px; }
+.btn-edit {
+  background: var(--bg-secondary); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 14px; font-size: 11px; cursor: pointer; font-weight: 500;
+  transition: background var(--transition), color var(--transition);
+}
+.btn-edit:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+.btn-ctx-preview {
+  display: flex; align-items: center; gap: 5px;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 10px; font-size: 11px; cursor: pointer; font-weight: 500;
+  transition: background var(--transition), color var(--transition);
+}
+.btn-ctx-preview:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+.ctx-preview-pre {
+  white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.6;
+  color: var(--text-primary); max-height: 60vh; overflow-y: auto;
+  background: var(--bg-secondary); border-radius: var(--radius); padding: 16px;
+  border: 1px solid var(--border); margin: 0;
+}
 .delete-modal-body {
   display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 24px 20px 20px; text-align: center;
