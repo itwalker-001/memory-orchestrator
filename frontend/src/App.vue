@@ -1,27 +1,27 @@
 <template>
   <div class="app">
     <header class="app-header">
-      <div class="header-left">
-        <div class="logo">
-          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="32" height="32" rx="7" fill="#6366f1"/>
-            <path d="M16 6 C13 6 11 7.5 10.5 9.5 C9 9.2 7 10 6.5 12 C5 12.5 4 14 4.5 16 C4 17.5 4.5 19.5 6 20.5 C6.5 22.5 8 24 10 24 C11 25.5 13 26 15 25.5 L15 22 C13 22 11.5 21 11 19.5 C9.5 19.5 8.5 18.5 8.5 17 C7.5 16.5 7 15.5 7.5 14.5 C7.2 13.5 8 12.5 9 12.5 C9.2 11 10.5 10 12 10.5 C12.5 9 14 8 16 8 Z" fill="#e0e7ff"/>
-            <path d="M16 6 C19 6 21 7.5 21.5 9.5 C23 9.2 25 10 25.5 12 C27 12.5 28 14 27.5 16 C28 17.5 27.5 19.5 26 20.5 C25.5 22.5 24 24 22 24 C21 25.5 19 26 17 25.5 L17 22 C19 22 20.5 21 21 19.5 C22.5 19.5 23.5 18.5 23.5 17 C24.5 16.5 25 15.5 24.5 14.5 C24.8 13.5 24 12.5 23 12.5 C22.8 11 21.5 10 20 10.5 C19.5 9 18 8 16 8 Z" fill="#e0e7ff"/>
-            <line x1="16" y1="8" x2="16" y2="25.5" stroke="#6366f1" stroke-width="1" opacity="0.6"/>
-            <path d="M10 14 Q12 15.5 10.5 17" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
-            <path d="M9.5 17.5 Q11.5 18.5 11 20" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
-            <path d="M22 14 Q20 15.5 21.5 17" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
-            <path d="M22.5 17.5 Q20.5 18.5 21 20" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
-          </svg>
-          <h1>Memory Orchestrator</h1>
-        </div>
-        <div class="stats-row" v-if="stats">
-          <span class="stat-total">{{ stats.total }} total</span>
-          <span v-for="(v, k) in stats.by_type" :key="k" :class="['badge', k]">
-            <span class="badge-dot"></span>{{ k }} <strong>{{ v }}</strong>
-          </span>
-        </div>
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="7" fill="#6366f1"/>
+          <path d="M16 6 C13 6 11 7.5 10.5 9.5 C9 9.2 7 10 6.5 12 C5 12.5 4 14 4.5 16 C4 17.5 4.5 19.5 6 20.5 C6.5 22.5 8 24 10 24 C11 25.5 13 26 15 25.5 L15 22 C13 22 11.5 21 11 19.5 C9.5 19.5 8.5 18.5 8.5 17 C7.5 16.5 7 15.5 7.5 14.5 C7.2 13.5 8 12.5 9 12.5 C9.2 11 10.5 10 12 10.5 C12.5 9 14 8 16 8 Z" fill="#e0e7ff"/>
+          <path d="M16 6 C19 6 21 7.5 21.5 9.5 C23 9.2 25 10 25.5 12 C27 12.5 28 14 27.5 16 C28 17.5 27.5 19.5 26 20.5 C25.5 22.5 24 24 22 24 C21 25.5 19 26 17 25.5 L17 22 C19 22 20.5 21 21 19.5 C22.5 19.5 23.5 18.5 23.5 17 C24.5 16.5 25 15.5 24.5 14.5 C24.8 13.5 24 12.5 23 12.5 C22.8 11 21.5 10 20 10.5 C19.5 9 18 8 16 8 Z" fill="#e0e7ff"/>
+          <line x1="16" y1="8" x2="16" y2="25.5" stroke="#6366f1" stroke-width="1" opacity="0.6"/>
+          <path d="M10 14 Q12 15.5 10.5 17" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
+          <path d="M9.5 17.5 Q11.5 18.5 11 20" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
+          <path d="M22 14 Q20 15.5 21.5 17" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
+          <path d="M22.5 17.5 Q20.5 18.5 21 20" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
+        </svg>
+        <h1>Memory Orchestrator</h1>
       </div>
+      <div class="stats-row" v-if="stats">
+        <span class="stat-sep">·</span>
+        <span class="stat-total">{{ stats.total }} total</span>
+        <span v-for="(v, k) in stats.by_type" :key="k" :class="['badge', k]">
+          <span class="badge-dot"></span>{{ k }} <strong>{{ v }}</strong>
+        </span>
+      </div>
+      <div class="header-spacer"></div>
       <div class="header-actions">
         <button @click="toggleTheme" class="btn-theme" :title="isDark ? 'Switch to light' : 'Switch to dark'">
           <svg v-if="isDark" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
@@ -112,7 +112,7 @@
         </colgroup>
         <thead>
           <tr>
-            <th>Type</th>
+            <th class="type-col">Type</th>
             <th>Project</th>
             <th>Name</th>
             <th>Description</th>
@@ -128,12 +128,7 @@
         <tbody>
           <template v-for="m in paged" :key="m.id">
             <tr @click="toggle(m.id)" :class="['type-' + m.type, { active: expanded === m.id }]">
-              <td>
-                <div class="type-cell">
-                  <span :class="['tag', m.type]">{{ m.type }}</span>
-                  <span class="imp-dot" :style="{background: impColor(m.importance)}" :title="'Importance ' + m.importance"></span>
-                </div>
-              </td>
+              <td class="type-col"><span :class="['tag', m.type]">{{ m.type }}</span></td>
               <td class="project-cell" @mouseenter="showTip($event, projectMap[m.project_id] || '—')" @mouseleave="hideTip">
                 <span v-if="projectMap[m.project_id]" :class="['project-badge', projectColorClass(m.project_id)]">{{ projectAbbr(m.project_id) }}</span>
                 <span v-else class="hit-zero">—</span>
@@ -923,16 +918,16 @@ body {
 /* ── Header ── */
 .app-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.header-left { display: flex; flex-direction: column; gap: 10px; }
-
 .logo { display: flex; align-items: center; gap: 10px; }
+.header-spacer { flex: 1; }
+.stat-sep { color: var(--text-muted); }
 h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
 
 .stats-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1079,7 +1074,8 @@ tbody tr:last-child td { border-bottom: none; }
 .tag.user      { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
 .tag.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
 
-.project-cell { max-width: 80px; }
+.project-cell { max-width: 80px; text-align: right; }
+.type-col { text-align: right; }
 .name {
   font-weight: 500; max-width: 180px; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1120,11 +1116,6 @@ tbody tr:last-child td { border-bottom: none; }
 .sort-icon { display: inline-block; margin-left: 3px; color: var(--accent); }
 
 /* Delete button */
-.type-cell { display: flex; align-items: center; gap: 5px; }
-.imp-dot {
-  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
-  opacity: 0.75;
-}
 .btn-edit-quick {
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; background: none;
