@@ -2,7 +2,7 @@
   <div class="app">
     <header class="app-header">
       <div class="logo">
-        <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect width="32" height="32" rx="7" fill="#6366f1"/>
           <path d="M16 6 C13 6 11 7.5 10.5 9.5 C9 9.2 7 10 6.5 12 C5 12.5 4 14 4.5 16 C4 17.5 4.5 19.5 6 20.5 C6.5 22.5 8 24 10 24 C11 25.5 13 26 15 25.5 L15 22 C13 22 11.5 21 11 19.5 C9.5 19.5 8.5 18.5 8.5 17 C7.5 16.5 7 15.5 7.5 14.5 C7.2 13.5 8 12.5 9 12.5 C9.2 11 10.5 10 12 10.5 C12.5 9 14 8 16 8 Z" fill="#e0e7ff"/>
           <path d="M16 6 C19 6 21 7.5 21.5 9.5 C23 9.2 25 10 25.5 12 C27 12.5 28 14 27.5 16 C28 17.5 27.5 19.5 26 20.5 C25.5 22.5 24 24 22 24 C21 25.5 19 26 17 25.5 L17 22 C19 22 20.5 21 21 19.5 C22.5 19.5 23.5 18.5 23.5 17 C24.5 16.5 25 15.5 24.5 14.5 C24.8 13.5 24 12.5 23 12.5 C22.8 11 21.5 10 20 10.5 C19.5 9 18 8 16 8 Z" fill="#e0e7ff"/>
@@ -16,14 +16,14 @@
       </div>
       <div class="stats-row" v-if="stats">
         <span class="stat-sep">·</span>
-        <span class="stat-total">{{ stats.total }} total</span>
+        <span class="stat-total">{{ t('{n} total', {n: stats.total}) }}</span>
         <span v-for="(v, k) in stats.by_type" :key="k" :class="['badge', k]">
           <span class="badge-dot"></span>{{ k }} <strong>{{ v }}</strong>
         </span>
       </div>
       <div class="header-spacer"></div>
       <div class="header-actions">
-        <button @click="toggleTheme" class="btn-theme" :title="isDark ? 'Switch to light' : 'Switch to dark'">
+        <button @click="toggleTheme" class="btn-theme" :title="isDark ? t('Switch to light') : t('Switch to dark')">
           <svg v-if="isDark" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
             <circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/>
             <line x1="4.22" y1="4.22" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/>
@@ -34,27 +34,30 @@
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
         </button>
-        <button @click="openSettings" class="btn-theme" title="Settings">
+        <button @click="toggleLang" class="btn-theme" :title="lang === 'en' ? '切换中文' : 'Switch to English'">
+          <span style="font-size:11px;font-weight:600;letter-spacing:0">{{ lang === 'en' ? '中' : 'EN' }}</span>
+        </button>
+        <button @click="openSettings" class="btn-theme" :title="t('Settings')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-        <button @click="load" class="btn-refresh" :class="{ loading: isLoading }" title="Refresh">
+        <button @click="load" class="btn-refresh" :class="{ loading: isLoading }" :title="t('Refresh')">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" :class="{ spinning: isLoading }">
             <path d="M13 7A6 6 0 1 1 7 1a6 6 0 0 1 4.243 1.757L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <path d="M9 4h4V0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Refresh
+          {{ t('Refresh') }}
         </button>
       </div>
     </header>
 
     <div class="toolbar">
       <div class="filter-group">
-        <span class="filter-label">Project</span>
+        <span class="filter-label">{{ t('Project') }}</span>
         <div class="pill-group">
-          <button :class="['pill', selectedProject === '' ? 'pill-active' : '']" @click="selectedProject = ''; load()">All</button>
+          <button :class="['pill', selectedProject === '' ? 'pill-active' : '']" @click="selectedProject = ''; load()">{{ t('All') }}</button>
           <button v-for="p in projects" :key="p.id"
             :class="['pill', selectedProject === p.slug ? 'pill-active' : '']"
             @click="selectedProject = p.slug; load()"
@@ -65,12 +68,12 @@
         </div>
       </div>
       <div class="filter-group">
-        <span class="filter-label">Type</span>
+        <span class="filter-label">{{ t('Type') }}</span>
         <div class="pill-group">
-          <button :class="['pill', selectedType === '' ? 'pill-active' : '']" @click="selectedType = ''; load()">All</button>
-          <button v-for="t in ['user','feedback','project','reference']" :key="t"
-            :class="['pill', selectedType === t ? 'pill-active' : '']"
-            @click="selectedType = t; load()">{{ t }}</button>
+          <button :class="['pill', selectedType === '' ? 'pill-active' : '']" @click="selectedType = ''; load()">{{ t('All') }}</button>
+          <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
+            :class="['pill', selectedType === tp ? 'pill-active' : '']"
+            @click="selectedType = tp; load()">{{ tp }}</button>
         </div>
       </div>
       <div class="toolbar-right">
@@ -79,22 +82,22 @@
             <circle cx="5.5" cy="5.5" r="4" stroke="#6e7681" stroke-width="1.3"/>
             <line x1="8.5" y1="8.5" x2="12" y2="12" stroke="#6e7681" stroke-width="1.3" stroke-linecap="round"/>
           </svg>
-          <input v-model="searchText" placeholder="Search…" class="search-input" />
+          <input v-model="searchText" :placeholder="t('Search…')" class="search-input" />
         </div>
-        <button v-if="selectedProject || selectedType || searchText" @click="resetFilters" class="btn-reset" title="Reset filters">
+        <button v-if="selectedProject || selectedType || searchText" @click="resetFilters" class="btn-reset" :title="t('Reset')">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
             <line x1="1" y1="1" x2="10" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <line x1="10" y1="1" x2="1" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          Reset
+          {{ t('Reset') }}
         </button>
-        <button class="btn-ctx-preview" @click="openContextPreview" title="Preview what would be injected into context">
+        <button class="btn-ctx-preview" @click="openContextPreview" :title="t('Context preview')">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/>
             <line x1="6" y1="4" x2="6" y2="6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
             <circle cx="6" cy="8.2" r="0.65" fill="currentColor"/>
           </svg>
-          Context preview
+          {{ t('Context preview') }}
         </button>
       </div>
     </div>
@@ -112,15 +115,15 @@
         </colgroup>
         <thead>
           <tr>
-            <th class="type-col">Type</th>
-            <th>Project</th>
-            <th>Name</th>
-            <th>Description</th>
+            <th class="type-col">{{ t('Type') }}</th>
+            <th>{{ t('Project') }}</th>
+            <th>{{ t('Name') }}</th>
+            <th>{{ t('Description') }}</th>
             <th class="sortable" @click="toggleSort('hits')">
-              Hits <span class="sort-icon" v-if="sortBy === 'hits'">{{ sortDesc ? '↓' : '↑' }}</span>
+              {{ t('Hits') }} <span class="sort-icon" v-if="sortBy === 'hits'">{{ sortDesc ? '↓' : '↑' }}</span>
             </th>
             <th class="sortable" @click="toggleSort('time')">
-              Updated <span class="sort-icon" v-if="sortBy === 'time'">{{ sortDesc ? '↓' : '↑' }}</span>
+              {{ t('Updated') }} <span class="sort-icon" v-if="sortBy === 'time'">{{ sortDesc ? '↓' : '↑' }}</span>
             </th>
             <th></th>
           </tr>
@@ -142,12 +145,12 @@
               <td class="date"><span :title="fmtDate(m.updated_at)">{{ relTime(m.updated_at) }}</span></td>
               <td>
                 <div class="row-actions">
-                  <button class="btn-edit-quick" @click.stop="openEdit(m)" title="Edit" aria-label="Edit">
+                  <button class="btn-edit-quick" @click.stop="openEdit(m)" :title="t('Edit')" :aria-label="t('Edit')">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                     </svg>
                   </button>
-                  <button class="btn-del" @click.stop="del(m)" title="Delete" aria-label="Delete">
+                  <button class="btn-del" @click.stop="del(m)" :title="t('Delete')" :aria-label="t('Delete')">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
                     </svg>
@@ -162,49 +165,49 @@
               <td colspan="7">
                 <div class="detail">
                   <div class="content-block">
-                    <div class="block-label">Content</div>
+                    <div class="block-label">{{ t('Content') }}</div>
                     <div class="md-body" v-html="md(m.content)"></div>
                   </div>
                   <div v-if="m.why" class="content-block">
-                    <div class="block-label">Why</div>
+                    <div class="block-label">{{ t('Why') }}</div>
                     <div class="md-body" v-html="md(m.why)"></div>
                   </div>
                   <div v-if="m.how_to_apply" class="content-block">
-                    <div class="block-label">How to Apply</div>
+                    <div class="block-label">{{ t('How to Apply') }}</div>
                     <div class="md-body" v-html="md(m.how_to_apply)"></div>
                   </div>
                   <div class="meta-row">
                     <span class="meta-item">
-                      ID:
-                      <code class="copyable" @click.stop="copy(m.id)" :title="'Click to copy'">{{ m.id }}</code>
-                      <span class="copy-hint" v-if="copied === m.id">Copied</span>
+                      {{ t('ID:') }}
+                      <code class="copyable" @click.stop="copy(m.id)" :title="t('Click to copy')">{{ m.id }}</code>
+                      <span class="copy-hint" v-if="copied === m.id">{{ t('Copied') }}</span>
                     </span>
                     <span class="meta-sep">·</span>
                     <span class="meta-item">
-                      Project: <code class="copyable" @click.stop="copy(m.project_id)" title="Click to copy">{{ m.project_id }}</code>
-                      <span class="copy-hint" v-if="copied === m.project_id">Copied</span>
+                      {{ t('Project:') }} <code class="copyable" @click.stop="copy(m.project_id)" :title="t('Click to copy')">{{ m.project_id }}</code>
+                      <span class="copy-hint" v-if="copied === m.project_id">{{ t('Copied') }}</span>
                     </span>
                     <span class="meta-sep">·</span>
-                    <span class="meta-item">Hits <strong>{{ m.hit_count }}</strong></span>
+                    <span class="meta-item">{{ t('Hits') }} <strong>{{ m.hit_count }}</strong></span>
                     <template v-if="m.last_hit_at">
                       <span class="meta-sep">·</span>
-                      <span class="meta-item">Last hit {{ fmtDateTime(m.last_hit_at) }}</span>
+                      <span class="meta-item">{{ t('Last hit') }} {{ fmtDateTime(m.last_hit_at) }}</span>
                     </template>
                   </div>
                   <div class="move-row" @click.stop>
-                    <span class="block-label">Move to project</span>
+                    <span class="block-label">{{ t('Move to project') }}</span>
                     <select class="move-select" v-model="moveTarget[m.id]">
-                      <option value="">— Select project —</option>
+                      <option value="">{{ t('— Select project —') }}</option>
                       <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }} ({{ p.memory_count }})</option>
                     </select>
                     <button class="btn-move" :disabled="!moveTarget[m.id] || isMoving[m.id]" @click.stop="moveMemory(m)">
-                      {{ isMoving[m.id] ? 'Moving…' : 'Move' }}
+                      {{ isMoving[m.id] ? t('Moving…') : t('Move') }}
                     </button>
-                    <span class="copy-hint" v-if="moved === m.id">Moved ✓</span>
+                    <span class="copy-hint" v-if="moved === m.id">{{ t('Moved ✓') }}</span>
                     <span class="save-hint err" v-if="moveError[m.id]">{{ moveError[m.id] }}</span>
                   </div>
                   <div class="action-row" @click.stop>
-                    <button class="btn-edit" @click.stop="openEdit(m)">Edit</button>
+                    <button class="btn-edit" @click.stop="openEdit(m)">{{ t('Edit') }}</button>
                   </div>
                 </div>
               </td>
@@ -219,7 +222,7 @@
                   <path d="M3 9v4c0 1.66 4.03 3 9 3s9-1.34 9-3V9"/>
                   <path d="M3 13v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4"/>
                 </svg>
-                <span>{{ searchText || selectedType || selectedProject ? 'No memories match the current filters' : 'No memories yet — start a Claude Code session to capture some' }}</span>
+                <span>{{ searchText || selectedType || selectedProject ? t('No memories match the current filters') : t('No memories yet — start a Claude Code session to capture some') }}</span>
               </div>
             </td>
           </tr>
@@ -231,13 +234,13 @@
       <div class="pagination">
         <button class="page-btn" :disabled="page === 1" @click="page = 1">«</button>
         <button class="page-btn" :disabled="page === 1" @click="page--">‹</button>
-        <span class="page-info">Page {{ page }} / {{ totalPages }} · {{ filtered.length }} total</span>
+        <span class="page-info">{{ t('Page {p} / {t} · {n} total', {p: page, t: totalPages, n: filtered.length}) }}</span>
         <button class="page-btn" :disabled="page === totalPages" @click="page++">›</button>
         <button class="page-btn" :disabled="page === totalPages" @click="page = totalPages">»</button>
         <select class="page-size-select" v-model="pageSize">
-          <option :value="20">20 / page</option>
-          <option :value="50">50 / page</option>
-          <option :value="100">100 / page</option>
+          <option :value="20">{{ t('{n} / page', {n: 20}) }}</option>
+          <option :value="50">{{ t('{n} / page', {n: 50}) }}</option>
+          <option :value="100">{{ t('{n} / page', {n: 100}) }}</option>
         </select>
       </div>
     </div>
@@ -247,7 +250,7 @@
     <div v-if="settingsOpen" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <span class="modal-title">Settings</span>
+          <span class="modal-title">{{ t('Settings') }}</span>
           <button class="modal-close" @click="settingsOpen = false">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -257,17 +260,17 @@
         </div>
         <div class="modal-body">
           <div class="settings-group">
-            <div class="settings-group-title">Extraction Model</div>
+            <div class="settings-group-title">{{ t('Extraction Model') }}</div>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'OpenAI-compatible API base URL')" @mouseleave="hideTip">Base URL</span>
-              <input v-model="form.extraction_base_url" class="field-input" placeholder="https://api.openai.com/v1" />
+              <span class="field-label" @mouseenter="showTip($event, t('OpenAI-compatible API base URL'))" @mouseleave="hideTip">{{ t('Base URL') }}</span>
+              <input v-model="form.extraction_base_url" class="field-input" :placeholder="t('https://api.openai.com/v1')" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'API key for the extraction model endpoint')" @mouseleave="hideTip">API Key</span>
-              <input v-model="form.extraction_api_key" class="field-input" type="password" :placeholder="form.extraction_api_key === KEY_SENTINEL ? '●●●●●● (saved — leave to keep)' : 'sk-… (enter to set)'" />
+              <span class="field-label" @mouseenter="showTip($event, t('API key for the extraction model endpoint'))" @mouseleave="hideTip">{{ t('API Key') }}</span>
+              <input v-model="form.extraction_api_key" class="field-input" type="password" :placeholder="form.extraction_api_key === KEY_SENTINEL ? t('●●●●●● (saved — leave to keep)') : t('sk-… (enter to set)')" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'Model name used to extract memories from session transcripts')" @mouseleave="hideTip">Model</span>
+              <span class="field-label" @mouseenter="showTip($event, t('Model name used to extract memories from session transcripts'))" @mouseleave="hideTip">{{ t('Model') }}</span>
               <div class="combobox-wrap">
                 <input
                   v-model="form.extraction_model"
@@ -297,7 +300,7 @@
                   </div>
                 </div>
               </div>
-              <button class="btn-fetch-models" @click.prevent="fetchModels" :disabled="!form.extraction_base_url || isFetchingModels" type="button" title="Fetch models from Base URL">
+              <button class="btn-fetch-models" @click.prevent="fetchModels" :disabled="!form.extraction_base_url || isFetchingModels" type="button" :title="t('Model')">
                 <svg v-if="!isFetchingModels" width="11" height="11" viewBox="0 0 11 11" fill="none">
                   <path d="M10 5.5A4.5 4.5 0 1 1 5.5 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
                   <path d="M7 1h3v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -309,62 +312,62 @@
             </label>
           </div>
           <div class="settings-group">
-            <div class="settings-group-title">Hooks</div>
+            <div class="settings-group-title">{{ t('Hooks') }}</div>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'Minimum seconds between two ingest triggers for the same session')" @mouseleave="hideTip">Ingest cooldown</span>
-              <input v-model="form.hook_cooldown_sec" class="field-input" placeholder="300 (seconds)" />
+              <span class="field-label" @mouseenter="showTip($event, t('Minimum seconds between two ingest triggers for the same session'))" @mouseleave="hideTip">{{ t('Ingest cooldown') }}</span>
+              <input v-model="form.hook_cooldown_sec" class="field-input" :placeholder="t('300 (seconds)')" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'Minimum number of new user turns required to trigger ingest')" @mouseleave="hideTip">Min turns</span>
+              <span class="field-label" @mouseenter="showTip($event, t('Minimum number of new user turns required to trigger ingest'))" @mouseleave="hideTip">{{ t('Min turns') }}</span>
               <input v-model="form.hook_min_turns" class="field-input" placeholder="1" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'Max tokens of memory context injected into each prompt via the UserPromptSubmit hook')" @mouseleave="hideTip">Context tokens</span>
+              <span class="field-label" @mouseenter="showTip($event, t('Max tokens of memory context injected into each prompt via the UserPromptSubmit hook'))" @mouseleave="hideTip">{{ t('Context tokens') }}</span>
               <input v-model="form.hook_budget_tokens" class="field-input" placeholder="1500" />
             </label>
           </div>
           <div class="settings-group">
-            <div class="settings-group-title">MCP / Service</div>
+            <div class="settings-group-title">{{ t('MCP / Service') }}</div>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'Default number of memories returned by search_memory when top_k is not specified by the caller')" @mouseleave="hideTip">Search top_k</span>
+              <span class="field-label" @mouseenter="showTip($event, t('Default number of memories returned by search_memory when top_k is not specified by the caller'))" @mouseleave="hideTip">{{ t('Search top_k') }}</span>
               <input v-model="form.search_top_k" class="field-input" placeholder="8" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'Cosine similarity threshold (0–1) above which an existing memory is considered a duplicate on save')" @mouseleave="hideTip">Dup threshold</span>
+              <span class="field-label" @mouseenter="showTip($event, t('Cosine similarity threshold (0–1) above which an existing memory is considered a duplicate on save'))" @mouseleave="hideTip">{{ t('Dup threshold') }}</span>
               <input v-model="form.dup_threshold" class="field-input" placeholder="0.92" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'PostgreSQL asyncpg connection string — requires service restart')" @mouseleave="hideTip">DB DSN</span>
-              <input v-model="form.db_dsn" class="field-input" placeholder="postgresql+asyncpg://… (restart required)" />
+              <span class="field-label" @mouseenter="showTip($event, t('PostgreSQL asyncpg connection string — requires service restart'))" @mouseleave="hideTip">{{ t('DB DSN') }}</span>
+              <input v-model="form.db_dsn" class="field-input" :placeholder="t('postgresql+asyncpg://… (restart required)')" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'HTTP port the service listens on — requires service restart')" @mouseleave="hideTip">HTTP port</span>
-              <input v-model="form.http_port" class="field-input" placeholder="8765 (restart required)" />
+              <span class="field-label" @mouseenter="showTip($event, t('HTTP port the service listens on — requires service restart'))" @mouseleave="hideTip">{{ t('HTTP port') }}</span>
+              <input v-model="form.http_port" class="field-input" :placeholder="t('8765 (restart required)')" />
             </label>
           </div>
           <div class="settings-group">
-            <div class="settings-group-title">Embed Model</div>
+            <div class="settings-group-title">{{ t('Embed Model') }}</div>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'FastEmbed model name used to generate memory vectors')" @mouseleave="hideTip">Model name</span>
+              <span class="field-label" @mouseenter="showTip($event, t('FastEmbed model name used to generate memory vectors'))" @mouseleave="hideTip">{{ t('Model name') }}</span>
               <input v-model="form.embed_model" class="field-input" placeholder="BAAI/bge-small-zh-v1.5" />
             </label>
             <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, 'Vector dimension — must match the chosen embed model')" @mouseleave="hideTip">Dimensions</span>
+              <span class="field-label" @mouseenter="showTip($event, t('Vector dimension — must match the chosen embed model'))" @mouseleave="hideTip">{{ t('Dimensions') }}</span>
               <input v-model="form.embed_dim" class="field-input" placeholder="512" />
             </label>
           </div>
         </div>
         <div class="modal-footer">
           <span :class="['save-hint', saveHint.startsWith('Error') ? 'err' : 'ok']" v-if="saveHint">{{ saveHint }}</span>
-          <button class="btn-cancel" @click="settingsOpen = false">Cancel</button>
-          <button class="btn-save" @click="saveSettings" :disabled="isSaving">{{ isSaving ? 'Saving…' : 'Save' }}</button>
+          <button class="btn-cancel" @click="settingsOpen = false">{{ t('Cancel') }}</button>
+          <button class="btn-save" @click="saveSettings" :disabled="isSaving">{{ isSaving ? t('Saving…') : t('Save') }}</button>
         </div>
       </div>
     </div>
     <div v-if="deleteTarget" class="modal-overlay">
       <div class="modal modal-sm">
         <div class="modal-header">
-          <span class="modal-title">Delete memory</span>
+          <span class="modal-title">{{ t('Delete memory') }}</span>
           <button class="modal-close" @click="deleteTarget = null">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -376,19 +379,19 @@
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
           </svg>
-          <p class="delete-confirm-text">Delete <strong>{{ deleteTarget.name }}</strong>?</p>
-          <p class="delete-confirm-sub">This memory will be soft-deleted and removed from context injection.</p>
+          <p class="delete-confirm-text">{{ t('Delete {name}?', {name: ''}) }}<strong>{{ deleteTarget.name }}</strong></p>
+          <p class="delete-confirm-sub">{{ t('This memory will be soft-deleted and removed from context injection.') }}</p>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" @click="deleteTarget = null">Cancel</button>
-          <button class="btn-danger" @click="confirmDelete" :disabled="isDeleting">{{ isDeleting ? 'Deleting…' : 'Delete' }}</button>
+          <button class="btn-cancel" @click="deleteTarget = null">{{ t('Cancel') }}</button>
+          <button class="btn-danger" @click="confirmDelete" :disabled="isDeleting">{{ isDeleting ? t('Deleting…') : t('Delete') }}</button>
         </div>
       </div>
     </div>
     <div v-if="editTarget" class="modal-overlay">
       <div class="modal modal-edit">
         <div class="modal-header">
-          <span class="modal-title">Edit Memory</span>
+          <span class="modal-title">{{ t('Edit Memory') }}</span>
           <button class="modal-close" @click="editTarget = null">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -397,13 +400,13 @@
           </button>
         </div>
         <div class="modal-body">
-          <div class="field-row"><label class="field-label">Name</label><input class="field-input" v-model="editForm.name" /></div>
-          <div class="field-row"><label class="field-label">Description</label><textarea class="field-input" v-model="editForm.description" rows="2" /></div>
-          <div class="field-row"><label class="field-label">Content</label><textarea class="field-input" v-model="editForm.content" rows="6" /></div>
-          <div class="field-row"><label class="field-label">Why</label><input class="field-input" v-model="editForm.why" /></div>
-          <div class="field-row"><label class="field-label">How to apply</label><input class="field-input" v-model="editForm.how_to_apply" /></div>
+          <div class="field-row"><label class="field-label">{{ t('Name') }}</label><input class="field-input" v-model="editForm.name" /></div>
+          <div class="field-row"><label class="field-label">{{ t('Description') }}</label><textarea class="field-input" v-model="editForm.description" rows="2" /></div>
+          <div class="field-row"><label class="field-label">{{ t('Content') }}</label><textarea class="field-input" v-model="editForm.content" rows="6" /></div>
+          <div class="field-row"><label class="field-label">{{ t('Why') }}</label><input class="field-input" v-model="editForm.why" /></div>
+          <div class="field-row"><label class="field-label">{{ t('How to apply') }}</label><input class="field-input" v-model="editForm.how_to_apply" /></div>
           <div class="field-row field-row-inline">
-            <label class="field-label">Importance</label>
+            <label class="field-label">{{ t('Importance') }}</label>
             <select class="field-input field-select-sm" v-model.number="editForm.importance">
               <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
             </select>
@@ -411,15 +414,15 @@
           <p v-if="editError" class="save-hint err">{{ editError }}</p>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" @click="editTarget = null">Cancel</button>
-          <button class="btn-save" :disabled="isEditSaving" @click="saveEdit">{{ isEditSaving ? 'Saving…' : 'Save' }}</button>
+          <button class="btn-cancel" @click="editTarget = null">{{ t('Cancel') }}</button>
+          <button class="btn-save" :disabled="isEditSaving" @click="saveEdit">{{ isEditSaving ? t('Saving…') : t('Save') }}</button>
         </div>
       </div>
     </div>
     <div v-if="ctxPreviewOpen" class="modal-overlay">
       <div class="modal modal-lg">
         <div class="modal-header">
-          <span class="modal-title">Context preview</span>
+          <span class="modal-title">{{ t('Context preview') }}</span>
           <button class="modal-close" @click="ctxPreviewOpen = false">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -430,14 +433,14 @@
         <div class="modal-body">
           <div class="ctx-preview-controls">
             <select class="field-input ctx-project-select" v-model="ctxPreviewSlug" @change="loadContextPreview">
-              <option value="">— Select project —</option>
+              <option value="">{{ t('— Select project —') }}</option>
               <option v-for="p in projects" :key="p.id" :value="p.slug">
                 {{ p.display_name || p.slug }}
               </option>
             </select>
           </div>
-          <div v-if="!ctxPreviewSlug" class="empty-state" style="padding:32px 0">Select a project to preview its injected context.</div>
-          <div v-else-if="ctxPreviewLoading" class="empty-state">Loading…</div>
+          <div v-if="!ctxPreviewSlug" class="empty-state" style="padding:32px 0">{{ t('Select a project to preview its injected context.') }}</div>
+          <div v-else-if="ctxPreviewLoading" class="empty-state">{{ t('Loading…') }}</div>
           <pre v-else class="ctx-preview-pre">{{ ctxPreviewMd }}</pre>
         </div>
       </div>
@@ -448,6 +451,8 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { marked } from 'marked'
+import enLocale from './locales/en.json'
+import zhLocale from './locales/zh.json'
 
 marked.setOptions({ breaks: true, gfm: true })
 function md(text) {
@@ -465,6 +470,20 @@ async function copy(text) {
 }
 
 const BASE = '/api'
+
+// ── i18n ──
+const lang = ref(localStorage.getItem('mo-lang') || 'en')
+const _locales = { en: enLocale, zh: zhLocale }
+function toggleLang() {
+  lang.value = lang.value === 'en' ? 'zh' : 'en'
+  localStorage.setItem('mo-lang', lang.value)
+}
+function t(key, vars) {
+  const locale = _locales[lang.value] || _locales.en
+  const str = locale[key] ?? key
+  if (!vars) return str
+  return str.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''))
+}
 
 const projects = ref([])
 const projectMap = computed(() => Object.fromEntries(projects.value.map(p => [p.id, p.display_name || p.slug])))
@@ -797,7 +816,7 @@ async function saveSettings() {
       saveHint.value = `Error ${r.status}: ${err.detail || r.statusText}`
       return
     }
-    saveHint.value = 'Saved'
+    saveHint.value = t('Saved')
     setTimeout(() => { saveHint.value = ''; settingsOpen.value = false }, 1200)
   } catch (e) {
     saveHint.value = `Error: ${e.message}`
@@ -909,10 +928,10 @@ body {
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
-  padding: 24px 20px 60px;
+  padding: 14px 20px 60px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 /* ── Header ── */
@@ -920,26 +939,26 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 20px;
+  gap: 12px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.logo { display: flex; align-items: center; gap: 10px; }
+.logo { display: flex; align-items: center; gap: 8px; }
 .header-spacer { flex: 1; }
 .stat-sep { color: var(--text-muted); }
-h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
+h1 { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
 
-.stats-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.stat-total { font-size: 12px; color: var(--text-muted); margin-right: 4px; }
+.stats-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.stat-total { font-size: 11px; color: var(--text-muted); margin-right: 2px; }
 
 .badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px 2px 6px; border-radius: 20px;
-  font-size: 11px; font-weight: 500; border: 1px solid transparent;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 6px 1px 5px; border-radius: 20px;
+  font-size: 10px; font-weight: 500; border: 1px solid transparent;
 }
 .badge strong { font-weight: 700; }
-.badge-dot { width: 6px; height: 6px; border-radius: 50%; }
+.badge-dot { width: 5px; height: 5px; border-radius: 50%; }
 
 .badge.feedback { background: var(--green-dim); color: var(--green); border-color: var(--green-border); }
 .badge.feedback .badge-dot { background: var(--green); }
@@ -987,7 +1006,7 @@ h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spaci
 }
 .filter-label {
   font-size: 11px; color: var(--text-muted); font-weight: 500;
-  min-width: 44px; flex-shrink: 0;
+  min-width: 44px; flex-shrink: 0; text-align: right;
 }
 .pill-group { display: flex; gap: 4px; flex-wrap: wrap; }
 .pill {
@@ -1074,8 +1093,8 @@ tbody tr:last-child td { border-bottom: none; }
 .tag.user      { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
 .tag.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
 
-.project-cell { max-width: 80px; text-align: right; }
-.type-col { text-align: right; }
+.project-cell { max-width: 80px; }
+.type-col { }
 .name {
   font-weight: 500; max-width: 180px; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
