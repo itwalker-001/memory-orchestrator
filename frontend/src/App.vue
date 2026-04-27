@@ -51,55 +51,52 @@
     </header>
 
     <div class="toolbar">
-      <div class="filters">
-        <div class="select-wrap">
-          <svg class="select-icon" width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <rect x="1" y="1" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="7" y="1" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="1" y="7" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/>
-            <rect x="7" y="7" width="4" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/>
-          </svg>
-          <select v-model="selectedProject" @change="load">
-            <option value="">All Projects</option>
-            <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }} ({{ p.memory_count }})</option>
-          </select>
-        </div>
-        <div class="select-wrap">
-          <svg class="select-icon" width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <circle cx="6" cy="6" r="4" stroke="currentColor" stroke-width="1.2"/>
-            <circle cx="6" cy="6" r="1.5" fill="currentColor"/>
-          </svg>
-          <select v-model="selectedType" @change="load">
-            <option value="">All Types</option>
-            <option value="user">user</option>
-            <option value="feedback">feedback</option>
-            <option value="project">project</option>
-            <option value="reference">reference</option>
-          </select>
+      <div class="filter-group">
+        <span class="filter-label">Project</span>
+        <div class="pill-group">
+          <button :class="['pill', selectedProject === '' ? 'pill-active' : '']" @click="selectedProject = ''; load()">All</button>
+          <button v-for="p in projects" :key="p.id"
+            :class="['pill', selectedProject === p.slug ? 'pill-active' : '']"
+            @click="selectedProject = p.slug; load()"
+            :title="p.slug">
+            {{ p.display_name || p.slug }}
+            <span class="pill-count">{{ p.memory_count }}</span>
+          </button>
         </div>
       </div>
-      <div class="search-wrap">
-        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-          <circle cx="5.5" cy="5.5" r="4" stroke="#6e7681" stroke-width="1.3"/>
-          <line x1="8.5" y1="8.5" x2="12" y2="12" stroke="#6e7681" stroke-width="1.3" stroke-linecap="round"/>
-        </svg>
-        <input v-model="searchText" placeholder="Search name or description…" class="search-input" />
+      <div class="filter-group">
+        <span class="filter-label">Type</span>
+        <div class="pill-group">
+          <button :class="['pill', selectedType === '' ? 'pill-active' : '']" @click="selectedType = ''; load()">All</button>
+          <button v-for="t in ['user','feedback','project','reference']" :key="t"
+            :class="['pill', selectedType === t ? 'pill-active' : '']"
+            @click="selectedType = t; load()">{{ t }}</button>
+        </div>
       </div>
-      <button v-if="selectedProject || selectedType || searchText" @click="resetFilters" class="btn-reset" title="Reset filters">
-        <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-          <line x1="1" y1="1" x2="10" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          <line x1="10" y1="1" x2="1" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>
-        Reset
-      </button>
-      <button v-if="selectedProject" class="btn-ctx-preview" @click="showContextPreview(selectedProject)" title="Preview what would be injected into context">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/>
-          <line x1="6" y1="4" x2="6" y2="6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-          <circle cx="6" cy="8.2" r="0.65" fill="currentColor"/>
-        </svg>
-        Context preview
-      </button>
+      <div class="toolbar-right">
+        <div class="search-wrap">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <circle cx="5.5" cy="5.5" r="4" stroke="#6e7681" stroke-width="1.3"/>
+            <line x1="8.5" y1="8.5" x2="12" y2="12" stroke="#6e7681" stroke-width="1.3" stroke-linecap="round"/>
+          </svg>
+          <input v-model="searchText" placeholder="Search…" class="search-input" />
+        </div>
+        <button v-if="selectedProject || selectedType || searchText" @click="resetFilters" class="btn-reset" title="Reset filters">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <line x1="1" y1="1" x2="10" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="10" y1="1" x2="1" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Reset
+        </button>
+        <button class="btn-ctx-preview" @click="openContextPreview" title="Preview what would be injected into context">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.2"/>
+            <line x1="6" y1="4" x2="6" y2="6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <circle cx="6" cy="8.2" r="0.65" fill="currentColor"/>
+          </svg>
+          Context preview
+        </button>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -417,7 +414,7 @@
     <div v-if="ctxPreviewOpen" class="modal-overlay">
       <div class="modal modal-lg">
         <div class="modal-header">
-          <span class="modal-title">Context preview — {{ ctxPreviewSlug }}</span>
+          <span class="modal-title">Context preview</span>
           <button class="modal-close" @click="ctxPreviewOpen = false">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -426,7 +423,16 @@
           </button>
         </div>
         <div class="modal-body">
-          <div v-if="ctxPreviewLoading" class="empty-state">Loading…</div>
+          <div class="ctx-preview-controls">
+            <select class="field-input ctx-project-select" v-model="ctxPreviewSlug" @change="loadContextPreview">
+              <option value="">— Select project —</option>
+              <option v-for="p in projects.filter(p => p.id !== '00000000-0000-0000-0000-000000000000')" :key="p.id" :value="p.slug">
+                {{ p.display_name || p.slug }}
+              </option>
+            </select>
+          </div>
+          <div v-if="!ctxPreviewSlug" class="empty-state" style="padding:32px 0">Select a project to preview its injected context.</div>
+          <div v-else-if="ctxPreviewLoading" class="empty-state">Loading…</div>
           <pre v-else class="ctx-preview-pre">{{ ctxPreviewMd }}</pre>
         </div>
       </div>
@@ -579,9 +585,15 @@ const ctxPreviewOpen = ref(false)
 const ctxPreviewSlug = ref('')
 const ctxPreviewMd = ref('')
 const ctxPreviewLoading = ref(false)
-async function showContextPreview(slug) {
-  ctxPreviewSlug.value = slug
+function openContextPreview() {
   ctxPreviewOpen.value = true
+  ctxPreviewSlug.value = selectedProject.value || ''
+  ctxPreviewMd.value = ''
+  if (ctxPreviewSlug.value) loadContextPreview()
+}
+async function loadContextPreview() {
+  const slug = ctxPreviewSlug.value
+  if (!slug) return
   ctxPreviewLoading.value = true
   ctxPreviewMd.value = ''
   try {
@@ -951,34 +963,45 @@ h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spaci
 
 /* ── Toolbar ── */
 .toolbar {
-  display: flex; align-items: center;
-  gap: 10px; flex-wrap: wrap;
+  display: flex; flex-direction: column;
+  gap: 8px; padding-bottom: 4px;
 }
 
-.filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-group {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.filter-label {
+  font-size: 11px; color: var(--text-muted); font-weight: 500;
+  min-width: 44px; flex-shrink: 0;
+}
+.pill-group { display: flex; gap: 4px; flex-wrap: wrap; }
+.pill {
+  background: var(--surface); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: 20px;
+  padding: 3px 10px; font-size: 11px; cursor: pointer; font-weight: 500;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  display: flex; align-items: center; gap: 4px;
+}
+.pill:hover { border-color: var(--accent); color: var(--accent); }
+.pill-active {
+  background: var(--accent-dim); color: var(--accent);
+  border-color: var(--accent);
+}
+.pill-count {
+  background: var(--bg-secondary); border-radius: 10px;
+  padding: 0 5px; font-size: 10px; color: var(--text-muted);
+}
+.pill-active .pill-count { background: var(--accent-dim); color: var(--accent); }
 
-.select-wrap {
-  position: relative; display: flex; align-items: center;
+.toolbar-right {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
-.select-icon {
-  position: absolute; left: 9px; color: var(--text-muted); pointer-events: none; z-index: 1;
-}
-.select-wrap select {
-  background: var(--surface); color: var(--text-primary);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 6px 10px 6px 26px; font-size: 12px; cursor: pointer;
-  appearance: none; -webkit-appearance: none;
-  transition: border-color var(--transition);
-  min-width: 120px;
-}
-.select-wrap select:hover { border-color: var(--border-hover); }
-.select-wrap select:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 
 .search-wrap {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: 6px 10px;
-  flex: 1; min-width: 180px; max-width: 280px;
+  border-radius: var(--radius-sm); padding: 5px 10px;
+  min-width: 160px; max-width: 240px;
   transition: border-color var(--transition);
 }
 .search-wrap:focus-within { border-color: var(--accent); }
@@ -987,6 +1010,9 @@ h1 { font-size: 16px; font-weight: 600; color: var(--text-primary); letter-spaci
   color: var(--text-primary); font-size: 12px; width: 100%;
 }
 .search-input::placeholder { color: var(--text-muted); }
+
+.ctx-preview-controls { margin-bottom: 12px; }
+.ctx-project-select { min-width: 240px; }
 
 /* ── Table ── */
 .table-wrap {
