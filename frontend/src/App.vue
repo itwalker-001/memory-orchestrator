@@ -97,8 +97,8 @@
     <div class="table-wrap">
       <table>
         <colgroup>
-          <col style="width:90px">
           <col style="width:80px">
+          <col style="width:90px">
           <col style="width:160px">
           <col>
           <col style="width:64px">
@@ -107,8 +107,8 @@
         </colgroup>
         <thead>
           <tr>
-            <th class="type-col">{{ t('Type') }}</th>
             <th>{{ t('Project') }}</th>
+            <th class="type-col">{{ t('Type') }}</th>
             <th>{{ t('Name') }}</th>
             <th>{{ t('Description') }}</th>
             <th class="sortable" @click="toggleSort('hits')">
@@ -123,11 +123,11 @@
         <tbody>
           <template v-for="m in paged" :key="m.id">
             <tr @click="toggle(m.id)" :class="['type-' + m.type, { active: expanded === m.id }]">
-              <td class="type-col"><span :class="['tag', m.type]">{{ m.type }}</span></td>
               <td class="project-cell" @mouseenter="showTip($event, projectMap[m.project_id] || '—')" @mouseleave="hideTip">
                 <span v-if="projectMap[m.project_id]" :class="['project-badge', projectColorClass(m.project_id)]">{{ projectAbbr(m.project_id) }}</span>
                 <span v-else class="hit-zero">—</span>
               </td>
+              <td class="type-col"><span :class="['tag', m.type]">{{ m.type }}</span></td>
               <td class="name" @mouseenter="showTip($event, m.name)" @mouseleave="hideTip">{{ m.name }}</td>
               <td><div class="desc" @mouseenter="showTip($event, m.description)" @mouseleave="hideTip">{{ m.description }}</div></td>
               <td class="hit" :class="{ 'hit-active': m.hit_count > 0 }">
