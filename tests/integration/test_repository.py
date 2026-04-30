@@ -14,8 +14,27 @@ async def test_save_and_get_roundtrip(session):
         source="explicit",
     )
     assert saved.id is not None
+    assert saved.source_client == "claude"
     fetched = await repo.get(saved.id)
     assert fetched.name == "role"
+    assert fetched.source_client == "claude"
+
+
+@pytest.mark.asyncio
+async def test_save_records_source_client(session):
+    repo = MemoryRepository(session)
+    pid = await repo.ensure_project("github.com/source/client")
+    saved = await repo.save(
+        type="project",
+        name="codex-source",
+        description="saved from codex",
+        content="full content here",
+        project_id=pid,
+        source="explicit",
+        source_client="codex",
+    )
+
+    assert saved.source_client == "codex"
 
 
 @pytest.mark.asyncio

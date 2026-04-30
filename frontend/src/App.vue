@@ -3,14 +3,27 @@
     <header class="app-header">
       <div class="logo">
         <svg width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="32" height="32" rx="7" fill="#6366f1"/>
-          <path d="M16 6 C13 6 11 7.5 10.5 9.5 C9 9.2 7 10 6.5 12 C5 12.5 4 14 4.5 16 C4 17.5 4.5 19.5 6 20.5 C6.5 22.5 8 24 10 24 C11 25.5 13 26 15 25.5 L15 22 C13 22 11.5 21 11 19.5 C9.5 19.5 8.5 18.5 8.5 17 C7.5 16.5 7 15.5 7.5 14.5 C7.2 13.5 8 12.5 9 12.5 C9.2 11 10.5 10 12 10.5 C12.5 9 14 8 16 8 Z" fill="#e0e7ff"/>
-          <path d="M16 6 C19 6 21 7.5 21.5 9.5 C23 9.2 25 10 25.5 12 C27 12.5 28 14 27.5 16 C28 17.5 27.5 19.5 26 20.5 C25.5 22.5 24 24 22 24 C21 25.5 19 26 17 25.5 L17 22 C19 22 20.5 21 21 19.5 C22.5 19.5 23.5 18.5 23.5 17 C24.5 16.5 25 15.5 24.5 14.5 C24.8 13.5 24 12.5 23 12.5 C22.8 11 21.5 10 20 10.5 C19.5 9 18 8 16 8 Z" fill="#e0e7ff"/>
-          <line x1="16" y1="8" x2="16" y2="25.5" stroke="#6366f1" stroke-width="1" opacity="0.6"/>
-          <path d="M10 14 Q12 15.5 10.5 17" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
-          <path d="M9.5 17.5 Q11.5 18.5 11 20" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
-          <path d="M22 14 Q20 15.5 21.5 17" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
-          <path d="M22.5 17.5 Q20.5 18.5 21 20" stroke="#818cf8" stroke-width="1" fill="none" stroke-linecap="round"/>
+          <defs>
+            <linearGradient id="mo-logo-bg" x1="4" y1="3" x2="28" y2="29" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#0f172a"/>
+              <stop offset="1" stop-color="#1d4ed8"/>
+            </linearGradient>
+            <linearGradient id="mo-logo-line" x1="8" y1="8" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#67e8f9"/>
+              <stop offset="1" stop-color="#a7f3d0"/>
+            </linearGradient>
+          </defs>
+          <rect x="1" y="1" width="30" height="30" rx="7" fill="url(#mo-logo-bg)"/>
+          <path d="M8 11.5H12.2L15.5 8.5H20.5" stroke="url(#mo-logo-line)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M8 20.5H12.2L15.5 23.5H24" stroke="url(#mo-logo-line)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M11 16H21" stroke="#93c5fd" stroke-width="2" stroke-linecap="round"/>
+          <path d="M20.5 8.5L24 12V20.5" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="8" cy="11.5" r="2" fill="#22d3ee"/>
+          <circle cx="8" cy="20.5" r="2" fill="#22d3ee"/>
+          <circle cx="11" cy="16" r="2.3" fill="#bfdbfe"/>
+          <circle cx="21" cy="16" r="2.3" fill="#bfdbfe"/>
+          <circle cx="24" cy="12" r="2" fill="#34d399"/>
+          <circle cx="24" cy="20.5" r="2" fill="#34d399"/>
         </svg>
         <h1>Memory Orchestrator</h1>
       </div>
@@ -54,29 +67,33 @@
     </header>
 
     <div class="toolbar">
-      <div class="filter-group">
-        <span class="filter-label">{{ t('Project') }}</span>
-        <div class="pill-group">
-          <button :class="['pill', selectedProject === '' ? 'pill-active' : '']" @click="selectedProject = ''; load()">{{ t('All') }}</button>
-          <button v-for="p in projects" :key="p.id"
-            :class="['pill', selectedProject === p.slug ? 'pill-active' : '']"
-            @click="selectedProject = p.slug; load()"
-            :title="p.slug">
-            {{ p.display_name || p.slug }}
-            <span class="pill-count">{{ p.memory_count }}</span>
-          </button>
+      <div class="filter-bar">
+        <div class="filter-project-wrap">
+          <span class="filter-at">@</span>
+          <select class="project-select" v-model="selectedProject" @change="load()">
+            <option value="">{{ t('All') }}</option>
+            <option v-for="p in projects" :key="p.id" :value="p.slug" :title="p.slug">
+              {{ p.display_name || p.slug }}
+            </option>
+          </select>
         </div>
-      </div>
-      <div class="filter-group">
-        <span class="filter-label">{{ t('Type') }}</span>
-        <div class="pill-group">
-          <button :class="['pill', selectedType === '' ? 'pill-active' : '']" @click="selectedType = ''; load()">{{ t('All') }}</button>
+        <span class="filter-sep-v"></span>
+        <div class="type-tabs">
+          <button :class="['type-tab', selectedType === '' ? 'active' : '']" @click="selectedType = ''; load()">{{ t('All') }}</button>
           <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
-            :class="['pill', selectedType === tp ? 'pill-active' : '']"
+            :class="['type-tab', 'type-tab-' + tp, selectedType === tp ? 'active' : '']"
             @click="selectedType = tp; load()">{{ tp }}</button>
         </div>
       </div>
       <div class="toolbar-right">
+        <button @click="openDuplicates" class="btn-toolbar-action" :title="t('Duplicates')">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+            <rect x="5" y="5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
+          </svg>
+          {{ t('Duplicates') }}
+        </button>
+        <input ref="importFileRef" type="file" accept=".sql" style="display:none" @change="onImportFile" />
         <div class="search-wrap">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
             <circle cx="5.5" cy="5.5" r="4" stroke="#6e7681" stroke-width="1.3"/>
@@ -91,55 +108,79 @@
           </svg>
           {{ t('Reset') }}
         </button>
+        <span class="toolbar-sep"></span>
+        <button @click="openWrite" class="btn-new" :title="t('New memory') + ' (N)'">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          {{ t('New') }}
+        </button>
       </div>
     </div>
 
     <div class="table-wrap">
       <table>
         <colgroup>
-          <col style="width:80px">
+          <col style="width:36px">
+          <col style="width:36px">
+          <col style="width:180px">
           <col style="width:90px">
           <col style="width:160px">
           <col>
           <col style="width:64px">
-          <col style="width:140px">
+          <col style="width:96px">
           <col style="width:80px">
         </colgroup>
         <thead>
           <tr>
+            <th class="col-check" :class="{ 'has-selection': selectedIds.size > 0 }">
+              <input type="checkbox" class="row-check" ref="selectAllRef"
+                :checked="allSelected" @change="toggleSelectAll" />
+            </th>
+            <th class="source-col"></th>
             <th>{{ t('Project') }}</th>
             <th class="type-col">{{ t('Type') }}</th>
             <th>{{ t('Name') }}</th>
             <th>{{ t('Description') }}</th>
-            <th class="sortable" @click="toggleSort('hits')">
-              {{ t('Hits') }} <span class="sort-icon" v-if="sortBy === 'hits'">{{ sortDesc ? '↓' : '↑' }}</span>
-            </th>
-            <th class="sortable" @click="toggleSort('time')">
-              {{ t('Updated') }} <span class="sort-icon" v-if="sortBy === 'time'">{{ sortDesc ? '↓' : '↑' }}</span>
-            </th>
-            <th></th>
+            <th class="sortable col-hits" @click="toggleSort('hits')">{{ t('Hits') }}<span class="sort-icon" v-if="sortBy === 'hits'">{{ sortDesc ? '↓' : '↑' }}</span></th>
+            <th class="sortable col-updated" @click="toggleSort('time')">{{ t('Updated') }}<span class="sort-icon" v-if="sortBy === 'time'">{{ sortDesc ? '↓' : '↑' }}</span></th>
+            <th class="col-actions"></th>
           </tr>
         </thead>
         <tbody>
           <template v-for="m in paged" :key="m.id">
-            <tr @click="toggle(m.id)" :class="['type-' + m.type, { active: expanded === m.id }]">
-              <td class="project-cell" @mouseenter="showTip($event, projectMap[m.project_id] || '—')" @mouseleave="hideTip">
-                <span v-if="projectMap[m.project_id]" :class="['project-badge', projectColorClass(m.project_id)]">{{ projectAbbr(m.project_id) }}</span>
+            <tr @click="openDetail(m)" :class="['type-' + m.type, { active: detailTarget?.id === m.id, selected: selectedIds.has(m.id) }]">
+              <td class="col-check" @click.stop>
+                <input type="checkbox" class="row-check" :checked="selectedIds.has(m.id)" @change="toggleSelect(m.id)" />
+              </td>
+              <td class="source-col">
+                <span :class="['source-badge', sourceClass(m.source_client)]" @mouseenter="showTip($event, sourceLabel(m.source_client))" @mouseleave="hideTip">
+                  <img class="source-icon" :src="sourceIconUrl(m.source_client)" :alt="sourceLabel(m.source_client)" />
+                </span>
+              </td>
+              <td class="project-cell" @mouseenter="showTip($event, projectDisplayName(m.project_id) || '—')" @mouseleave="hideTip">
+                <span v-if="projectDisplayName(m.project_id)" class="plain-cell-text">{{ projectCellText(m.project_id) }}</span>
                 <span v-else class="hit-zero">—</span>
               </td>
               <td class="type-col"><span :class="['tag', m.type]">{{ m.type }}</span></td>
               <td class="name" @mouseenter="showTip($event, m.name)" @mouseleave="hideTip">{{ m.name }}</td>
               <td><div class="desc" @mouseenter="showTip($event, m.description)" @mouseleave="hideTip">{{ m.description }}</div></td>
-              <td class="hit" :class="{ 'hit-active': m.hit_count > 0 }">
+              <td class="hit col-hits" :class="{ 'hit-active': m.hit_count > 0 }">
                 <span v-if="m.hit_count > 0" class="hit-pill">{{ m.hit_count }}</span>
                 <span v-else class="hit-zero">—</span>
               </td>
-              <td class="date"><span :title="fmtDate(m.updated_at)">{{ relTime(m.updated_at) }}</span></td>
-              <td>
+              <td class="date col-updated"><span :title="fmtDate(m.updated_at)">{{ relTime(m.updated_at) }}</span></td>
+              <td class="col-actions">
                 <div class="row-actions">
                   <button class="btn-edit-quick" @click.stop="openEdit(m)" :title="t('Edit')" :aria-label="t('Edit')">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                  <button class="btn-clone-quick" @click.stop="openClone(m)" :title="t('Clone')" :aria-label="t('Clone')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                     </svg>
                   </button>
                   <button class="btn-del" @click.stop="del(m)" :title="t('Delete')" :aria-label="t('Delete')">
@@ -147,66 +188,13 @@
                       <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
                     </svg>
                   </button>
-                  <svg class="row-chevron" :class="{open: expanded === m.id}" width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="expanded === m.id" class="detail-row">
-              <td colspan="7">
-                <div class="detail">
-                  <div class="content-block">
-                    <div class="block-label">{{ t('Content') }}</div>
-                    <div class="md-body" v-html="md(m.content)"></div>
-                  </div>
-                  <div v-if="m.why" class="content-block">
-                    <div class="block-label">{{ t('Why') }}</div>
-                    <div class="md-body" v-html="md(m.why)"></div>
-                  </div>
-                  <div v-if="m.how_to_apply" class="content-block">
-                    <div class="block-label">{{ t('How to Apply') }}</div>
-                    <div class="md-body" v-html="md(m.how_to_apply)"></div>
-                  </div>
-                  <div class="meta-row">
-                    <span class="meta-item">
-                      {{ t('ID:') }}
-                      <code class="copyable" @click.stop="copy(m.id)" :title="t('Click to copy')">{{ m.id }}</code>
-                      <span class="copy-hint" v-if="copied === m.id">{{ t('Copied') }}</span>
-                    </span>
-                    <span class="meta-sep">·</span>
-                    <span class="meta-item">
-                      {{ t('Project:') }} <code class="copyable" @click.stop="copy(m.project_id)" :title="t('Click to copy')">{{ m.project_id }}</code>
-                      <span class="copy-hint" v-if="copied === m.project_id">{{ t('Copied') }}</span>
-                    </span>
-                    <span class="meta-sep">·</span>
-                    <span class="meta-item">{{ t('Hits') }} <strong>{{ m.hit_count }}</strong></span>
-                    <template v-if="m.last_hit_at">
-                      <span class="meta-sep">·</span>
-                      <span class="meta-item">{{ t('Last hit') }} {{ fmtDateTime(m.last_hit_at) }}</span>
-                    </template>
-                  </div>
-                  <div class="move-row" @click.stop>
-                    <span class="block-label">{{ t('Move to project') }}</span>
-                    <select class="move-select" v-model="moveTarget[m.id]">
-                      <option value="">{{ t('— Select project —') }}</option>
-                      <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }} ({{ p.memory_count }})</option>
-                    </select>
-                    <button class="btn-move" :disabled="!moveTarget[m.id] || isMoving[m.id]" @click.stop="moveMemory(m)">
-                      {{ isMoving[m.id] ? t('Moving…') : t('Move') }}
-                    </button>
-                    <span class="copy-hint" v-if="moved === m.id">{{ t('Moved ✓') }}</span>
-                    <span class="save-hint err" v-if="moveError[m.id]">{{ moveError[m.id] }}</span>
-                  </div>
-                  <div class="action-row" @click.stop>
-                    <button class="btn-edit" @click.stop="openEdit(m)">{{ t('Edit') }}</button>
-                  </div>
+
                 </div>
               </td>
             </tr>
           </template>
           <tr v-if="paged.length === 0">
-            <td colspan="7" class="empty">
+            <td colspan="9" class="empty">
               <div class="empty-inner">
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.25">
                   <ellipse cx="12" cy="5" rx="9" ry="3"/>
@@ -239,6 +227,71 @@
   </div>
   <Teleport to="body">
     <div v-if="tip.visible" class="tooltip-popup" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
+    <div v-if="detailTarget" class="write-overlay">
+      <div class="write-panel detail-panel">
+        <div :class="['type-stripe', detailTarget.type]"></div>
+        <div :class="['write-header', 'type-header-' + detailTarget.type]">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span :class="['tag', detailTarget.type]" style="font-size:10px;padding:1px 6px">{{ detailTarget.type }}</span>
+            <span class="write-title">{{ t('Memory Details') }}</span>
+          </div>
+          <div class="write-header-right">
+            <button class="btn-header-edit" @click="openEdit(detailTarget); detailTarget = null" :title="t('Edit')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="modal-close" @click="detailTarget = null">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="write-body">
+          <div class="detail-hero">
+            <div class="detail-hero-name">{{ detailTarget.name }}</div>
+            <div v-if="detailTarget.description" class="detail-hero-desc">{{ detailTarget.description }}</div>
+          </div>
+          <div class="content-block">
+            <div class="block-label">{{ t('Content') }}</div>
+            <div class="md-body" v-html="md(detailTarget.content)"></div>
+          </div>
+          <div v-if="detailTarget.why" class="content-block">
+            <div class="block-label">{{ t('Why') }}</div>
+            <div class="md-body" v-html="md(detailTarget.why)"></div>
+          </div>
+          <div v-if="detailTarget.how_to_apply" class="content-block">
+            <div class="block-label">{{ t('How to Apply') }}</div>
+            <div class="md-body" v-html="md(detailTarget.how_to_apply)"></div>
+          </div>
+          <div class="meta-strip">
+            <span class="meta-item"><strong>{{ sourceLabel(detailTarget.source_client) }}</strong></span>
+            <span class="meta-sep">·</span>
+            <span class="meta-item">{{ t('Hits') }} <strong>{{ detailTarget.hit_count }}</strong></span>
+            <template v-if="detailTarget.last_hit_at">
+              <span class="meta-sep">·</span>
+              <span class="meta-item">{{ fmtDateTime(detailTarget.last_hit_at) }}</span>
+            </template>
+          </div>
+          <details class="meta-ids">
+            <summary class="meta-ids-toggle">IDs</summary>
+            <div class="meta-ids-body">
+              <span class="meta-item">
+                ID: <code class="copyable" @click.stop="copy(detailTarget.id)" :title="t('Click to copy')">{{ detailTarget.id }}</code>
+                <span class="copy-hint" v-if="copied === detailTarget.id">{{ t('Copied') }}</span>
+              </span>
+              <span class="meta-sep">·</span>
+              <span class="meta-item">
+                Project: <code class="copyable" @click.stop="copy(detailTarget.project_id)" :title="t('Click to copy')">{{ detailTarget.project_id }}</code>
+                <span class="copy-hint" v-if="copied === detailTarget.project_id">{{ t('Copied') }}</span>
+              </span>
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
     <div v-if="settingsOpen" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
@@ -250,7 +303,11 @@
             </svg>
           </button>
         </div>
-        <div class="modal-body">
+        <div class="settings-tabs">
+          <button :class="['settings-tab', {active: settingsTab === 'settings'}]" @click="settingsTab = 'settings'">{{ t('Settings') }}</button>
+          <button :class="['settings-tab', {active: settingsTab === 'backup'}]" @click="settingsTab = 'backup'">{{ t('Backup') }}</button>
+        </div>
+        <div v-if="settingsTab === 'settings'" class="modal-body">
           <div class="settings-group">
             <div class="settings-group-title">{{ t('Extraction Model') }}</div>
             <label class="field-row">
@@ -349,10 +406,39 @@
             </label>
           </div>
         </div>
+        <div v-else class="modal-body backup-tab-body">
+          <div class="settings-group">
+            <div class="settings-group-title">{{ t('Export') }}</div>
+            <p class="backup-desc">{{ t('Download a full SQL backup of the database (pg_dump).') }}</p>
+            <button class="btn-save backup-action-btn" @click="exportMemories(); settingsOpen = false">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                <path d="M5.5 1v6.5M2.5 5l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="1.5" y1="9.5" x2="9.5" y2="9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+              {{ t('Download Backup') }}
+            </button>
+          </div>
+          <div class="settings-group">
+            <div class="settings-group-title">{{ t('Restore') }}</div>
+            <p class="backup-desc">{{ t('Upload a .sql file to restore the database. Existing data will be overwritten.') }}</p>
+            <button class="btn-save backup-action-btn" @click="openImport()">
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                <path d="M5.5 7.5V1M2.5 4l3-3 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="1.5" y1="9.5" x2="9.5" y2="9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+              {{ t('Select .sql file…') }}
+            </button>
+          </div>
+        </div>
         <div class="modal-footer">
-          <span :class="['save-hint', saveHint.startsWith('Error') ? 'err' : 'ok']" v-if="saveHint">{{ saveHint }}</span>
-          <button class="btn-cancel" @click="settingsOpen = false">{{ t('Cancel') }}</button>
-          <button class="btn-save" @click="saveSettings" :disabled="isSaving">{{ isSaving ? t('Saving…') : t('Save') }}</button>
+          <template v-if="settingsTab === 'settings'">
+            <span :class="['save-hint', saveHint.startsWith('Error') ? 'err' : 'ok']" v-if="saveHint">{{ saveHint }}</span>
+            <button class="btn-cancel" @click="settingsOpen = false">{{ t('Cancel') }}</button>
+            <button class="btn-save" @click="saveSettings" :disabled="isSaving">{{ isSaving ? t('Saving…') : t('Save') }}</button>
+          </template>
+          <template v-else>
+            <button class="btn-cancel" @click="settingsOpen = false">{{ t('Close') }}</button>
+          </template>
         </div>
       </div>
     </div>
@@ -380,34 +466,300 @@
         </div>
       </div>
     </div>
-    <div v-if="editTarget" class="modal-overlay">
-      <div class="modal modal-edit">
+    <div v-if="editTarget" class="write-overlay">
+      <div class="write-panel">
+        <div :class="['type-stripe', editTarget?.type]"></div>
+        <div :class="['write-header', editTarget?.type ? 'type-header-' + editTarget.type : '']">
+          <div class="write-header-left">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span v-if="editTarget" :class="['tag', editTarget.type]" style="font-size:10px;padding:1px 6px">{{ editTarget.type }}</span>
+              <span class="write-title">{{ t('Edit Memory') }}</span>
+            </div>
+            <div v-if="editTarget?.name" class="write-subtitle">{{ editTarget.name }}</div>
+          </div>
+          <div class="write-header-right">
+            <button class="modal-close" @click="editTarget = null">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="write-body">
+          <div class="write-section">
+            <label class="write-field-label">{{ t('Name') }}</label>
+            <input class="write-input" v-model="editForm.name" />
+          </div>
+          <div class="write-section">
+            <label class="write-field-label">{{ t('Description') }}</label>
+            <textarea class="write-input write-textarea" v-model="editForm.description" rows="2" style="min-height:56px" />
+          </div>
+          <div class="write-section write-section-grow">
+            <label class="write-field-label">{{ t('Content') }}</label>
+            <textarea class="write-input write-textarea" v-model="editForm.content" rows="6" />
+          </div>
+          <div class="write-section">
+            <label class="write-field-label">{{ t('Why') }}</label>
+            <input class="write-input" v-model="editForm.why" />
+          </div>
+          <div class="write-section">
+            <label class="write-field-label">{{ t('How to apply') }}</label>
+            <input class="write-input" v-model="editForm.how_to_apply" />
+          </div>
+          <div class="write-section write-section-row">
+            <div class="write-section-half">
+              <label class="write-field-label">{{ t('Importance') }}</label>
+              <select class="write-input write-select" v-model.number="editForm.importance">
+                <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </div>
+          </div>
+          <p v-if="editError" class="save-hint err" style="margin-top:4px">{{ editError }}</p>
+        </div>
+        <div class="write-footer">
+          <button class="btn-cancel" @click="editTarget = null">{{ t('Cancel') }}</button>
+          <button class="btn-save" :disabled="isEditSaving" @click="saveEdit">{{ isEditSaving ? t('Saving…') : t('Save') }}</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="writeOpen" class="write-overlay">
+      <div class="write-panel">
+        <div class="write-header">
+          <span class="write-title">{{ t('New Memory') }}</span>
+          <div class="write-header-right">
+            <kbd class="kbd-hint">N</kbd>
+            <button class="modal-close" @click="writeOpen = false">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="write-body">
+          <div class="write-type-tabs">
+            <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
+              :class="['type-tab', 'type-tab-' + tp, writeForm.type === tp ? 'active' : '']"
+              @click="writeForm.type = tp">{{ tp }}</button>
+          </div>
+          <div class="write-section">
+            <label class="write-field-label">{{ t('Name') }}</label>
+            <input class="write-input" v-model="writeForm.name" :placeholder="t('Short identifier…')" ref="writeNameRef" />
+          </div>
+          <div class="write-section">
+            <label class="write-field-label">{{ t('Description') }}</label>
+            <input class="write-input" v-model="writeForm.description" :placeholder="t('One-line summary…')" />
+          </div>
+          <div class="write-section write-section-grow">
+            <label class="write-field-label">{{ t('Content') }}</label>
+            <textarea class="write-input write-textarea" v-model="writeForm.content" :placeholder="t('Full memory content…')" rows="6" />
+          </div>
+          <div class="write-collapsible" :class="{open: writeShowExtra}">
+            <button class="write-extra-toggle" @click="writeShowExtra = !writeShowExtra">
+              <svg :class="['write-extra-chevron', {open: writeShowExtra}]" width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              {{ t('Optional fields') }}
+            </button>
+            <div v-if="writeShowExtra" class="write-extra-fields">
+              <div class="write-section">
+                <label class="write-field-label">{{ t('Why') }}</label>
+                <input class="write-input" v-model="writeForm.why" :placeholder="t('Reason or motivation…')" />
+              </div>
+              <div class="write-section">
+                <label class="write-field-label">{{ t('How to apply') }}</label>
+                <input class="write-input" v-model="writeForm.how_to_apply" :placeholder="t('When / how to use this…')" />
+              </div>
+              <div class="write-section write-section-row">
+                <div class="write-section-half">
+                  <label class="write-field-label">{{ t('Importance') }}</label>
+                  <select class="write-input write-select" v-model.number="writeForm.importance">
+                    <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
+                  </select>
+                </div>
+                <div class="write-section-half">
+                  <label class="write-field-label">{{ t('Project') }}</label>
+                  <select class="write-input write-select" v-model="writeForm.project_id">
+                    <option value="">{{ t('Global (*)') }}</option>
+                    <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p v-if="writeError" class="save-hint err" style="margin-top:4px">{{ writeError }}</p>
+        </div>
+        <div class="write-footer">
+          <span class="write-target-hint">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <circle cx="5" cy="5" r="4" stroke="currentColor" stroke-width="1.2"/>
+              <line x1="5" y1="3" x2="5" y2="5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              <circle cx="5" cy="7" r="0.6" fill="currentColor"/>
+            </svg>
+            {{ writeForm.project_id ? writeForm.project_id : t('Global (*)') }}
+          </span>
+          <button class="btn-cancel" @click="writeOpen = false">{{ t('Cancel') }}</button>
+          <button class="btn-save" :disabled="isWriteSaving || !writeForm.name || !writeForm.content" @click="submitWrite">
+            {{ isWriteSaving ? t('Saving…') : t('Write') }}
+          </button>
+        </div>
+      </div>
+    </div>
+    <div v-if="cloneSource" class="modal-overlay" @click.self="cloneSource = null">
+      <div class="modal modal-clone">
         <div class="modal-header">
-          <span class="modal-title">{{ t('Edit Memory') }}</span>
-          <button class="modal-close" @click="editTarget = null">
+          <span class="modal-title">{{ t('Clone Memory') }}</span>
+          <button class="modal-close" @click="cloneSource = null">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
               <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
           </button>
         </div>
-        <div class="modal-body">
-          <div class="field-row"><label class="field-label">{{ t('Name') }}</label><input class="field-input" v-model="editForm.name" /></div>
-          <div class="field-row"><label class="field-label">{{ t('Description') }}</label><textarea class="field-input" v-model="editForm.description" rows="2" /></div>
-          <div class="field-row"><label class="field-label">{{ t('Content') }}</label><textarea class="field-input" v-model="editForm.content" rows="6" /></div>
-          <div class="field-row"><label class="field-label">{{ t('Why') }}</label><input class="field-input" v-model="editForm.why" /></div>
-          <div class="field-row"><label class="field-label">{{ t('How to apply') }}</label><input class="field-input" v-model="editForm.how_to_apply" /></div>
-          <div class="field-row field-row-inline">
-            <label class="field-label">{{ t('Importance') }}</label>
-            <select class="field-input field-select-sm" v-model.number="editForm.importance">
-              <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
-            </select>
+        <div class="modal-body clone-modal-body">
+          <div class="clone-source-card">
+            <div class="clone-source-meta">
+              <span :class="['badge', cloneSource.type]">
+                <span class="badge-dot"></span>{{ cloneSource.type }}
+              </span>
+              <span class="clone-source-project">{{ projectDisplayName(cloneSource.project_id) || t('Global (*)') }}</span>
+            </div>
+            <div class="clone-source-name">{{ cloneSource.name }}</div>
+            <div v-if="cloneSource.description" class="clone-source-desc">{{ cloneSource.description }}</div>
           </div>
-          <p v-if="editError" class="save-hint err">{{ editError }}</p>
+          <label class="field-row clone-target-row">
+            <span class="field-label">{{ t('Clone to project') }}</span>
+            <select v-model="cloneSlug" class="field-input">
+              <option value="">{{ t('— Select project —') }}</option>
+              <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }}</option>
+            </select>
+          </label>
+          <div v-if="cloneError" class="clone-status err">{{ cloneError }}</div>
+          <div v-if="cloneDone" class="clone-status ok">{{ t('Cloned ✓') }}</div>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" @click="editTarget = null">{{ t('Cancel') }}</button>
-          <button class="btn-save" :disabled="isEditSaving" @click="saveEdit">{{ isEditSaving ? t('Saving…') : t('Save') }}</button>
+          <button class="btn-cancel" @click="cloneSource = null">{{ t('Cancel') }}</button>
+          <button class="btn-save" :disabled="!cloneSlug || isCloning" @click="doClone">
+            {{ isCloning ? t('Cloning…') : t('Clone') }}
+          </button>
+        </div>
+      </div>
+    </div>
+    <Transition name="bulk">
+      <div v-if="selectedIds.size > 0" class="bulk-bar">
+        <span class="bulk-count">{{ selectedIds.size }} {{ t('selected') }}</span>
+        <button class="bulk-clear" @click="selectedIds.clear()">×</button>
+        <span class="bulk-sep">|</span>
+        <template v-if="!bulkConfirmDelete">
+          <button class="bulk-btn bulk-btn-danger" @click="bulkConfirmDelete = true">{{ t('Delete') }}</button>
+        </template>
+        <template v-else>
+          <span class="bulk-confirm-text">{{ t('Delete {n}?', {n: selectedIds.size}) }}</span>
+          <button class="bulk-btn bulk-btn-danger" :disabled="isBulkDeleting" @click="bulkDelete">{{ isBulkDeleting ? t('Deleting…') : t('Yes') }}</button>
+          <button class="bulk-btn" @click="bulkConfirmDelete = false">{{ t('No') }}</button>
+        </template>
+        <span class="bulk-sep">|</span>
+        <select class="bulk-move-select" v-model="bulkMoveTarget">
+          <option value="">{{ t('Move to…') }}</option>
+          <option v-for="p in projects" :key="p.id" :value="p.slug">{{ p.display_name || p.slug }}</option>
+        </select>
+        <button class="bulk-btn" :disabled="!bulkMoveTarget || isBulkMoving" @click="bulkMove">
+          {{ isBulkMoving ? t('Moving…') : t('Move') }}
+        </button>
+      </div>
+    </Transition>
+    <div v-if="importModalOpen" class="modal-overlay">
+      <div class="modal modal-sm">
+        <div class="modal-header">
+          <span class="modal-title">{{ t('Import Memories') }}</span>
+          <button class="modal-close" @click="importModalOpen = false">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body delete-modal-body">
+          <template v-if="!importProgress.running && importProgress.total === 0">
+            <p class="delete-confirm-text">{{ importPreview?.name }}</p>
+            <p class="delete-confirm-sub">{{ t('This will overwrite existing data.') }}</p>
+          </template>
+          <template v-else-if="importProgress.running">
+            <p class="delete-confirm-text">{{ t('Restoring…') }}</p>
+          </template>
+          <template v-else-if="importProgress.total === 1">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--green);opacity:0.8">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <p class="delete-confirm-text">{{ t('Restored ✓') }}</p>
+          </template>
+          <template v-else-if="importProgress.total === -1">
+            <p class="delete-confirm-text" style="color:var(--red)">{{ t('Restore failed') }}</p>
+            <pre class="delete-confirm-sub" style="white-space:pre-wrap;font-size:11px;max-height:120px;overflow-y:auto">{{ importProgress.errorMsg }}</pre>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="importModalOpen = false">{{ importProgress.total !== 0 ? t('Close') : t('Cancel') }}</button>
+          <button v-if="importProgress.total === 0" class="btn-save" @click="confirmImport" :disabled="importProgress.running">{{ t('Import') }}</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="duplicatesOpen" class="modal-overlay">
+      <div class="modal modal-xl">
+        <div class="modal-header">
+          <span class="modal-title">{{ t('Duplicates') }} <span v-if="!duplicatesLoading" class="dup-count">({{ duplicatePairs.length }})</span></span>
+          <button class="modal-close" @click="duplicatesOpen = false">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="dup-toolbar">
+          <label class="dup-threshold">
+            <span>{{ t('Threshold') }}</span>
+            <input
+              class="dup-threshold-slider"
+              type="range"
+              min="0.80"
+              max="0.98"
+              step="0.01"
+              v-model="duplicateThreshold"
+              :aria-label="t('Threshold')"
+            />
+            <output class="dup-threshold-value">{{ duplicateThreshold }}</output>
+          </label>
+          <button class="dup-refresh" :disabled="duplicatesLoading" @click="scanDuplicates">
+            {{ duplicatesLoading ? t('Loading…') : t('Scan') }}
+          </button>
+        </div>
+        <div v-if="duplicateError" class="dup-error">{{ duplicateError }}</div>
+        <div class="modal-body dup-modal-body">
+          <div v-if="duplicatesLoading" class="empty-state">{{ t('Loading…') }}</div>
+          <div v-else-if="duplicatePairs.length === 0" class="empty-state">{{ t('No duplicates found') }}</div>
+          <div v-else class="dup-list">
+            <div v-for="(pair, i) in duplicatePairs" :key="pair.id1 + pair.id2" class="dup-pair">
+              <div class="dup-side">
+                <div class="dup-meta"><span :class="'badge badge-' + pair.type1">{{ pair.type1 }}</span><span class="dup-proj">{{ pair.project_slug1 }}</span></div>
+                <div class="dup-name">{{ pair.name1 }}</div>
+                <div class="dup-desc">{{ pair.description1 }}</div>
+                <div class="dup-content">{{ pair.content1 }}</div>
+                <button class="btn-dup-del" @click="deleteDupMem(pair.id1, i)">{{ t('Delete') }}</button>
+              </div>
+              <div class="dup-center">
+                <div class="dup-sim">{{ Math.round(pair.similarity * 100) }}%</div>
+                <button class="btn-dup-skip" @click="duplicatePairs.splice(i, 1)">{{ t('Skip') }}</button>
+              </div>
+              <div class="dup-side">
+                <div class="dup-meta"><span :class="'badge badge-' + pair.type2">{{ pair.type2 }}</span><span class="dup-proj">{{ pair.project_slug2 }}</span></div>
+                <div class="dup-name">{{ pair.name2 }}</div>
+                <div class="dup-desc">{{ pair.description2 }}</div>
+                <div class="dup-content">{{ pair.content2 }}</div>
+                <button class="btn-dup-del" @click="deleteDupMem(pair.id2, i)">{{ t('Delete') }}</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -458,7 +810,7 @@ const stats = ref(null)
 const selectedProject = ref('')
 const selectedType = ref('')
 const searchText = ref('')
-const expanded = ref(null)
+const detailTarget = ref(null)
 const sortDesc = ref(true)
 const sortBy = ref('time')
 const isLoading = ref(false)
@@ -533,6 +885,36 @@ async function moveMemory(m) {
   }
 }
 
+const cloneSource = ref(null)
+const cloneSlug = ref('')
+const isCloning = ref(false)
+const cloneError = ref('')
+const cloneDone = ref(false)
+function openClone(m) {
+  cloneSource.value = m
+  cloneSlug.value = ''
+  cloneError.value = ''
+  cloneDone.value = false
+}
+async function doClone() {
+  if (!cloneSource.value || !cloneSlug.value) return
+  isCloning.value = true
+  cloneError.value = ''
+  try {
+    const r = await fetch(`${BASE}/memories/${cloneSource.value.id}/clone?project_slug=${encodeURIComponent(cloneSlug.value)}`, { method: 'POST' })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      cloneError.value = err.detail || r.statusText
+      return
+    }
+    cloneDone.value = true
+    await load()
+    setTimeout(() => { cloneSource.value = null }, 1500)
+  } finally {
+    isCloning.value = false
+  }
+}
+
 const editTarget = ref(null)
 const editForm = ref({})
 const isEditSaving = ref(false)
@@ -568,6 +950,220 @@ async function saveEdit() {
     await load()
   } finally {
     isEditSaving.value = false
+  }
+}
+
+const writeOpen = ref(false)
+const writeShowExtra = ref(false)
+const writeNameRef = ref(null)
+const isWriteSaving = ref(false)
+const writeError = ref('')
+const writeForm = ref({ type: 'feedback', name: '', description: '', content: '', why: '', how_to_apply: '', importance: 3, project_id: '' })
+
+function openWrite() {
+  writeForm.value = { type: 'feedback', name: '', description: '', content: '', why: '', how_to_apply: '', importance: 3, project_id: '' }
+  writeError.value = ''
+  writeShowExtra.value = false
+  writeOpen.value = true
+  setTimeout(() => writeNameRef.value?.focus(), 50)
+}
+
+async function submitWrite() {
+  if (!writeForm.value.name || !writeForm.value.content) return
+  isWriteSaving.value = true
+  writeError.value = ''
+  try {
+    const payload = { ...writeForm.value }
+    if (!payload.project_id) delete payload.project_id
+    if (!payload.why) delete payload.why
+    if (!payload.how_to_apply) delete payload.how_to_apply
+    const r = await fetch(`${BASE}/memories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}))
+      writeError.value = `Failed: ${err.detail || r.statusText}`
+      return
+    }
+    writeOpen.value = false
+    await load()
+  } finally {
+    isWriteSaving.value = false
+  }
+}
+
+// ── Bulk operations ──
+const selectedIds = ref(new Set())
+const isBulkDeleting = ref(false)
+const isBulkMoving = ref(false)
+const bulkMoveTarget = ref('')
+const bulkConfirmDelete = ref(false)
+const selectAllRef = ref(null)
+
+const allSelected = computed(() =>
+  paged.value.length > 0 && paged.value.every(m => selectedIds.value.has(m.id))
+)
+const someSelected = computed(() =>
+  paged.value.some(m => selectedIds.value.has(m.id)) && !allSelected.value
+)
+function toggleSelect(id) {
+  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
+  else selectedIds.value.add(id)
+}
+function toggleSelectAll() {
+  if (allSelected.value) paged.value.forEach(m => selectedIds.value.delete(m.id))
+  else paged.value.forEach(m => selectedIds.value.add(m.id))
+}
+async function bulkDelete() {
+  if (!selectedIds.value.size) return
+  isBulkDeleting.value = true
+  try {
+    const ids = [...selectedIds.value]
+    const r = await fetch(`${BASE}/memories/batch-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    })
+    if (!r.ok) return
+    selectedIds.value.clear()
+    bulkConfirmDelete.value = false
+    await load()
+  } finally {
+    isBulkDeleting.value = false
+  }
+}
+async function bulkMove() {
+  if (!bulkMoveTarget.value || !selectedIds.value.size) return
+  isBulkMoving.value = true
+  try {
+    const ids = [...selectedIds.value]
+    const r = await fetch(`${BASE}/memories/batch-move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, project_slug: bulkMoveTarget.value }),
+    })
+    if (!r.ok) return
+    selectedIds.value.clear()
+    bulkMoveTarget.value = ''
+    await load()
+  } finally {
+    isBulkMoving.value = false
+  }
+}
+
+// ── Import / Export ──
+const importFileRef = ref(null)
+const importPreview = ref(null)
+const importModalOpen = ref(false)
+const importProgress = ref({ done: 0, total: 0, skipped: 0, errors: 0, running: false })
+
+async function exportMemories() {
+  const r = await fetch(`${BASE}/backup`)
+  if (!r.ok) { alert('Backup failed: ' + (await r.text())); return }
+  const blob = await r.blob()
+  const cd = r.headers.get('Content-Disposition') || ''
+  const match = cd.match(/filename="([^"]+)"/)
+  const filename = match ? match[1] : `mo-backup-${new Date().toISOString().slice(0, 10)}.sql`
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+function openImport() { importFileRef.value?.click() }
+async function onImportFile(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  e.target.value = ''
+  importPreview.value = { file, name: file.name, size: file.size }
+  importProgress.value = { done: 0, total: 0, skipped: 0, errors: 0, running: false, errorMsg: '' }
+  importModalOpen.value = true
+}
+async function confirmImport() {
+  if (!importPreview.value?.file) return
+  importProgress.value.running = true
+  try {
+    const fd = new FormData()
+    fd.append('file', importPreview.value.file)
+    const r = await fetch(`${BASE}/restore`, { method: 'POST', body: fd })
+    if (!r.ok) {
+      const text = await r.text()
+      importProgress.value.errors = 1
+      importProgress.value.running = false
+      importProgress.value.total = -1
+      importProgress.value.errorMsg = text.slice(0, 400)
+      return
+    }
+    importProgress.value.done = 1
+    importProgress.value.total = 1
+    importProgress.value.running = false
+    await load()
+  } catch (err) {
+    importProgress.value.errors = 1
+    importProgress.value.running = false
+    importProgress.value.total = -1
+    importProgress.value.errorMsg = String(err)
+  }
+}
+
+// ── Duplicates ──
+const duplicatesOpen = ref(false)
+const duplicatePairs = ref([])
+const duplicatesLoading = ref(false)
+const duplicateError = ref('')
+const duplicateThreshold = ref('0.92')
+const DUP_THRESHOLD_MIN = 0.80
+const DUP_THRESHOLD_MAX = 0.98
+
+function normalizeDuplicateThreshold(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '0.92'
+  return Math.min(DUP_THRESHOLD_MAX, Math.max(DUP_THRESHOLD_MIN, n)).toFixed(2)
+}
+
+async function openDuplicates() {
+  duplicatesOpen.value = true
+  try {
+    const settings = await fetch(`${BASE}/settings`).then(r => r.ok ? r.json() : null)
+    duplicateThreshold.value = normalizeDuplicateThreshold(settings?.dup_threshold || '0.92')
+  } catch {
+    duplicateThreshold.value = '0.92'
+  }
+  await scanDuplicates()
+}
+
+async function scanDuplicates() {
+  duplicatesLoading.value = true
+  duplicateError.value = ''
+  duplicatePairs.value = []
+  try {
+    const params = new URLSearchParams()
+    if (selectedProject.value) params.set('project_slug', selectedProject.value)
+    if (selectedType.value) params.set('type', selectedType.value)
+    duplicateThreshold.value = normalizeDuplicateThreshold(duplicateThreshold.value)
+    params.set('threshold', duplicateThreshold.value)
+    const qs = params.toString()
+    const r = await fetch(`${BASE}/duplicates${qs ? '?' + qs : ''}`)
+    if (!r.ok) {
+      const text = await r.text()
+      duplicateError.value = `Scan failed (${r.status}): ${text.slice(0, 180) || r.statusText}`
+      return
+    }
+    duplicatePairs.value = await r.json()
+  } catch (err) {
+    duplicateError.value = `Scan failed: ${err?.message || err}`
+  } finally {
+    duplicatesLoading.value = false
+  }
+}
+
+async function deleteDupMem(id, pairIdx) {
+  const r = await fetch(`${BASE}/memories/${id}`, { method: 'DELETE' })
+  if (r.ok || r.status === 204) {
+    duplicatePairs.value = duplicatePairs.value.filter(pair => pair.id1 !== id && pair.id2 !== id)
+    await load()
   }
 }
 
@@ -608,42 +1204,57 @@ function projectAbbr(id) {
   return seg.slice(0, 2).toUpperCase()
 }
 
+function projectDisplayName(id) {
+  return projectMap.value[id] || ''
+}
+
+function projectCellText(id) {
+  const name = projectDisplayName(id)
+  return name.length > 20 ? `${name.slice(0, 20)}...` : name
+}
+
+function sourceClass(source) {
+  return source === 'codex' ? 'codex' : 'claude'
+}
+function sourceIconUrl(source) {
+  const tone = isDark.value ? 'dark' : 'light'
+  return source === 'codex'
+    ? `/ui/assets/openai-${tone}.svg`
+    : `/ui/assets/claude-${tone}.svg`
+}
+function sourceLabel(source) {
+  return source === 'codex' ? 'Codex' : 'Claude Code'
+}
+
 function toggleSort(col) {
   if (sortBy.value === col) { sortDesc.value = !sortDesc.value } else { sortBy.value = col; sortDesc.value = true }
   page.value = 1
   load()
 }
-function toggle(id) { expanded.value = expanded.value === id ? null : id }
+function openDetail(m) { detailTarget.value = m }
 function resetFilters() {
   selectedProject.value = ''
   selectedType.value = ''
   searchText.value = ''
   load()
 }
-const serverTz = ref(null)       // IANA name if available
-const serverOffsetMin = ref(null) // fallback: UTC offset in minutes
+const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || null
 
 function _fmt(iso) {
   if (!iso) return ''
   const d = new Date(iso)
-  if (serverTz.value) {
+  if (browserTz) {
     try {
       const parts = new Intl.DateTimeFormat('sv', {
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit', second: '2-digit',
-        hour12: false, timeZone: serverTz.value,
+        timeZoneName: 'short',
+        hour12: false, timeZone: browserTz,
       }).formatToParts(d)
       const get = t => parts.find(p => p.type === t)?.value ?? ''
-      return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+      const zone = get('timeZoneName')
+      return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}${zone ? ' ' + zone : ''}`
     } catch { /* fall through */ }
-  }
-  // offset_minutes fallback (works when IANA name not available, e.g. Windows)
-  const off = serverOffsetMin.value
-  if (off != null) {
-    const shifted = new Date(d.getTime() + off * 60000 - d.getTimezoneOffset() * 60000)
-    const pad = n => String(n).padStart(2, '0')
-    return `${shifted.getFullYear()}-${pad(shifted.getMonth()+1)}-${pad(shifted.getDate())} ` +
-           `${pad(shifted.getHours())}:${pad(shifted.getMinutes())}:${pad(shifted.getSeconds())}`
   }
   return d.toLocaleDateString('sv') + ' ' + d.toLocaleTimeString('en-GB', { hour12: false })
 }
@@ -660,10 +1271,12 @@ function relTime(iso) {
   return Math.floor(diff / (86400 * 30)) + 'mo'
 }
 
-const isDark = ref(localStorage.getItem('mo-theme') === 'dark')
+const storedTheme = localStorage.getItem('mo-theme')
+const isDark = ref(storedTheme ? storedTheme === 'dark' : true)
 
 // ── Settings modal ──
 const settingsOpen = ref(false)
+const settingsTab = ref('settings')
 const isSaving = ref(false)
 const saveHint = ref('')
 const availableModels = ref([])
@@ -738,6 +1351,7 @@ async function openSettings() {
   availableModels.value = []
   modelDropOpen.value = false
   modelHighlight.value = -1
+  settingsTab.value = 'settings'
   settingsOpen.value = true
 }
 
@@ -775,11 +1389,21 @@ function toggleTheme() {
 }
 
 onMounted(async () => {
+  watch(someSelected, v => { if (selectAllRef.value) selectAllRef.value.indeterminate = v })
   applyTheme()
-  const tzInfo = await fetch(`${BASE}/timezone`).then(r => r.json()).catch(() => null)
-  if (tzInfo?.iana) serverTz.value = tzInfo.iana
-  if (tzInfo?.offset_minutes != null) serverOffsetMin.value = tzInfo.offset_minutes
-  projects.value = await fetch(`${BASE}/projects?hide_empty=true`).then(r => r.json())
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (writeOpen.value) { writeOpen.value = false; return }
+      if (editTarget.value) { editTarget.value = null; return }
+      if (detailTarget.value) { detailTarget.value = null; return }
+    }
+    if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) {
+      e.preventDefault()
+      openWrite()
+    }
+  })
+  projects.value = await fetch(`${BASE}/projects`).then(r => r.json())
   await load()
 })
 </script>
@@ -789,90 +1413,141 @@ onMounted(async () => {
 
 /* ── Shared tokens (layout, radii, timing) ── */
 :root {
-  --radius-sm: 5px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
   --transition: 150ms ease;
 }
 
 /* ── Light theme (default) ── */
 :root,
 [data-theme="light"] {
-  --bg:             #f6f8fa;
-  --surface:        #ffffff;
-  --surface-2:      #f0f2f5;
-  --border:         #d0d7de;
-  --border-subtle:  #e4e8ec;
-  --border-hover:   #adb5bd;
-  --text-primary:   #1f2328;
-  --text-secondary: #57606a;
-  --text-muted:     #8c959f;
-  --accent:         #0969da;
-  --accent-dim:     rgba(9,105,218,0.1);
-  --green:          #1a7f37;
-  --green-dim:      rgba(26,127,55,0.1);
-  --green-border:   rgba(26,127,55,0.2);
-  --blue:           #0969da;
-  --blue-dim:       rgba(9,105,218,0.1);
-  --blue-border:    rgba(9,105,218,0.2);
-  --purple:         #8250df;
-  --purple-dim:     rgba(130,80,223,0.1);
-  --purple-border:  rgba(130,80,223,0.2);
-  --orange:         #9a6700;
-  --orange-dim:     rgba(154,103,0,0.1);
-  --orange-border:  rgba(154,103,0,0.2);
-  --red:            #cf222e;
-  --red-dim:        rgba(207,34,46,0.1);
-  --shadow:         rgba(0,0,0,0.12);
+  --bg:             #ECF2F8;
+  --bg-secondary:   #E2EBF5;
+  --surface:        rgba(255,255,255,0.94);
+  --surface-2:      #DDE8F2;
+  --surface-panel:  rgba(245,250,255,0.86);
+  --border:         #A8C0D4;
+  --border-subtle:  rgba(100,140,180,0.22);
+  --border-hover:   #5A9ACA;
+  --text-primary:   #0E1C28;
+  --text-secondary: #2E4A60;
+  --text-muted:     #5E7888;
+  --text:           var(--text-primary);
+  --muted:          var(--text-muted);
+  --accent:         #006AFF;
+  --accent-strong:  #0080FF;
+  --accent-dim:     rgba(0,106,255,0.10);
+  --green:          #00A878;
+  --green-dim:      rgba(0,168,120,0.10);
+  --green-border:   rgba(0,168,120,0.24);
+  --blue:           #0066EE;
+  --blue-dim:       rgba(0,102,238,0.10);
+  --blue-border:    rgba(0,102,238,0.24);
+  --purple:         #7B3AED;
+  --purple-dim:     rgba(123,58,237,0.10);
+  --purple-border:  rgba(123,58,237,0.22);
+  --orange:         #C05A00;
+  --orange-dim:     rgba(192,90,0,0.10);
+  --orange-border:  rgba(192,90,0,0.24);
+  --red:            #CC2020;
+  --red-dim:        rgba(204,32,32,0.10);
+  --grid-line:      rgba(0,106,255,0.06);
+  --scan-line:      rgba(0,106,255,0.05);
+  --row-hover:      rgba(0,106,255,0.05);
+  --row-active:     rgba(0,106,255,0.10);
+  --shadow:         rgba(10,20,40,0.12);
+  --glow:           rgba(0,106,255,0.20);
 }
 
-/* ── Dark theme ── */
+/* ── Dark theme — Cyberpunk void ── */
 [data-theme="dark"] {
-  --bg:             #0d1117;
-  --surface:        #161b22;
-  --surface-2:      #1c2128;
-  --border:         #30363d;
-  --border-subtle:  #21262d;
-  --border-hover:   #484f58;
-  --text-primary:   #e6edf3;
-  --text-secondary: #8b949e;
-  --text-muted:     #6e7681;
-  --accent:         #58a6ff;
-  --accent-dim:     rgba(88,166,255,0.12);
-  --green:          #3fb950;
-  --green-dim:      rgba(63,185,80,0.15);
-  --green-border:   rgba(63,185,80,0.25);
-  --blue:           #58a6ff;
-  --blue-dim:       rgba(88,166,255,0.15);
-  --blue-border:    rgba(88,166,255,0.25);
-  --purple:         #bc8cff;
-  --purple-dim:     rgba(188,140,255,0.15);
-  --purple-border:  rgba(188,140,255,0.25);
-  --orange:         #d29922;
-  --orange-dim:     rgba(210,153,34,0.15);
-  --orange-border:  rgba(210,153,34,0.25);
-  --red:            #f85149;
-  --red-dim:        rgba(248,81,73,0.15);
-  --shadow:         rgba(0,0,0,0.5);
+  --bg:             #06080F;
+  --bg-secondary:   #090D18;
+  --surface:        rgba(10,14,26,0.95);
+  --surface-2:      #0C1122;
+  --surface-panel:  rgba(8,11,22,0.82);
+  --border:         rgba(0,212,140,0.18);
+  --border-subtle:  rgba(0,212,140,0.08);
+  --border-hover:   rgba(0,240,165,0.42);
+  --text-primary:   #C8E8F2;
+  --text-secondary: #5E8AA8;
+  --text-muted:     #304858;
+  --text:           var(--text-primary);
+  --muted:          var(--text-muted);
+  --accent:         #00D48A;
+  --accent-strong:  #00F0A8;
+  --accent-dim:     rgba(0,212,138,0.10);
+  --green:          #00D48A;
+  --green-dim:      rgba(0,212,138,0.10);
+  --green-border:   rgba(0,212,138,0.28);
+  --blue:           #00C8F5;
+  --blue-dim:       rgba(0,200,245,0.10);
+  --blue-border:    rgba(0,200,245,0.28);
+  --purple:         #B090F8;
+  --purple-dim:     rgba(176,144,248,0.12);
+  --purple-border:  rgba(176,144,248,0.28);
+  --orange:         #F0A030;
+  --orange-dim:     rgba(240,160,48,0.11);
+  --orange-border:  rgba(240,160,48,0.28);
+  --red:            #FF4466;
+  --red-dim:        rgba(255,68,102,0.12);
+  --grid-line:      rgba(0,200,245,0.05);
+  --scan-line:      rgba(0,212,138,0.06);
+  --row-hover:      rgba(0,212,138,0.05);
+  --row-active:     rgba(0,212,138,0.11);
+  --shadow:         rgba(0,0,0,0.85);
+  --glow:           rgba(0,212,138,0.32);
+  --glow-blue:      rgba(0,200,245,0.24);
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  background: var(--bg);
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'Cascadia Code', monospace;
+  background:
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(0deg, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(180deg, var(--scan-line), transparent 28%),
+    var(--bg);
+  background-size: 32px 32px, 32px 32px, 100% 100%, auto;
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.018) 2px,
+    rgba(0,0,0,0.018) 3px
+  );
+  pointer-events: none;
+  z-index: 9998;
+}
+[data-theme="dark"] body::after {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.055) 2px,
+    rgba(0,0,0,0.055) 3px
+  );
+}
 
+html, body { height: 100%; overflow: hidden; }
 .app {
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
-  padding: 14px 20px 60px;
+  padding: 6px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
+  height: 100vh;
 }
 
 /* ── Header ── */
@@ -881,14 +1556,33 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: 0 10px 32px -28px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.08);
+  backdrop-filter: blur(12px);
+}
+[data-theme="dark"] .app-header {
+  border-color: rgba(0,212,138,0.20);
+  box-shadow: 0 0 0 1px rgba(0,212,138,0.06), 0 8px 32px -16px rgba(0,0,0,0.9), inset 0 1px 0 rgba(0,212,138,0.05);
 }
 
 .logo { display: flex; align-items: center; gap: 8px; }
 .header-spacer { flex: 1; }
 .stat-sep { color: var(--text-muted); }
-h1 { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
+h1 {
+  font-family: 'Orbitron', ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+[data-theme="dark"] h1 {
+  color: var(--accent);
+  text-shadow: 0 0 14px rgba(0,212,138,0.45);
+}
 
 .stats-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .stat-total { font-size: 11px; color: var(--text-muted); margin-right: 2px; }
@@ -915,22 +1609,22 @@ h1 { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spaci
 .btn-theme {
   display: flex; align-items: center; justify-content: center;
   width: 30px; height: 30px;
-  background: var(--surface); color: var(--text-secondary);
+  background: var(--surface-panel); color: var(--text-secondary);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
-  cursor: pointer; transition: background var(--transition), color var(--transition);
+  cursor: pointer; transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
 }
-.btn-theme:hover { background: var(--surface-2); color: var(--text-primary); }
+.btn-theme:hover { background: var(--surface-2); color: var(--accent); border-color: var(--border-hover); box-shadow: 0 0 0 3px var(--accent-dim); }
 .btn-theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .btn-refresh {
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--surface); color: var(--text-secondary);
+  background: var(--surface-panel); color: var(--text-secondary);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 6px 12px; font-size: 12px; cursor: pointer;
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
   white-space: nowrap;
 }
-.btn-refresh:hover { background: var(--surface-2); color: var(--text-primary); }
+.btn-refresh:hover { background: var(--surface-2); color: var(--accent); border-color: var(--border-hover); box-shadow: 0 0 0 3px var(--accent-dim); }
 .btn-refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -938,48 +1632,124 @@ h1 { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spaci
 
 /* ── Toolbar ── */
 .toolbar {
-  display: flex; flex-direction: column;
-  gap: 8px; padding-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  backdrop-filter: blur(12px);
+}
+[data-theme="dark"] .toolbar {
+  border-color: rgba(0,212,138,0.12);
+  box-shadow: inset 0 1px 0 rgba(0,212,138,0.04);
 }
 
-.filter-group {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
-.filter-label {
-  font-size: 11px; color: var(--text-muted); font-weight: 500;
-  min-width: 44px; flex-shrink: 0; text-align: right;
+.filter-project-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
 }
-.pill-group { display: flex; gap: 4px; flex-wrap: wrap; }
-.pill {
-  background: var(--surface); color: var(--text-secondary);
-  border: 1px solid var(--border); border-radius: 20px;
-  padding: 3px 10px; font-size: 11px; cursor: pointer; font-weight: 500;
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
-  display: flex; align-items: center; gap: 4px;
+.filter-at {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  user-select: none;
 }
-.pill:hover { border-color: var(--accent); color: var(--accent); }
-.pill-active {
-  background: var(--accent-dim); color: var(--accent);
-  border-color: var(--accent);
+.project-select {
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 18px 2px 0;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 2px center;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color var(--transition), color var(--transition);
 }
-.pill-count {
-  background: var(--bg-secondary); border-radius: 10px;
-  padding: 0 5px; font-size: 10px; color: var(--text-muted);
+.project-select:focus { border-bottom-color: var(--accent); }
+.project-select option { background: var(--surface); color: var(--text-primary); }
+.filter-sep-v {
+  width: 1px;
+  height: 16px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
 }
-.pill-active .pill-count { background: var(--accent-dim); color: var(--accent); }
+.type-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  min-width: 0;
+}
+.type-tabs::-webkit-scrollbar { display: none; }
+.type-tab {
+  padding: 3px 10px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  position: relative;
+  bottom: -1px;
+  transition: color 120ms ease, border-color 120ms ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.type-tab:hover { color: var(--text-secondary); }
+.type-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.type-tab-feedback.active { color: var(--green); border-bottom-color: var(--green); }
+.type-tab-project.active { color: var(--blue); border-bottom-color: var(--blue); }
+.type-tab-user.active { color: var(--purple); border-bottom-color: var(--purple); }
+.type-tab-reference.active { color: var(--orange); border-bottom-color: var(--orange); }
 
 .toolbar-right {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .search-wrap {
   display: flex; align-items: center; gap: 8px;
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--surface-panel); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 5px 10px;
   min-width: 160px; max-width: 240px;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
-.search-wrap:focus-within { border-color: var(--accent); }
+.search-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .search-input {
   background: none; border: none; outline: none;
   color: var(--text-primary); font-size: 12px; width: 100%;
@@ -987,17 +1757,24 @@ h1 { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spaci
 .search-input::placeholder { color: var(--text-muted); }
 
 /* ── Table ── */
-.toolbar { padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px; }
 .table-wrap {
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   overflow: hidden; overflow-x: auto;
+  flex: 1; overflow-y: auto; min-height: 0;
+  background: var(--surface-panel);
+  box-shadow: 0 18px 48px -36px var(--shadow), inset 0 1px 0 rgba(255,255,255,0.06);
+  backdrop-filter: blur(12px);
+}
+[data-theme="dark"] .table-wrap {
+  border-color: rgba(0,212,138,0.16);
+  box-shadow: 0 0 0 1px rgba(0,212,138,0.05), 0 18px 48px -36px rgba(0,0,0,0.95);
 }
 
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
-thead { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: 0 1px 0 var(--border), 0 4px 14px -4px var(--shadow); }
+thead { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: 0 1px 0 var(--border), 0 10px 22px -18px var(--shadow); }
 th {
-  padding: 8px 12px; text-align: left;
+  padding: 5px 10px; text-align: left;
   color: var(--text-muted); font-weight: 500; font-size: 11px;
   text-transform: uppercase; letter-spacing: 0.04em;
   border-bottom: 1px solid var(--border);
@@ -1005,15 +1782,21 @@ th {
 }
 
 tbody tr {
-  transition: background var(--transition);
+  transition: background var(--transition), box-shadow var(--transition);
   cursor: pointer;
 }
-tbody tr:not(.detail-row):hover td { background: var(--surface); }
-tbody tr.active td { background: var(--accent-dim) !important; }
-tbody tr.active:hover td { background: var(--accent-dim) !important; }
+tbody tr:hover td { background: var(--row-hover); }
+tbody tr.active td { background: var(--row-active) !important; }
+tbody tr.active:hover td { background: var(--row-active) !important; }
+
+/* Type-colored left accent stripe */
+tbody tr.type-feedback td.col-check { border-left: 3px solid var(--green); }
+tbody tr.type-project td.col-check { border-left: 3px solid var(--blue); }
+tbody tr.type-user td.col-check { border-left: 3px solid var(--purple); }
+tbody tr.type-reference td.col-check { border-left: 3px solid var(--orange); }
 
 td {
-  padding: 7px 12px;
+  padding: 4px 10px;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
   text-align: left;
@@ -1031,15 +1814,30 @@ tbody tr:last-child td { border-bottom: none; }
 .tag.user      { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
 .tag.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
 
-.project-cell { max-width: 80px; }
+.project-cell { max-width: 180px; }
 .type-col { }
+.plain-cell-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.source-col { text-align: center; }
+.source-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; cursor: default;
+}
+.source-icon { width: 15px; height: 15px; display: block; opacity: 0.95; }
 .name {
   font-weight: 500; max-width: 180px; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .desc {
   color: var(--text-secondary); max-width: 320px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
   overflow: hidden; line-height: 1.45;
 }
 
@@ -1072,6 +1870,25 @@ tbody tr:last-child td { border-bottom: none; }
 .sortable:hover { color: var(--text-secondary); }
 .sort-icon { display: inline-block; margin-left: 3px; color: var(--accent); }
 
+/* Sticky right columns */
+.col-hits    { position: sticky; right: 176px; }
+.col-updated { position: sticky; right: 80px; }
+.col-actions { position: sticky; right: 0; }
+thead .col-hits, thead .col-updated, thead .col-actions {
+  z-index: 3; background: var(--surface);
+}
+td.col-hits, td.col-updated, td.col-actions {
+  z-index: 1; background: var(--surface-panel);
+  box-shadow: -1px 0 0 var(--border-subtle);
+}
+td.col-hits { box-shadow: -2px 0 0 var(--border-subtle); }
+tbody tr:hover td.col-hits,
+tbody tr:hover td.col-updated,
+tbody tr:hover td.col-actions { background: var(--row-hover); }
+tbody tr.active td.col-hits,
+tbody tr.active td.col-updated,
+tbody tr.active td.col-actions { background: var(--row-active) !important; }
+
 /* Delete button */
 .btn-edit-quick {
   display: flex; align-items: center; justify-content: center;
@@ -1096,28 +1913,154 @@ tr:hover .btn-del { opacity: 1; }
 .btn-del:hover { background: var(--red-dim); color: var(--red); border-color: rgba(207,34,46,0.25); }
 [data-theme="dark"] .btn-del:hover { border-color: rgba(248,81,73,0.3); }
 .btn-del:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; opacity: 1; }
+.btn-clone-quick {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; background: none;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--text-muted); cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  opacity: 0; flex-shrink: 0;
+}
+tr:hover .btn-clone-quick { opacity: 1; }
+.btn-clone-quick:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--blue-border); }
+.btn-clone-quick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; opacity: 1; }
+.modal-clone { width: 420px; }
+.clone-modal-body {
+  padding: 14px 16px;
+  gap: 14px;
+}
+.clone-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.clone-source-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.clone-source-project {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.clone-source-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.clone-source-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.clone-target-row {
+  align-items: flex-start;
+}
+.clone-target-row .field-label {
+  padding-top: 7px;
+}
+.clone-status {
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.clone-status.ok {
+  color: var(--green);
+  background: var(--green-dim);
+}
+.clone-status.err {
+  color: var(--red);
+  background: var(--red-dim);
+}
 
-/* Detail row */
-.detail-row td {
-  background: var(--surface-2) !important;
-  cursor: default;
-  padding: 0;
-  border-bottom: 1px solid var(--border);
-}
 .detail {
-  padding: 16px 14px;
-  display: flex; flex-direction: column; gap: 14px;
-  animation: detail-in 180ms ease-out;
+  padding: 0;
+  display: flex; flex-direction: column; gap: 8px;
 }
-@keyframes detail-in {
-  from { opacity: 0; transform: translateY(-5px); }
-  to   { opacity: 1; transform: translateY(0); }
+.detail-summary {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.35fr) minmax(260px, 1fr);
+  gap: 8px;
 }
-.content-block { display: flex; flex-direction: column; gap: 6px; }
+.detail-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.detail-summary-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--bg);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  overflow-wrap: anywhere;
+}
+.content-block { display: flex; flex-direction: column; gap: 4px; }
+.detail-modal-body {
+  max-height: min(72vh, 760px);
+  padding: 14px;
+}
 
 .block-label {
-  font-size: 10px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-muted);
+}
+.block-label::before {
+  content: ''; display: inline-block;
+  width: 2px; height: 10px; border-radius: 1px;
+  background: var(--accent); flex-shrink: 0;
+}
+.detail-hero {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.detail-hero-name {
+  font-size: 15px; font-weight: 700; color: var(--text-primary);
+  line-height: 1.4; margin-bottom: 5px; overflow-wrap: anywhere;
+}
+.detail-hero-desc {
+  font-size: 12px; color: var(--text-muted); line-height: 1.55;
+}
+.meta-strip {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 4px 0; font-size: 11px; color: var(--text-muted);
+  padding-top: 10px; border-top: 1px solid var(--border-subtle);
+}
+.meta-ids { margin-top: 4px; }
+.meta-ids-toggle {
+  font-size: 10px; color: var(--text-muted); cursor: pointer;
+  user-select: none; list-style: none; display: flex; align-items: center; gap: 4px;
+}
+.meta-ids-toggle::-webkit-details-marker { display: none; }
+.meta-ids-toggle::before { content: '▸'; font-size: 9px; }
+details[open] > .meta-ids-toggle::before { content: '▾'; }
+.meta-ids-body {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 4px 0; padding-top: 4px; font-size: 11px;
+}
+.write-type-tabs {
+  display: flex; border-bottom: 1px solid var(--border-subtle);
+  margin: 0 -16px 8px; padding: 0 16px;
 }
 
 pre {
@@ -1152,7 +2095,7 @@ pre {
 .md-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
 
 .meta-row {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
   row-gap: 4px;
 }
 .meta-item { font-size: 11px; color: var(--text-muted); }
@@ -1187,13 +2130,13 @@ pre {
 .empty-inner {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 10px;
-  padding: 48px 20px; color: var(--text-muted); font-size: 13px;
+  padding: 28px 16px; color: var(--text-muted); font-size: 13px;
 }
 
 /* Move row */
 .move-row {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding-top: 4px; border-top: 1px solid var(--border-subtle); margin-top: 4px;
+  padding-top: 2px; border-top: 1px solid var(--border-subtle); margin-top: 2px;
 }
 .move-select {
   background: var(--surface); color: var(--text-primary);
@@ -1212,7 +2155,7 @@ pre {
 /* Reset button */
 .btn-reset {
   display: inline-flex; align-items: center; gap: 5px;
-  background: none; color: var(--text-muted);
+  background: var(--surface-panel); color: var(--text-muted);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 6px 10px; font-size: 12px; cursor: pointer;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
@@ -1249,7 +2192,6 @@ pre {
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
 body { margin: 0; }
-html, body { overflow-x: hidden; }
 
 /* Tooltip */
 .tooltip-popup {
@@ -1278,22 +2220,36 @@ html, body { overflow-x: hidden; }
 }
 .modal-overlay {
   position: fixed; inset: 0; z-index: 1000;
-  background: rgba(0,0,0,0.45);
+  background:
+    linear-gradient(90deg, rgba(0,212,138,0.06) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(0,212,138,0.06) 1px, transparent 1px),
+    rgba(2,4,10,0.66);
+  background-size: 28px 28px;
   display: flex; align-items: center; justify-content: center;
   animation: overlay-in 150ms ease;
+  backdrop-filter: blur(5px);
 }
 .modal {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); width: 440px; max-width: 95vw;
-  box-shadow: 0 20px 60px var(--shadow);
+  box-shadow: 0 24px 70px var(--shadow), 0 0 0 1px rgba(0,212,138,0.06), 0 0 40px -28px var(--glow);
   display: flex; flex-direction: column;
   animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(14px);
 }
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px 12px; border-bottom: 1px solid var(--border-subtle);
+  background: linear-gradient(90deg, var(--accent-dim), transparent 62%);
 }
-.modal-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.modal-title {
+  font-family: 'Orbitron', ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .modal-close {
   display: flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; background: none; border: none;
@@ -1301,21 +2257,28 @@ html, body { overflow-x: hidden; }
   transition: background var(--transition), color var(--transition);
 }
 .modal-close:hover { background: var(--red-dim); color: var(--red); }
-.modal-body { padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: calc(90vh - 120px); }
-.settings-group { display: flex; flex-direction: column; gap: 10px; }
+.settings-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 12px; background: var(--surface-panel); }
+.settings-tab { padding: 8px 14px; font-size: 12px; font-weight: 500; color: var(--muted); background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+.settings-tab:hover { color: var(--text); }
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.backup-tab-body { padding: 16px; display: flex; flex-direction: column; gap: 20px; }
+.backup-desc { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
+.backup-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; }
+.modal-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; max-height: calc(90vh - 120px); }
+.settings-group { display: flex; flex-direction: column; gap: 8px; }
 .settings-group-title {
   font-size: 10px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-muted);
 }
-.field-row { display: flex; align-items: center; gap: 10px; }
+.field-row { display: flex; align-items: center; gap: 8px; }
 .field-label { font-size: 12px; color: var(--text-secondary); width: 80px; flex-shrink: 0; cursor: help; }
 .field-input {
-  flex: 1; background: var(--bg); color: var(--text-primary);
+  flex: 1; background: var(--surface-panel); color: var(--text-primary);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 6px 9px; font-size: 12px; outline: none;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
 }
-.field-input:focus { border-color: var(--accent); }
+.field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); background: var(--surface); }
 .field-input::placeholder { color: var(--text-muted); }
 .modal-footer {
   display: flex; align-items: center; justify-content: flex-end; gap: 8px;
@@ -1325,27 +2288,110 @@ html, body { overflow-x: hidden; }
 .save-hint.ok { color: var(--green); }
 .save-hint.err { color: var(--red); }
 .btn-cancel {
-  background: none; color: var(--text-secondary);
+  background: var(--surface-panel); color: var(--text-secondary);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 5px 14px; font-size: 12px; cursor: pointer;
-  transition: background var(--transition);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.btn-cancel:hover { background: var(--surface-2); }
+.btn-cancel:hover { background: var(--surface-2); color: var(--text-primary); border-color: var(--border-hover); }
 .btn-save {
-  background: var(--accent); color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong)); color: #fff;
   border: none; border-radius: var(--radius-sm);
   padding: 5px 16px; font-size: 12px; cursor: pointer; font-weight: 500;
-  transition: opacity var(--transition);
+  transition: opacity var(--transition), box-shadow var(--transition), transform var(--transition);
+  box-shadow: 0 0 18px -8px var(--glow);
 }
-.btn-save:hover:not(:disabled) { opacity: 0.85; }
+.btn-save:hover:not(:disabled) { opacity: 0.9; box-shadow: 0 0 22px -6px var(--glow); transform: translateY(-1px); }
 .btn-save:disabled { opacity: 0.45; cursor: default; }
 
 .modal-sm { width: 360px; }
 .modal-edit { width: 560px; }
 .modal-lg { width: 700px; }
+.modal-xl { width: 860px; }
+
+/* ── Duplicates ── */
+.dup-modal-body { padding: 0; max-height: 70vh; overflow-y: auto; }
+.dup-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-panel);
+}
+.dup-threshold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.dup-threshold-slider {
+  width: 180px;
+  height: 24px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.dup-threshold-value {
+  min-width: 34px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.dup-refresh {
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.dup-refresh:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-hover); }
+.dup-refresh { margin-left: auto; }
+.dup-refresh:disabled { opacity: 0.5; cursor: default; }
+.dup-error {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  font-size: 12px;
+}
+.dup-list { display: flex; flex-direction: column; }
+.dup-pair { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 0; border-bottom: 1px solid var(--border); padding: 12px 16px; align-items: start; }
+.dup-pair:last-child { border-bottom: none; }
+.dup-side { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dup-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.dup-proj { font-size: 10px; color: var(--muted); font-family: monospace; }
+.dup-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dup-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dup-content {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  background: var(--bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 6px 8px;
+  margin: 3px 0 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+.btn-dup-del { align-self: flex-start; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: 4px; background: transparent; color: var(--danger, #e5534b); cursor: pointer; }
+.btn-dup-del:hover { background: rgba(229,83,75,0.08); }
+.dup-center { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 4px; gap: 6px; }
+.dup-sim { font-size: 13px; font-weight: 600; color: var(--accent); }
+.btn-dup-skip { font-size: 10px; color: var(--muted); background: transparent; border: none; cursor: pointer; padding: 2px 4px; }
+.btn-dup-skip:hover { color: var(--text); }
+.dup-count { font-size: 13px; font-weight: 400; color: var(--muted); }
 .field-row-inline { align-items: center; flex-direction: row; gap: 12px; }
 .field-select-sm { width: 80px !important; }
-.action-row { display: flex; gap: 8px; margin-top: 8px; }
+.action-row { display: flex; gap: 8px; margin-top: 4px; }
 .btn-edit {
   background: var(--bg-secondary); color: var(--text-secondary);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -1393,18 +2439,10 @@ html, body { overflow-x: hidden; }
 .project-badge.user     { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
 .project-badge.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
 
-/* ── Row actions + chevron ── */
+/* ── Row actions ── */
 .row-actions {
   display: flex; align-items: center; justify-content: flex-end; gap: 4px;
 }
-.row-chevron {
-  flex-shrink: 0; color: var(--text-muted);
-  transition: transform var(--transition), opacity var(--transition);
-  opacity: 0;
-}
-tr:hover .row-chevron,
-tr.active .row-chevron { opacity: 1; }
-.row-chevron.open { transform: rotate(180deg); }
 
 /* ── Combobox ── */
 .combobox-wrap {
@@ -1421,9 +2459,10 @@ tr.active .row-chevron { opacity: 1; }
   position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 200;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px var(--shadow);
+  box-shadow: 0 14px 34px var(--shadow), 0 0 28px -22px var(--glow);
   max-height: 200px; overflow-y: auto;
   padding: 4px;
+  backdrop-filter: blur(12px);
 }
 .combobox-option {
   display: flex; align-items: center; gap: 6px;
@@ -1435,9 +2474,226 @@ tr.active .row-chevron { opacity: 1; }
 .combobox-option:hover,
 .combobox-option.highlighted { background: var(--surface-2); }
 .combobox-option.selected { color: var(--accent); }
-.combobox-check {
-  width: 14px; height: 14px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--accent);
+/* ── Type stripe (3px colored top border inside panel) ── */
+.type-stripe { height: 3px; flex-shrink: 0; }
+.type-stripe.feedback { background: var(--green); }
+.type-stripe.project  { background: var(--blue); }
+.type-stripe.user     { background: var(--purple); }
+.type-stripe.reference { background: var(--orange); }
+
+/* ── Write panel (Linear-style slide-in) ── */
+@keyframes write-panel-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
+.write-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; justify-content: flex-end;
+  pointer-events: none;
+}
+.write-panel {
+  width: 480px; max-width: 95vw;
+  background: var(--surface); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  height: 100%; box-shadow: -18px 0 52px var(--shadow), 0 0 36px -24px var(--glow);
+  animation: write-panel-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: all;
+}
+.write-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--accent-dim), transparent 68%);
+}
+.write-title {
+  font-family: ui-monospace, SFMono-Regular, 'Cascadia Code', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.write-header-right { display: flex; align-items: center; gap: 8px; }
+.write-header-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.write-subtitle {
+  font-size: 11px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 320px;
+}
+/* type-tinted header backgrounds */
+.write-header.type-header-feedback { background: linear-gradient(90deg, var(--green-dim), transparent 72%); }
+.write-header.type-header-project  { background: linear-gradient(90deg, var(--blue-dim),  transparent 72%); }
+.write-header.type-header-user     { background: linear-gradient(90deg, var(--purple-dim), transparent 72%); }
+.write-header.type-header-reference { background: linear-gradient(90deg, var(--orange-dim), transparent 72%); }
+/* detail panel same width as edit panel */
+.detail-panel { width: 480px; }
+/* inline edit button in panel header */
+.btn-header-edit {
+  background: transparent; color: var(--text-muted);
+  border: none; border-radius: var(--radius-sm);
+  padding: 4px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+.btn-header-edit:hover { color: var(--accent); background: var(--accent-dim); }
+.kbd-hint {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 4px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 4px; font-size: 10px; font-weight: 600;
+  color: var(--text-muted); font-family: ui-monospace, monospace;
+}
+.write-body {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 12px; min-height: 0;
+}
+.write-section { display: flex; flex-direction: column; gap: 4px; }
+.write-section-grow { flex: 1; }
+.write-section-row { flex-direction: row; gap: 12px; align-items: flex-start; }
+.write-section-half { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.write-section-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 2px;
+}
+.write-field-label {
+  font-size: 11px; color: var(--text-muted); font-weight: 500;
+}
+.write-input {
+  background: var(--surface-panel); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 9px; font-size: 12px; outline: none; width: 100%;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  font-family: inherit;
+}
+.write-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); background: var(--surface); }
+.write-input::placeholder { color: var(--text-muted); }
+.write-textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
+.write-select { cursor: pointer; }
+
+.write-type-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.write-type-pill {
+  padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface-panel);
+  color: var(--text-muted); cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+}
+.write-type-pill:hover { border-color: var(--border-hover); color: var(--text-primary); box-shadow: 0 0 0 3px var(--accent-dim); }
+.write-type-pill.active.feedback { background: var(--green-dim); color: var(--green); border-color: var(--green-border); }
+.write-type-pill.active.project  { background: var(--blue-dim);   color: var(--blue);   border-color: var(--blue-border); }
+.write-type-pill.active.user     { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
+.write-type-pill.active.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
+
+.write-extra-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: none; cursor: pointer;
+  font-size: 11px; color: var(--text-muted); padding: 0;
+  transition: color var(--transition);
+}
+.write-extra-toggle:hover { color: var(--text-secondary); }
+.write-extra-chevron { transition: transform var(--transition); flex-shrink: 0; }
+.write-extra-chevron.open { transform: rotate(180deg); }
+.write-extra-fields { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.write-collapsible { display: flex; flex-direction: column; }
+
+.write-footer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.write-target-hint {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--text-muted); margin-right: auto;
+  max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── New button ── */
+.btn-new {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong)); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: opacity var(--transition), box-shadow var(--transition), transform var(--transition);
+  box-shadow: 0 0 18px -8px var(--glow);
+  white-space: nowrap;
+}
+.btn-new:hover { opacity: 0.9; box-shadow: 0 0 22px -6px var(--glow); transform: translateY(-1px); }
+.btn-new:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Toolbar action buttons (Export / Import) ── */
+.btn-toolbar-action {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface-panel); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 5px 10px; font-size: 12px; cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition), box-shadow var(--transition);
+  white-space: nowrap;
+}
+.btn-toolbar-action:hover { background: var(--surface-2); color: var(--accent); border-color: var(--border-hover); box-shadow: 0 0 0 3px var(--accent-dim); }
+.btn-toolbar-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toolbar-sep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
+
+/* ── Checkbox column ── */
+.col-check { width: 36px; text-align: center; padding: 4px 6px; }
+.row-check { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); opacity: 0; transition: opacity 0.1s; }
+tr:hover .row-check,
+tr.selected .row-check { opacity: 1; }
+th.col-check:hover .row-check,
+th.col-check.has-selection .row-check { opacity: 1; }
+
+/* ── Selected row ── */
+tbody tr.selected td { background: var(--row-active); }
+tbody tr.selected td.col-hits,
+tbody tr.selected td.col-updated,
+tbody tr.selected td.col-actions { background: var(--row-active); }
+tbody tr.selected:hover td { background: var(--row-hover); }
+tbody tr.selected:hover td.col-hits,
+tbody tr.selected:hover td.col-updated,
+tbody tr.selected:hover td.col-actions { background: var(--row-hover); }
+
+/* ── Bulk action bar ── */
+.bulk-bar {
+  position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 8px 16px;
+  box-shadow: 0 18px 46px var(--shadow), 0 0 32px -18px var(--glow);
+  z-index: 900; white-space: nowrap;
+  backdrop-filter: blur(14px);
+}
+.bulk-enter-active, .bulk-leave-active { transition: opacity 150ms ease, transform 150ms ease; }
+.bulk-enter-from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+.bulk-leave-to  { opacity: 0; transform: translateX(-50%) translateY(12px); }
+.bulk-count { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.bulk-clear {
+  display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; background: none; border: none;
+  color: var(--text-muted); cursor: pointer; font-size: 14px; border-radius: 3px;
+  transition: background var(--transition), color var(--transition);
+}
+.bulk-clear:hover { background: var(--surface-2); color: var(--text-primary); }
+.bulk-sep { color: var(--border); font-size: 16px; }
+.bulk-btn {
+  background: var(--surface-2); color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 12px; font-size: 12px; cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.bulk-btn:hover:not(:disabled) { background: var(--bg); color: var(--text-primary); }
+.bulk-btn:disabled { opacity: 0.4; cursor: default; }
+.bulk-btn-danger:hover:not(:disabled) { background: var(--red-dim); color: var(--red); border-color: var(--red); }
+.bulk-confirm-text { font-size: 12px; color: var(--text-secondary); }
+.bulk-move-select {
+  background: var(--surface); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 8px; font-size: 12px; cursor: pointer; max-width: 160px;
+}
+
+/* ── Import progress ── */
+.import-progress-bar {
+  width: 100%; height: 4px; background: var(--border);
+  border-radius: 2px; overflow: hidden; margin-top: 8px;
+}
+.import-progress-fill {
+  height: 100%; background: var(--accent); border-radius: 2px;
+  transition: width 100ms linear;
+}
+
 </style>

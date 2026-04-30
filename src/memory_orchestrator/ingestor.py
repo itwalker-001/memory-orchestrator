@@ -3,7 +3,6 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +11,7 @@ from memory_orchestrator.config import get_settings
 from memory_orchestrator.embedder import embed_one
 from memory_orchestrator.models import GLOBAL_PROJECT_ID, Session as SessionRow
 from memory_orchestrator.repository import MemoryRepository
+from memory_orchestrator.time_utils import utc_now
 
 
 def read_transcript_incremental(path: str, offset: int) -> tuple[list[dict], int]:
@@ -110,6 +110,7 @@ async def ingest_session(
     session_id: str,
     project_id: uuid.UUID,
     transcript_path: str,
+    source_client: str = "claude",
 ) -> IngestResult:
     _env = get_settings()
     repo = MemoryRepository(db)
@@ -127,7 +128,7 @@ async def ingest_session(
     lines, new_offset = read_transcript_incremental(transcript_path, row.last_offset)
     if not lines:
         row.status = "done"
-        row.last_ingested_at = datetime.now(timezone.utc)
+        row.last_ingested_at = utc_now()
         await db.commit()
         return IngestResult(extracted=0, saved=0, skipped=0)
 
@@ -176,6 +177,7 @@ async def ingest_session(
                 importance=int(cand.get("importance", 3)),
                 project_id=cand_pid,
                 source="auto_extracted",
+                source_client=source_client,
                 embedding=embedding,
             )
             saved += 1
@@ -186,7 +188,7 @@ async def ingest_session(
         raise
 
     row.last_offset = new_offset
-    row.last_ingested_at = datetime.now(timezone.utc)
+    row.last_ingested_at = utc_now()
     row.status = "done"
     row.last_error = None
     await db.commit()

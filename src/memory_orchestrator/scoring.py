@@ -1,6 +1,8 @@
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TypedDict
+
+from memory_orchestrator.time_utils import to_utc, utc_now
 
 
 class ScoredItem(TypedDict):
@@ -11,9 +13,8 @@ class ScoredItem(TypedDict):
 
 
 def recency_decay(updated_at: datetime, half_life_days: float = 60.0) -> float:
-    now = datetime.now(timezone.utc)
-    if updated_at.tzinfo is None:
-        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    now = utc_now()
+    updated_at = to_utc(updated_at)
     age = (now - updated_at).total_seconds() / 86400.0
     return math.exp(-age / half_life_days)
 

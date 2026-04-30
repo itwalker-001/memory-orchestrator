@@ -1,6 +1,6 @@
 # Memory Orchestrator
 
-Cross-project memory center for Claude Code. Collects, organizes, and serves
+Cross-project memory center for Claude Code and Codex. Collects, organizes, and serves
 memories across all projects via MCP and HTTP API.
 
 ## Quickstart
@@ -20,15 +20,39 @@ uv sync
 # 4. Migrate DB
 uv run alembic upgrade head
 
-# 5. Wire hooks + MCP server into ~/.claude/settings.json
+# 5. Wire hooks + MCP server into a coding client
 uv run mo setup --scope user
+# or:
+uv run mo setup --client codex --scope user
+# or both:
+uv run mo setup --client all --scope user
 
 # 6. Run the service (in another terminal)
 uv run mo serve-http
 ```
 
-Open Claude Code in any project. The UserPromptSubmit hook pre-injects
+Open Claude Code or Codex in any project. The UserPromptSubmit hook pre-injects
 relevant memories; `save_memory` / `search_memory` MCP tools are available.
+
+## Client Setup
+
+Claude Code remains the default:
+
+```bash
+uv run mo setup --client claude --scope user
+uv run mo doctor --client claude
+```
+
+Codex setup writes `~/.codex/config.toml`, `~/.codex/hooks.json`, and
+`~/.codex/AGENTS.md`:
+
+```bash
+uv run mo setup --client codex --scope user
+uv run mo doctor --client codex
+```
+
+Codex hooks require the `codex_hooks` feature. `mo setup --client codex` enables
+that flag and registers the same stdio MCP server as Claude.
 
 ## Configuration
 

@@ -2,14 +2,19 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from sqlalchemy import delete as sa_delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from memory_orchestrator.models import GLOBAL_PROJECT_ID, Memory, Project, SystemSetting
+from memory_orchestrator.scoring import hybrid_score, truncate_by_budget
+from memory_orchestrator.time_utils import utc_now
+
+ProjectRef = uuid.UUID | str
 
 _SETTINGS_CACHE: tuple[float, dict[str, str]] | None = None
 _SETTINGS_TTL = 60.0  # seconds
 
-from memory_orchestrator.models import GLOBAL_PROJECT_ID, Memory, Project, SystemSetting
 
 def _sync_project_count(project_id: uuid.UUID):
     subq = (
@@ -23,7 +28,6 @@ def _sync_project_count(project_id: uuid.UUID):
         .values(memory_count=subq)
         .execution_options(synchronize_session=False)
     )
-from memory_orchestrator.scoring import hybrid_score, truncate_by_budget
 
 
 class MemoryRepository:
@@ -32,10 +36,27 @@ class MemoryRepository:
 
     async def ensure_project(self, slug: str, cwd: str | None = None) -> uuid.UUID:
         """Upsert a project by slug; return its UUID. slug='*' returns GLOBAL_PROJECT_ID."""
-        if slug == "*":
-            return GLOBAL_PROJECT_ID
         from sqlalchemy.dialects.postgresql import insert as pg_insert
-        now = datetime.now(timezone.utc)
+        now = utc_now()
+        if slug == "*":
+            stmt = (
+                pg_insert(Project)
+                .values(
+                    id=GLOBAL_PROJECT_ID,
+                    slug="*",
+                    display_name="Global",
+                    root_paths=[],
+                    first_seen_at=now,
+                    last_active_at=now,
+                )
+                .on_conflict_do_update(
+                    index_elements=["slug"],
+                    set_={"last_active_at": now},
+                )
+                .returning(Project.id)
+            )
+            result = await self.session.execute(stmt)
+            return result.scalar_one()
         display_name = slug.split("/")[-1] if "/" in slug else slug
         stmt = (
             pg_insert(Project)
@@ -64,6 +85,26 @@ class MemoryRepository:
         )
         return result.scalar_one_or_none()
 
+    async def _ensure_project_ref(self, project_id: ProjectRef) -> uuid.UUID:
+        if isinstance(project_id, uuid.UUID):
+            return project_id
+        try:
+            return uuid.UUID(project_id)
+        except ValueError:
+            return await self.ensure_project(project_id)
+
+    async def _resolve_project_ref(self, project_id: ProjectRef) -> uuid.UUID | None:
+        if isinstance(project_id, uuid.UUID):
+            return project_id
+        try:
+            return uuid.UUID(project_id)
+        except ValueError:
+            return await self.slug_to_id(project_id)
+
+    async def _resolve_project_refs(self, project_ids: list[ProjectRef]) -> list[uuid.UUID]:
+        resolved = [await self._resolve_project_ref(project_id) for project_id in project_ids]
+        return [project_id for project_id in resolved if project_id is not None]
+
     async def save(
         self,
         *,
@@ -71,21 +112,24 @@ class MemoryRepository:
         name: str,
         description: str,
         content: str,
-        project_id: uuid.UUID,
+        project_id: ProjectRef,
         source: str,
+        source_client: str = "claude",
         why: str | None = None,
         how_to_apply: str | None = None,
         importance: int = 3,
         embedding: list[float] | None = None,
     ) -> Memory:
+        resolved_project_id = await self._ensure_project_ref(project_id)
         m = Memory(
             type=type, name=name, description=description, content=content,
-            project_id=project_id, source=source, why=why, how_to_apply=how_to_apply,
+            project_id=resolved_project_id, source=source, source_client=source_client,
+            why=why, how_to_apply=how_to_apply,
             importance=max(1, min(5, importance)), embedding=embedding,
         )
         self.session.add(m)
         await self.session.flush()
-        await self.session.execute(_sync_project_count(project_id))
+        await self.session.execute(_sync_project_count(resolved_project_id))
         return m
 
     async def get(self, memory_id: uuid.UUID, include_superseded: bool = False) -> Memory | None:
@@ -98,8 +142,8 @@ class MemoryRepository:
     async def list(
         self,
         *,
-        project_id: uuid.UUID | None = None,
-        project_ids: list[uuid.UUID] | None = None,
+        project_id: ProjectRef | None = None,
+        project_ids: list[ProjectRef] | None = None,
         type: str | None = None,
         q: str | None = None,
         limit: int = 50,
@@ -108,9 +152,15 @@ class MemoryRepository:
     ) -> list[Memory]:
         stmt = select(Memory).where(Memory.superseded_by.is_(None))
         if project_ids is not None:
-            stmt = stmt.where(Memory.project_id.in_(project_ids))
+            resolved_project_ids = await self._resolve_project_refs(project_ids)
+            if not resolved_project_ids:
+                return []
+            stmt = stmt.where(Memory.project_id.in_(resolved_project_ids))
         elif project_id is not None:
-            stmt = stmt.where(Memory.project_id == project_id)
+            resolved_project_id = await self._resolve_project_ref(project_id)
+            if resolved_project_id is None:
+                return []
+            stmt = stmt.where(Memory.project_id == resolved_project_id)
         if type is not None:
             stmt = stmt.where(Memory.type == type)
         if q:
@@ -127,18 +177,21 @@ class MemoryRepository:
         self,
         *,
         type: str,
-        project_id: uuid.UUID,
+        project_id: ProjectRef,
         embedding: list[float],
         threshold: float = 0.92,
         limit: int = 5,
     ) -> list[Memory]:
+        resolved_project_id = await self._resolve_project_ref(project_id)
+        if resolved_project_id is None:
+            return []
         max_distance = 1.0 - threshold
         stmt = (
             select(Memory)
             .where(
                 Memory.superseded_by.is_(None),
                 Memory.type == type,
-                Memory.project_id == project_id,
+                Memory.project_id == resolved_project_id,
                 Memory.embedding.isnot(None),
                 Memory.embedding.cosine_distance(embedding) <= max_distance,
             )
@@ -152,17 +205,20 @@ class MemoryRepository:
         self,
         *,
         query_embedding: list[float],
-        project_ids: list[uuid.UUID],
+        project_ids: list[ProjectRef],
         types: list[str] | None = None,
         top_k: int = 8,
         record_hits: bool = False,
     ) -> list[Hit]:
+        resolved_project_ids = await self._resolve_project_refs(project_ids)
+        if not resolved_project_ids:
+            return []
         distance = Memory.embedding.cosine_distance(query_embedding)
         stmt = (
             select(Memory, distance.label("distance"))
             .where(
                 Memory.superseded_by.is_(None),
-                Memory.project_id.in_(project_ids),
+                Memory.project_id.in_(resolved_project_ids),
                 Memory.embedding.isnot(None),
             )
             .order_by(distance)
@@ -190,7 +246,7 @@ class MemoryRepository:
                 .where(Memory.id.in_(ids))
                 .values(
                     hit_count=Memory.hit_count + 1,
-                    last_hit_at=datetime.now(timezone.utc),
+                    last_hit_at=utc_now(),
                 )
                 .execution_options(synchronize_session="fetch")
             )
@@ -199,18 +255,19 @@ class MemoryRepository:
     async def build_context(
         self,
         *,
-        project_id: uuid.UUID,
+        project_id: ProjectRef,
         budget_tokens: int = 1500,
     ) -> str:
+        resolved_project_id = await self._ensure_project_ref(project_id)
         stmt = select(Memory).where(
             Memory.superseded_by.is_(None),
             or_(
                 Memory.project_id == GLOBAL_PROJECT_ID,
-                (Memory.project_id == project_id) & (Memory.type == "feedback") & (Memory.importance >= 3),
-                (Memory.project_id == project_id) & (Memory.type == "project") & (
-                    Memory.updated_at >= datetime.now(timezone.utc) - timedelta(days=30)
+                (Memory.project_id == resolved_project_id) & (Memory.type == "feedback") & (Memory.importance >= 3),
+                (Memory.project_id == resolved_project_id) & (Memory.type == "project") & (
+                    Memory.updated_at >= utc_now() - timedelta(days=30)
                 ),
-                (Memory.project_id == project_id) & (Memory.type == "reference"),
+                (Memory.project_id == resolved_project_id) & (Memory.type == "reference"),
             ),
         )
         result = await self.session.execute(stmt)
@@ -233,7 +290,7 @@ class MemoryRepository:
         await self.session.execute(
             update(Memory)
             .where(Memory.id.in_(ids))
-            .values(hit_count=Memory.hit_count + 1, last_hit_at=datetime.now(timezone.utc))
+            .values(hit_count=Memory.hit_count + 1, last_hit_at=utc_now())
             .execution_options(synchronize_session="fetch")
         )
         await self.session.commit()
@@ -266,7 +323,7 @@ class MemoryRepository:
         global _SETTINGS_CACHE
         _SETTINGS_CACHE = None  # invalidate on write
         from sqlalchemy.dialects.postgresql import insert as pg_insert
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         for key, value in updates.items():
             stmt = (
                 pg_insert(SystemSetting)
@@ -283,7 +340,7 @@ class MemoryRepository:
         else:
             await self.session.execute(
                 update(Memory).where(Memory.id == memory_id).values(
-                    superseded_by=memory_id, updated_at=datetime.now(timezone.utc)
+                    superseded_by=memory_id, updated_at=utc_now()
                 )
             )
         if project_id:

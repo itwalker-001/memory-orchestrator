@@ -14,11 +14,15 @@ uv run alembic upgrade head
 # Wire hooks + MCP into ~/.claude/settings.json
 uv run mo setup --scope user
 
+# Wire hooks + MCP into ~/.codex/config.toml and ~/.codex/hooks.json
+uv run mo setup --client codex --scope user
+
 # Start HTTP service (port 8765, keep running in separate terminal)
 uv run mo serve-http
 
 # Check wiring (DB reachable, MCP entry, hooks present)
 uv run mo doctor
+uv run mo doctor --client codex
 
 # Run unit tests (no external deps)
 uv run pytest tests/unit/
@@ -38,7 +42,7 @@ cd frontend && npm run build
 Two separate processes serve different clients:
 
 - **`mo serve-http`** — FastAPI on port 8765. Used by hooks (`/context`, `/ingest`) and the browser UI (`/ui`). Must be started manually.
-- **`mo serve-mcp`** — MCP stdio server. Registered in `~/.claude/settings.json` via `mo setup`; Claude Code launches it automatically per-session.
+- **`mo serve-mcp`** — MCP stdio server. Registered in `~/.claude/settings.json` or `~/.codex/config.toml` via `mo setup`; the client launches it automatically per-session.
 
 Both processes share the same PostgreSQL database and `MemoryRepository`.
 
@@ -47,7 +51,7 @@ Both processes share the same PostgreSQL database and `MemoryRepository`.
 ```
 UserPromptSubmit hook  →  GET /context  →  repo.build_context()  →  inject markdown
 Stop hook              →  POST /ingest  →  ingestor.py  →  LLM extraction  →  repo.save()
-Claude Code MCP call   →  mcp_server.py handler  →  repo.*()
+Claude/Codex MCP call  →  mcp_server.py handler  →  repo.*()
 ```
 
 ### Key modules
@@ -62,6 +66,7 @@ Claude Code MCP call   →  mcp_server.py handler  →  repo.*()
 | `ingestor.py` | Reads transcript JSONL incrementally (`sessions.last_offset`), calls OpenAI-compatible API to extract memories |
 | `embedder.py` | FastEmbed local vectorization; must set `HF_HUB_OFFLINE=1` after first download |
 | `scoring.py` | Hybrid re-ranking and token-budget truncation for context injection |
+| `client_adapters.py` | Client-specific setup/teardown for Claude Code and Codex |
 | `cli.py` | `mo` CLI entry point: `setup`, `teardown`, `serve-http`, `serve-mcp`, `doctor` |
 
 ### Data model
@@ -77,8 +82,8 @@ All settings are editable at `/ui` → Settings without restart, except `db_dsn`
 
 ### Hooks
 
-- `hooks/user_prompt_submit.py` — reads `CLAUDE_PROJECT_DIR`, calls `/context`, writes markdown to stdout (Claude Code prepends it to system prompt).
-- `hooks/stop.py` — reads transcript JSONL to count new user turns; fires `/ingest` if cooldown and min-turns thresholds are met; persists state in `~/.claude/memory-orchestrator/stop-<session_id>.json`.
+- `hooks/user_prompt_submit.py` — reads Claude env or Codex hook JSON, calls `/context`, writes markdown for Claude or `hookSpecificOutput.additionalContext` JSON for Codex.
+- `hooks/stop.py` — reads transcript JSONL to count new user turns; fires `/ingest` if cooldown and min-turns thresholds are met; persists state under `~/.claude/memory-orchestrator/` or `~/.codex/memory-orchestrator/`.
 - Hook commands use `uv run --no-sync --project <abs-path> python <hook.py>` — `--no-sync` prevents uv from trying to reinstall the package, which would fail with a file-lock error when `mo serve-http` is already running.
 
 ### Frontend

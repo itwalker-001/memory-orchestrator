@@ -1,0 +1,41 @@
+{
+  "client": "codex",
+  "home_env": "CODEX_HOME",
+  "default_home": "~/.codex",
+  "config": {
+    "format": "toml",
+    "path": "config.toml",
+    "managed_paths": [["mcp_servers", "memory-orchestrator"]],
+    "patches": [
+      {
+        "path": ["features", "codex_hooks"],
+        "value": true
+      },
+      {
+        "path": ["mcp_servers", "memory-orchestrator"],
+        "value": {
+          "command": "uv",
+          "args": ["run", "--no-sync", "--project", "{project_dir}", "mo", "serve-mcp", "--client", "codex"]
+        }
+      }
+    ]
+  },
+  "hooks": {
+    "format": "json",
+    "path": "hooks.json",
+    "events": {
+      "UserPromptSubmit": {
+        "type": "command",
+        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/hooks/user_prompt_submit.py", "--client", "codex"]
+      },
+      "Stop": {
+        "type": "command",
+        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/hooks/stop.py", "--client", "codex"]
+      }
+    }
+  },
+  "instructions": {
+    "source": "agents/memory-orchestrator.AGENTS.md",
+    "destination": "AGENTS.md"
+  }
+}

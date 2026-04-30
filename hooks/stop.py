@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook: trigger incremental session ingestion."""
+"""Stop hook: trigger incremental session ingestion."""
 from __future__ import annotations
 import hashlib
 import json
@@ -15,21 +15,43 @@ from pathlib import Path
 _DEFAULT_PORT = 8765
 _COOLDOWN_SEC = 300
 _MIN_TURNS = 1
-_STATE_DIR = Path.home() / ".claude" / "memory-orchestrator"
-_LOG_PATH = _STATE_DIR / "hook.log"
+
+
+def _client_name() -> str:
+    if "--client" in sys.argv:
+        idx = sys.argv.index("--client")
+        if idx + 1 < len(sys.argv):
+            value = sys.argv[idx + 1].strip().lower()
+            if value in {"codex", "claude"}:
+                return value
+    explicit = os.environ.get("MO_CLIENT", "").strip().lower()
+    if explicit in {"codex", "claude"}:
+        return explicit
+    return "claude"
+
+
+def _state_dir() -> Path:
+    if _client_name() == "codex" and os.environ.get("CODEX_HOME"):
+        return Path(os.environ["CODEX_HOME"]) / "memory-orchestrator"
+    return Path.home() / f".{_client_name()}" / "memory-orchestrator"
+
+
+def _log_path() -> Path:
+    return _state_dir() / "hook.log"
 
 
 def _log(msg: str) -> None:
     try:
-        _STATE_DIR.mkdir(parents=True, exist_ok=True)
-        with _LOG_PATH.open("a", encoding="utf-8") as f:
+        state_dir = _state_dir()
+        state_dir.mkdir(parents=True, exist_ok=True)
+        with _log_path().open("a", encoding="utf-8") as f:
             f.write(msg + "\n")
     except Exception:
         pass
 
 
 def _state_file(session_id: str) -> Path:
-    return _STATE_DIR / f"stop-{session_id}.json"
+    return _state_dir() / f"stop-{session_id}.json"
 
 
 def _read_state(session_id: str) -> dict:
@@ -44,10 +66,22 @@ def _read_state(session_id: str) -> dict:
 
 def _write_state(session_id: str, state: dict) -> None:
     try:
-        _STATE_DIR.mkdir(parents=True, exist_ok=True)
+        _state_dir().mkdir(parents=True, exist_ok=True)
         _state_file(session_id).write_text(json.dumps(state))
     except Exception:
         pass
+
+
+def _event_cwd(event: dict) -> str:
+    for key in ("cwd", "workspace_root", "workspaceRoot", "project_dir", "projectDir"):
+        value = event.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return (
+        os.environ.get("CODEX_PROJECT_DIR")
+        or os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.getcwd()
+    )
 
 
 def _count_user_turns(transcript_path: str) -> int:
@@ -112,7 +146,7 @@ def main() -> int:
 
     session_id = event.get("session_id") or "unknown"
     transcript_path = event.get("transcript_path") or ""
-    cwd = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    cwd = _event_cwd(event)
     project_id = _detect_project_id(cwd)
 
     state = _read_state(session_id)
@@ -128,6 +162,7 @@ def main() -> int:
         "session_id": session_id,
         "project_slug": project_id,
         "transcript_path": transcript_path,
+        "client": _client_name(),
     }).encode("utf-8")
     req = urllib.request.Request(
         f"http://localhost:{_DEFAULT_PORT}/ingest",

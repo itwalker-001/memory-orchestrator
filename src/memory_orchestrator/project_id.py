@@ -68,3 +68,9 @@ def detect_project_id(cwd: str | Path) -> str:
         return f"local:{git_root.name}-{short}"
     short = hashlib.sha256(str(cwd.resolve()).encode("utf-8")).hexdigest()[:8]
     return f"local:{cwd.name}-{short}"
+
+
+def project_id_from_path(path: str | Path) -> str:
+    p = Path(path)
+    short = hashlib.sha256(str(p.resolve()).encode("utf-8")).hexdigest()[:12]
+    return f"local:{short}"

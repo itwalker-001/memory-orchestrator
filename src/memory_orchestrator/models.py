@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Integer, SmallInteger, DateTime, ForeignKey, ARRAY, Text, UniqueConstraint
+from sqlalchemy import Integer, SmallInteger, DateTime, ForeignKey, ARRAY, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 
 from memory_orchestrator.config import get_settings
+from memory_orchestrator.time_utils import utc_now
 
 GLOBAL_PROJECT_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
@@ -21,8 +22,8 @@ class Project(Base):
     slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(Text, nullable=False)
     root_paths: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
-    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     memory_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
 
@@ -42,8 +43,9 @@ class Memory(Base):
     hit_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_hit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    source_client: Mapped[str] = mapped_column(Text, nullable=False, default="claude", server_default="claude")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     superseded_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("memories.id"))
 
 
@@ -52,7 +54,7 @@ class SystemSetting(Base):
 
     key: Mapped[str] = mapped_column(Text, primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class MemoryLink(Base):
