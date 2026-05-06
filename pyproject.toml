@@ -45,3 +45,9 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.12",
 ]
+
+
+[[tool.uv.index]]
+# 配置清华源
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+default = true

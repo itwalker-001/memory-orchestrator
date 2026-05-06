@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from memory_orchestrator.config import get_settings
+from memory_orchestrator.db_check import ensure_database_exists, format_database_startup_error
 from memory_orchestrator.models import Base
 
 config = context.config
@@ -23,6 +24,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
+    database_created = await ensure_database_exists(get_settings().db_dsn)
+    if database_created:
+        print("Database did not exist and was created automatically; continuing with the target database.")
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -32,4 +37,7 @@ async def run_migrations_online() -> None:
     await connectable.dispose()
 
 
-asyncio.run(run_migrations_online())
+try:
+    asyncio.run(run_migrations_online())
+except Exception as exc:
+    raise SystemExit(format_database_startup_error(get_settings().db_dsn, exc)) from None

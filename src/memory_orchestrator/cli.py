@@ -16,6 +16,19 @@ from memory_orchestrator.client_rules import (
 from memory_orchestrator.config import get_settings
 
 
+def _preflight_database() -> None:
+    from memory_orchestrator.db_check import check_database_dsn, format_database_startup_error
+
+    settings = get_settings()
+    try:
+        database_created = asyncio.run(check_database_dsn(settings.db_dsn))
+    except Exception as exc:
+        click.echo(format_database_startup_error(settings.db_dsn, exc), err=True)
+        sys.exit(1)
+    if database_created:
+        click.echo("Database did not exist and was created automatically; continuing with the target database.")
+
+
 @click.group()
 def main() -> None:
     """Memory Orchestrator CLI."""
@@ -28,6 +41,7 @@ def serve() -> None:
     from memory_orchestrator.http_app import create_app
     from memory_orchestrator.mcp_server import run_stdio_server
 
+    _preflight_database()
     settings = get_settings()
     app = create_app()
     config = uvicorn.Config(app, host="127.0.0.1", port=settings.http_port, log_level=settings.log_level.lower())
@@ -51,6 +65,8 @@ def serve_http() -> None:
     import logging.config
     import uvicorn
     from memory_orchestrator.http_app import create_app
+
+    _preflight_database()
     settings = get_settings()
 
     log_dir = Path(__file__).parent.parent.parent / "logs"
@@ -79,6 +95,8 @@ def serve_http() -> None:
             "uvicorn": {"handlers": ["console", "file"], "level": settings.log_level, "propagate": False},
             "uvicorn.access": {"handlers": ["console", "file"], "level": "INFO", "propagate": False},
             "uvicorn.error": {"handlers": ["console", "file"], "level": "DEBUG", "propagate": False},
+            "python_multipart": {"handlers": ["console", "file"], "level": "WARNING", "propagate": False},
+            "multipart": {"handlers": ["console", "file"], "level": "WARNING", "propagate": False},
         },
     })
 
@@ -99,6 +117,7 @@ def serve_mcp(client: str | None) -> None:
     if client:
         os.environ["MO_CLIENT"] = client
     from memory_orchestrator.mcp_server import run_stdio_server
+    _preflight_database()
     asyncio.run(run_stdio_server())
 
 

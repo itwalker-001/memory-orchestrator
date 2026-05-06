@@ -6,6 +6,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from memory_orchestrator.config import get_settings
+from memory_orchestrator.db_check import (
+    check_database_dsn,
+    check_database_ready,
+    format_database_startup_error,
+)
 from memory_orchestrator.embedder import ensure_loaded as ensure_embedder
 from memory_orchestrator.router_hooks import make_hooks_router
 from memory_orchestrator.router_ui import make_ui_router
@@ -21,6 +26,18 @@ def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: boo
 
     @app.on_event("startup")
     async def _startup() -> None:
+        try:
+            if engine_override is None:
+                await check_database_dsn(settings.db_dsn)
+            else:
+                await check_database_ready(engine)
+        except Exception as exc:
+            import logging
+
+            logging.getLogger(__name__).critical(
+                format_database_startup_error(settings.db_dsn, exc)
+            )
+            raise
         if not skip_embedder:
             ensure_embedder()
 

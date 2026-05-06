@@ -1,16 +1,32 @@
 from __future__ import annotations
 import asyncio
+import os
 from functools import lru_cache
+from pathlib import Path
+
 from fastembed import TextEmbedding
 
 from memory_orchestrator.config import get_settings
 
 
+def _cache_dir() -> Path:
+    cache_dir = Path(get_settings().embed_cache_dir).expanduser()
+    if not cache_dir.is_absolute():
+        cache_dir = Path.cwd() / cache_dir
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("FASTEMBED_CACHE_PATH", str(cache_dir))
+    return cache_dir
+
+
 @lru_cache(maxsize=1)
 def _model() -> TextEmbedding:
-    import os
-    os.environ.setdefault("HF_HUB_OFFLINE", "1")
-    return TextEmbedding(model_name=get_settings().embed_model)
+    settings = get_settings()
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    return TextEmbedding(
+        model_name=settings.embed_model,
+        cache_dir=str(_cache_dir()),
+        local_files_only=True,
+    )
 
 
 async def embed_one(text: str) -> list[float]:
