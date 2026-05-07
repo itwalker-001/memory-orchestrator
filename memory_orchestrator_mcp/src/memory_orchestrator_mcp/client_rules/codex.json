@@ -15,7 +15,7 @@
         "path": ["mcp_servers", "memory-orchestrator"],
         "value": {
           "command": "uv",
-          "args": ["run", "--no-sync", "--project", "{project_dir}", "mo-server", "serve-mcp", "--client", "codex"],
+          "args": ["run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_server", "mo-server", "serve-mcp", "--client", "codex"],
           "env": {"MO_CLIENT": "codex"}
         }
       }
@@ -27,16 +27,16 @@
     "events": {
       "UserPromptSubmit": {
         "type": "command",
-        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/src/memory_orchestrator_mcp/hooks/user_prompt_submit.py", "--client", "codex"]
+        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_server", "python", "{project_dir}/memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/user_prompt_submit.py", "--client", "codex"]
       },
       "Stop": {
         "type": "command",
-        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/src/memory_orchestrator_mcp/hooks/stop.py", "--client", "codex"]
+        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_server", "python", "{project_dir}/memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/stop.py", "--client", "codex"]
       }
     }
   },
   "instructions": {
-    "source": "src/memory_orchestrator_mcp/agents/memory-orchestrator.AGENTS.md",
+    "source": "memory_orchestrator_mcp/src/memory_orchestrator_mcp/agents/memory-orchestrator.AGENTS.md",
     "destination": "AGENTS.md"
   }
 }
