@@ -12,8 +12,8 @@ mo = "memory_orchestrator.cli:main"
 
 [tool.uv.workspace]
 members = [
-    "src/memory_orchestrator_server",
-    "src/memory_orchestrator_mcp",
+    "memory_orchestrator_server",
+    "memory_orchestrator_mcp",
 ]
 
 [tool.uv.sources]

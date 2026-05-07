@@ -10,6 +10,6 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = [".."]
+where = ["../src"]
 include = ["memory_orchestrator_mcp*"]
 exclude = ["memory_orchestrator_mcp.tests*"]
