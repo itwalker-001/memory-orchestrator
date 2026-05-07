@@ -1,0 +1,56 @@
+{
+  "client": "claude",
+  "default_home": "~/.claude",
+  "config": {
+    "format": "json",
+    "path": "settings.json",
+    "managed_paths": [
+      ["hooks", "UserPromptSubmit"],
+      ["hooks", "Stop"],
+      ["mcpServers", "memory-orchestrator"]
+    ],
+    "patches": [
+      {
+        "path": ["hooks", "UserPromptSubmit"],
+        "value": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/src/memory_orchestrator_mcp/hooks/user_prompt_submit.py", "--client", "claude"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": ["hooks", "Stop"],
+        "value": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/src/memory_orchestrator_mcp/hooks/stop.py", "--client", "claude"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": ["mcpServers", "memory-orchestrator"],
+        "value": {
+          "command": "uv",
+          "args": ["run", "--no-sync", "--project", "{project_dir}", "mo-server", "serve-mcp", "--client", "claude"],
+          "env": {"MO_CLIENT": "claude"}
+        }
+      }
+    ]
+  },
+  "mcp_registration": {
+    "command": ["claude", "mcp", "add", "--scope", "{scope}", "memory-orchestrator", "--", "uv", "run", "--no-sync", "--project", "{project_dir}", "mo-server", "serve-mcp", "--client", "claude"]
+  },
+  "instructions": {
+    "source": "src/memory_orchestrator_mcp/skills/memory-orchestrator/SKILL.md",
+    "destination": "skills/memory-orchestrator/SKILL.md"
+  }
+}

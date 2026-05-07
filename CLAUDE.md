@@ -5,116 +5,105 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install dependencies
+# Server package (FastAPI, DB, frontend)
+cd memory_orchestrator_server
+uv sync                           # Install all dependencies
+uv run alembic upgrade head       # Migrate database
+uv run mo-server setup --scope user                    # Wire into ~/.claude/settings.json
+uv run mo-server setup --client codex --scope user     # Wire into ~/.codex/
+uv run mo-server serve-http                            # Start HTTP service on port 8765
+uv run mo-server doctor                                # Check wiring
+uv run pytest                                          # All tests (unit + integration)
+uv run pytest src/memory_orchestrator_server/tests/unit/        # Unit tests only
+uv run pytest src/memory_orchestrator_server/tests/integration/ # Integration tests (needs Postgres)
+
+# MCP client package (hooks, client rules, zero deps)
+cd memory_orchestrator_mcp
 uv sync
-
-# Migrate database
-uv run alembic upgrade head
-
-# Wire hooks + MCP into ~/.claude/settings.json
-uv run mo setup --scope user
-
-# Wire hooks + MCP into ~/.codex/config.toml and ~/.codex/hooks.json
-uv run mo setup --client codex --scope user
-
-# Start HTTP service (port 8765, keep running in separate terminal)
-uv run mo serve-http
-
-# Check wiring (DB reachable, MCP entry, hooks present)
-uv run mo doctor
-uv run mo doctor --client codex
-
-# Run all unit tests (no external deps)
-uv run pytest src/memory_orchestrator_server/tests/unit/ src/memory_orchestrator_mcp/tests/
-
-# Run integration tests (requires Postgres on port 5433)
-uv run pytest src/memory_orchestrator_server/tests/integration/
-
-# Run a single test
-uv run pytest src/memory_orchestrator_server/tests/unit/test_scoring.py::test_name -x
+uv run pytest                     # 9 tests
 
 # Build frontend
-cd src/memory_orchestrator_server/frontend && npm run build
+cd memory_orchestrator_server/src/memory_orchestrator_server/frontend && npm run build
 ```
 
 ## Architecture
 
-Memory Orchestrator is split into two independently installable packages:
+Two independently installable packages:
 
-- **Server package**: `memory_orchestrator_server` (`memory_orchestrator_server/pyproject.toml`)
-  - Runs FastAPI via `mo serve-http`.
-  - Owns PostgreSQL, pgvector, FastEmbed, Alembic, repository access, UI APIs, and hook APIs.
-  - Source: `src/memory_orchestrator_server/`
-- **Client MCP package**: `memory_orchestrator_mcp` (`memory_orchestrator_mcp/pyproject.toml`)
-  - Owns hooks, client rules, client instructions (agents/skills).
-  - Zero third-party dependencies — hooks use stdlib only.
-  - Must stay lightweight: no DB, SQLAlchemy, FastEmbed, pgvector, or Alembic.
-  - Source: `src/memory_orchestrator_mcp/`
-- **Compat shims**: `memory_orchestrator` (root `pyproject.toml`)
-  - Re-exports from `memory_orchestrator_server.*`. Existing code continues to work.
-  - Provides the `mo` CLI entry point.
-  - Source: `src/memory_orchestrator/`
+- **`memory_orchestrator_server/`** — Server package (entry point: `mo-server`)
+  - FastAPI, PostgreSQL, pgvector, FastEmbed, Alembic, repository, frontend, MCP HTTP bridge
+  - CLI: `mo-server serve-http | serve-mcp | setup | teardown | doctor | token | migrate`
+  - Depends on `memory-orchestrator-mcp` (for client rules JSON files)
 
-The three packages form a uv workspace. `uv sync` installs all of them.
-
-New code should import from `memory_orchestrator_server` or `memory_orchestrator_mcp` directly.
+- **`memory_orchestrator_mcp/`** — Client MCP package (no entry point, zero deps)
+  - Hooks, client rules (JSON), agent instructions, skill files
+  - Must stay lightweight: no DB, SQLAlchemy, FastEmbed, pgvector, or Alembic
 
 ### Request flow
 
 ```
 UserPromptSubmit hook  →  GET /context  →  repo.build_context()  →  inject markdown
 Stop hook              →  POST /ingest  →  ingestor.py  →  LLM extraction  →  repo.save()
-Claude/Codex MCP call  →  mcp_server.py handler  →  repo.*()
+Claude/Codex MCP call  →  local stdio MCP  →  POST /mcp/tools/call  →  server repo.*()
 ```
 
 ### Key modules
 
 | File | Role |
 |---|---|
-| `src/memory_orchestrator_server/models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `MemoryLink`, `SystemSetting` |
-| `src/memory_orchestrator_server/repository.py` | All DB operations; `get_settings()` reads `system_settings` table for runtime config |
-| `src/memory_orchestrator_server/routers/hooks.py` | `/healthz`, `/context`, `/stats`, `/ingest` endpoints |
-| `src/memory_orchestrator_server/routers/ui.py` | `/api/memories` CRUD, `/api/projects`, `/api/settings`, `/api/export`, `/api/duplicates`, `/api/backup` |
-| `src/memory_orchestrator_server/ingestor.py` | Reads transcript JSONL incrementally (`sessions.last_offset`), calls OpenAI-compatible API to extract memories |
-| `src/memory_orchestrator_server/embedder.py` | FastEmbed local vectorization; must set `HF_HUB_OFFLINE=1` after first download |
-| `src/memory_orchestrator_server/scoring.py` | Hybrid re-ranking and token-budget truncation for context injection |
-| `src/memory_orchestrator/mcp_server.py` | MCP tools: `save_memory`, `search_memory`, `list_memories`, `delete_memory`, `promote_memory`, `ingest_session`; MCP resources |
-| `src/memory_orchestrator/client_adapters.py` | Client-specific setup/teardown for Claude Code and Codex |
-| `src/memory_orchestrator/cli.py` | `mo` CLI entry point: `setup`, `teardown`, `serve-http`, `serve-mcp`, `doctor` |
-| `src/memory_orchestrator_mcp/hooks/user_prompt_submit.py` | UserPromptSubmit hook: injects memory context |
-| `src/memory_orchestrator_mcp/hooks/stop.py` | Stop hook: triggers session ingestion |
+| `memory_orchestrator_server/src/memory_orchestrator_server/models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `MemoryLink`, `SystemSetting`, `ApiToken` |
+| `memory_orchestrator_server/src/memory_orchestrator_server/repository.py` | All DB operations |
+| `memory_orchestrator_server/src/memory_orchestrator_server/routers/hooks.py` | `/healthz`, `/context`, `/ingest` endpoints |
+| `memory_orchestrator_server/src/memory_orchestrator_server/routers/ui.py` | `/api/memories`, `/api/projects`, `/api/settings` |
+| `memory_orchestrator_server/src/memory_orchestrator_server/routers/mcp.py` | `/mcp/tools/call`, `/mcp/resources/read` |
+| `memory_orchestrator_server/src/memory_orchestrator_server/mcp_core.py` | Server-side MCP tool implementations |
+| `memory_orchestrator_server/src/memory_orchestrator_server/mcp_server.py` | stdio MCP runner (direct DB access) |
+| `memory_orchestrator_server/src/memory_orchestrator_server/client_adapters.py` | Claude/Codex setup/teardown |
+| `memory_orchestrator_server/src/memory_orchestrator_server/client_rules.py` | Reads JSON rules from `memory_orchestrator_mcp` |
+| `memory_orchestrator_server/src/memory_orchestrator_server/cli.py` | `mo-server` entry point |
+| `memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/user_prompt_submit.py` | UserPromptSubmit hook |
+| `memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/stop.py` | Stop hook |
+| `memory_orchestrator_mcp/src/memory_orchestrator_mcp/client_rules/` | `claude.json`, `codex.json` |
 
 ### Data model
 
-- `projects`: slug (git remote URL or `local:<name>-<hash>`) → UUID. Global sentinel: `00000000-0000-0000-0000-000000000000` (slug `*`).
-- `memories`: belongs to a project; `type` ∈ {user, feedback, project, reference}; `embedding vector(512)`; `superseded_by` for soft-delete chains.
-- `system_settings`: key-value table; read on every request via `repo.get_settings()` — no restart needed for most config changes.
-- `sessions`: tracks ingestion progress per session (`last_offset` for incremental reads, `status` ∈ pending/done/failed).
+- `projects`: slug → UUID. Global sentinel: `00000000-0000-0000-0000-000000000000` (slug `*`).
+- `memories`: `type` ∈ {user, feedback, project, reference}; `embedding vector(512)`; `superseded_by` for soft-delete.
+- `system_settings`: key-value; read on every request — no restart needed for most config.
+- `sessions`: ingestion progress per session (`last_offset`, `status` ∈ pending/done/failed).
+- `api_tokens`: hashed bearer tokens. `kind='ui_admin'` → `/api/*`; `kind='mcp_client'` → `/mcp/*`.
+
+### Authentication
+
+- `/api/*` requires `ui_admin` token when any DB token or `MO_UI_TOKEN` env var exists.
+- `/mcp/*` requires `mcp_client` token when any DB token or `MO_MCP_TOKEN` env var exists.
+
+```bash
+# From memory_orchestrator_server/:
+uv run mo-server token create --kind ui_admin --name admin
+uv run mo-server token create --kind mcp_client --name "local claude"
+```
 
 ### Runtime config (system_settings)
 
-All settings are editable at `/ui` → Settings without restart, except `db_dsn` and `http_port` which require a service restart. Keys: `hook_budget_tokens`, `hook_cooldown_sec`, `hook_min_turns`, `search_top_k`, `dup_threshold`, `extraction_base_url`, `extraction_model`, `embed_model`, `embed_dim`.
-
-### Hooks
-
-- `src/memory_orchestrator_mcp/hooks/user_prompt_submit.py` — reads Claude env or Codex hook JSON, calls `/context`, writes markdown for Claude or `hookSpecificOutput.additionalContext` JSON for Codex.
-- `src/memory_orchestrator_mcp/hooks/stop.py` — reads transcript JSONL to count new user turns; fires `/ingest` if cooldown and min-turns thresholds are met; persists state under `~/.claude/memory-orchestrator/` or `~/.codex/memory-orchestrator/`.
-- Hook commands use `uv run --no-sync --project <abs-path> python <hook.py>` — `--no-sync` prevents uv from trying to reinstall the package, which would fail with a file-lock error when `mo serve-http` is already running.
-
-### Frontend
-
-Vue 3 + Vite SPA in `src/memory_orchestrator_server/frontend/`. Served statically by FastAPI at `/ui`. Build output goes to `frontend/dist/`. After any frontend change, run `npm run build` in `src/memory_orchestrator_server/frontend/`.
+Editable at `/ui` → Settings without restart. Keys: `hook_budget_tokens`, `hook_cooldown_sec`,
+`hook_min_turns`, `search_top_k`, `dup_threshold`, `extraction_base_url`, `extraction_model`,
+`embed_model`, `embed_dim`.
 
 ### Tests
 
-- Unit tests (no DB): `src/memory_orchestrator_server/tests/unit/` and `src/memory_orchestrator_mcp/tests/`
-- Integration tests (Postgres on port 5433): `src/memory_orchestrator_server/tests/integration/`
-  - `test_http_app.py` — full HTTP endpoint coverage (CRUD, batch, settings, export, duplicates)
-  - `test_mcp_tools.py` — full MCP tool coverage (save, search, list, delete, promote, resources)
-  - `test_repository.py` — repository layer
+Run from each package directory with `uv run pytest`.
 
-Package boundary enforcement: `test_package_boundaries.py` asserts `memory_orchestrator_mcp` never imports server-side deps (sqlalchemy, fastembed, pgvector) and `memory_orchestrator_server` never imports `memory_orchestrator_mcp`.
+- Server: `memory_orchestrator_server/src/memory_orchestrator_server/tests/`
+  - `unit/` — no DB required (27 tests)
+  - `integration/` — Postgres on port 5433 required (75 tests)
+    - `test_http_app.py` — HTTP endpoint coverage
+    - `test_mcp_tools.py` — MCP tool coverage
+    - `test_mcp_http.py` — MCP HTTP bridge coverage
+    - `test_repository.py` — repository layer
+    - `unit/test_package_boundaries.py` — package isolation enforcement
+- MCP: `memory_orchestrator_mcp/src/memory_orchestrator_mcp/tests/` (9 tests, no deps)
 
 ### Database
 
-PostgreSQL 16 + pgvector on port 5433. Integration tests use a separate `memory_orchestrator_test` database. Override with `MO_TEST_DB_DSN`.
+PostgreSQL 16 + pgvector on port 5433. Override test DB with `MO_TEST_DB_DSN`.
