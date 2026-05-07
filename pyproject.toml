@@ -4,22 +4,20 @@ version = "0.1.0"
 description = "Cross-project memory center for Claude Code"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
-    "sqlalchemy[asyncio]>=2.0",
-    "asyncpg>=0.30",
-    "pgvector>=0.3",
-    "alembic>=1.13",
-    "pydantic-settings>=2.5",
-    "fastembed>=0.4",
-    "mcp>=1.0",
-    "openai>=1.0",
-    "httpx>=0.27",
-    "click>=8.1",
+    "memory-orchestrator-server",
 ]
 
 [project.scripts]
 mo = "memory_orchestrator.cli:main"
+
+[tool.uv.workspace]
+members = [
+    "src/memory_orchestrator_server",
+    "src/memory_orchestrator_mcp",
+]
+
+[tool.uv.sources]
+memory-orchestrator-server = {workspace = true}
 
 [build-system]
 requires = ["hatchling"]
