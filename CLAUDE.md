@@ -39,19 +39,23 @@ cd src/memory_orchestrator_server/frontend && npm run build
 
 ## Architecture
 
-Memory Orchestrator is split by runtime boundary:
+Memory Orchestrator is split into two independently installable packages:
 
-- **Server package**: `memory_orchestrator_server`
+- **Server package**: `memory_orchestrator_server` (`memory_orchestrator_server/pyproject.toml`)
   - Runs FastAPI via `mo serve-http`.
   - Owns PostgreSQL, pgvector, FastEmbed, Alembic, repository access, UI APIs, and hook APIs.
   - Source: `src/memory_orchestrator_server/`
-- **Client MCP package**: `memory_orchestrator_mcp`
+- **Client MCP package**: `memory_orchestrator_mcp` (`memory_orchestrator_mcp/pyproject.toml`)
   - Owns hooks, client rules, client instructions (agents/skills).
+  - Zero third-party dependencies — hooks use stdlib only.
   - Must stay lightweight: no DB, SQLAlchemy, FastEmbed, pgvector, or Alembic.
   - Source: `src/memory_orchestrator_mcp/`
-- **Compat shims**: `memory_orchestrator`
+- **Compat shims**: `memory_orchestrator` (root `pyproject.toml`)
   - Re-exports from `memory_orchestrator_server.*`. Existing code continues to work.
+  - Provides the `mo` CLI entry point.
   - Source: `src/memory_orchestrator/`
+
+The three packages form a uv workspace. `uv sync` installs all of them.
 
 New code should import from `memory_orchestrator_server` or `memory_orchestrator_mcp` directly.
 
@@ -69,11 +73,12 @@ Claude/Codex MCP call  →  mcp_server.py handler  →  repo.*()
 |---|---|
 | `src/memory_orchestrator_server/models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `MemoryLink`, `SystemSetting` |
 | `src/memory_orchestrator_server/repository.py` | All DB operations; `get_settings()` reads `system_settings` table for runtime config |
-| `src/memory_orchestrator_server/routers/hooks.py` | `/healthz`, `/context`, `/ingest` endpoints |
-| `src/memory_orchestrator_server/routers/ui.py` | `/api/memories`, `/api/projects`, `/api/settings` (PATCH persists to `system_settings`) |
+| `src/memory_orchestrator_server/routers/hooks.py` | `/healthz`, `/context`, `/stats`, `/ingest` endpoints |
+| `src/memory_orchestrator_server/routers/ui.py` | `/api/memories` CRUD, `/api/projects`, `/api/settings`, `/api/export`, `/api/duplicates`, `/api/backup` |
 | `src/memory_orchestrator_server/ingestor.py` | Reads transcript JSONL incrementally (`sessions.last_offset`), calls OpenAI-compatible API to extract memories |
 | `src/memory_orchestrator_server/embedder.py` | FastEmbed local vectorization; must set `HF_HUB_OFFLINE=1` after first download |
 | `src/memory_orchestrator_server/scoring.py` | Hybrid re-ranking and token-budget truncation for context injection |
+| `src/memory_orchestrator/mcp_server.py` | MCP tools: `save_memory`, `search_memory`, `list_memories`, `delete_memory`, `promote_memory`, `ingest_session`; MCP resources |
 | `src/memory_orchestrator/client_adapters.py` | Client-specific setup/teardown for Claude Code and Codex |
 | `src/memory_orchestrator/cli.py` | `mo` CLI entry point: `setup`, `teardown`, `serve-http`, `serve-mcp`, `doctor` |
 | `src/memory_orchestrator_mcp/hooks/user_prompt_submit.py` | UserPromptSubmit hook: injects memory context |
@@ -99,6 +104,16 @@ All settings are editable at `/ui` → Settings without restart, except `db_dsn`
 ### Frontend
 
 Vue 3 + Vite SPA in `src/memory_orchestrator_server/frontend/`. Served statically by FastAPI at `/ui`. Build output goes to `frontend/dist/`. After any frontend change, run `npm run build` in `src/memory_orchestrator_server/frontend/`.
+
+### Tests
+
+- Unit tests (no DB): `src/memory_orchestrator_server/tests/unit/` and `src/memory_orchestrator_mcp/tests/`
+- Integration tests (Postgres on port 5433): `src/memory_orchestrator_server/tests/integration/`
+  - `test_http_app.py` — full HTTP endpoint coverage (CRUD, batch, settings, export, duplicates)
+  - `test_mcp_tools.py` — full MCP tool coverage (save, search, list, delete, promote, resources)
+  - `test_repository.py` — repository layer
+
+Package boundary enforcement: `test_package_boundaries.py` asserts `memory_orchestrator_mcp` never imports server-side deps (sqlalchemy, fastembed, pgvector) and `memory_orchestrator_server` never imports `memory_orchestrator_mcp`.
 
 ### Database
 
