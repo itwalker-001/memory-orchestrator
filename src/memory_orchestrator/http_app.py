@@ -44,7 +44,7 @@ def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: boo
     app.include_router(make_hooks_router(engine=engine, maker=maker, skip_embedder=skip_embedder))
     app.include_router(make_ui_router(maker=maker))
 
-    _dist = Path(__file__).parent.parent.parent / "frontend" / "dist"
+    _dist = Path(__file__).parent.parent.parent / "src" / "memory_orchestrator_server" / "frontend" / "dist"
     if _dist.exists():
         app.mount("/ui", StaticFiles(directory=str(_dist), html=True), name="ui")
 

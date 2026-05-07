@@ -8,9 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml README.md ./
 COPY src/ src/
-COPY alembic/ alembic/
+COPY src/memory_orchestrator_server/alembic/ src/memory_orchestrator_server/alembic/
 COPY alembic.ini ./
-COPY frontend/dist/ frontend/dist/
+COPY src/memory_orchestrator_server/frontend/dist/ src/memory_orchestrator_server/frontend/dist/
 
 RUN pip install --no-cache-dir -e .
 

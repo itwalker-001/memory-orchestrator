@@ -34,7 +34,7 @@ uv run pytest tests/integration/
 uv run pytest tests/unit/test_scoring.py::test_name -x
 
 # Build frontend
-cd frontend && npm run build
+cd src/memory_orchestrator_server/frontend && npm run build
 ```
 
 ## Architecture
