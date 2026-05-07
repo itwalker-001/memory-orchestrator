@@ -316,13 +316,29 @@ def _flog(msg: str) -> None:
         f.write(f"{isoformat_utc(utc_now())} {msg}\n")
 
 
+def _cwd() -> str:
+    return (
+        os.environ.get("CODEX_PROJECT_DIR")
+        or os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.getcwd()
+    )
+
+
+def _http_headers() -> dict[str, str]:
+    token = os.environ.get("MO_MCP_TOKEN", "").strip()
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return {}
+
+
 async def run_stdio_server() -> None:
-    _flog("run_stdio_server: start")
+    import httpx
+    import json
+
+    _flog("run_stdio_server: start (HTTP bridge mode)")
     settings = get_settings()
-    engine = create_async_engine(settings.db_dsn)
-    maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+    base_url = f"http://localhost:{settings.http_port}"
     app = Server("memory-orchestrator")
-    _flog("run_stdio_server: Server created")
 
     @app.list_tools()
     async def _list_tools() -> list[Tool]:
@@ -338,52 +354,39 @@ async def run_stdio_server() -> None:
 
     @app.read_resource()
     async def _read_resource(uri) -> str:
-        cwd = (
-            os.environ.get("CODEX_PROJECT_DIR")
-            or os.environ.get("CLAUDE_PROJECT_DIR")
-            or os.getcwd()
-        )
+        cwd = _cwd()
         slug = detect_project_id(cwd)
-        async with maker() as s:
-            repo = MemoryRepository(s)
-            project_uuid = await repo.ensure_project(slug, cwd)
-            return await handle_read_memory_resource(
-                session=s,
-                project_uuid=project_uuid,
-                uri=str(uri),
-            )
+        async with httpx.AsyncClient(base_url=base_url, headers=_http_headers()) as client:
+            resp = await client.post("/mcp/resources/read", json={
+                "uri": str(uri), "project_slug": slug, "cwd": cwd,
+                "client": current_client(),
+            })
+            resp.raise_for_status()
+            return resp.json()["result"]
 
     @app.call_tool()
     async def _call(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-        import json
         import uuid as _uuid
-
         call_id = _uuid.uuid4().hex[:8]
-        args_log = json.dumps({k: v for k, v in arguments.items() if k != 'content'}, ensure_ascii=False)[:200]
+        args_log = json.dumps({k: v for k, v in arguments.items() if k != "content"}, ensure_ascii=False)[:200]
         _flog(f"[{call_id}] START tool={name} args={args_log}")
-        cwd = (
-            os.environ.get("CODEX_PROJECT_DIR")
-            or os.environ.get("CLAUDE_PROJECT_DIR")
-            or os.getcwd()
-        )
+        cwd = _cwd()
         slug = detect_project_id(cwd)
         _flog(f"[{call_id}] slug={slug}")
-        async with maker() as s:
-            repo = MemoryRepository(s)
-            project_uuid = await repo.ensure_project(slug, cwd)
-            _flog(f"[{call_id}] project_uuid={project_uuid}")
-            handler = _DISPATCH.get(name)
-            if not handler:
-                _flog(f"[{call_id}] ERROR unknown tool")
-                return [TextContent(type="text", text=f'{{"error":"unknown tool {name}"}}')]
+        async with httpx.AsyncClient(base_url=base_url, headers=_http_headers()) as client:
             try:
-                result = await handler(session=s, project_uuid=project_uuid, args=arguments, cwd=cwd)
-                await s.commit()
+                resp = await client.post("/mcp/tools/call", json={
+                    "name": name, "arguments": arguments,
+                    "project_slug": slug, "cwd": cwd,
+                    "client": current_client(),
+                })
+                resp.raise_for_status()
+                result = resp.json()["result"]
                 _flog(f"[{call_id}] OK result={type(result).__name__}")
             except Exception as e:
                 _flog(f"[{call_id}] ERROR {e!r}")
                 raise
-            return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
+        return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
 
     async with stdio_server() as (read, write):
         await app.run(read, write, app.create_initialization_options())

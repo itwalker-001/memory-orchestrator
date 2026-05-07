@@ -117,7 +117,6 @@ def serve_mcp(client: str | None) -> None:
     if client:
         os.environ["MO_CLIENT"] = client
     from memory_orchestrator_server.mcp_server import run_stdio_server
-    _preflight_database()
     asyncio.run(run_stdio_server())
 
 
