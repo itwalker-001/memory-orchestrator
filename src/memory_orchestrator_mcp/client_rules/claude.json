@@ -17,7 +17,7 @@
             "hooks": [
               {
                 "type": "command",
-                "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/hooks/user_prompt_submit.py", "--client", "claude"]
+                "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/src/memory_orchestrator_mcp/hooks/user_prompt_submit.py", "--client", "claude"]
               }
             ]
           }
@@ -30,7 +30,7 @@
             "hooks": [
               {
                 "type": "command",
-                "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/hooks/stop.py", "--client", "claude"]
+                "command": ["uv", "run", "--no-sync", "--project", "{project_dir}", "python", "{project_dir}/src/memory_orchestrator_mcp/hooks/stop.py", "--client", "claude"]
               }
             ]
           }
@@ -40,7 +40,8 @@
         "path": ["mcpServers", "memory-orchestrator"],
         "value": {
           "command": "uv",
-          "args": ["run", "--no-sync", "--project", "{project_dir}", "mo", "serve-mcp", "--client", "claude"]
+          "args": ["run", "--no-sync", "--project", "{project_dir}", "mo", "serve-mcp", "--client", "claude"],
+          "env": {"MO_CLIENT": "claude"}
         }
       }
     ]
@@ -49,7 +50,7 @@
     "command": ["claude", "mcp", "add", "--scope", "{scope}", "memory-orchestrator", "--", "uv", "run", "--no-sync", "--project", "{project_dir}", "mo", "serve-mcp", "--client", "claude"]
   },
   "instructions": {
-    "source": "skills/memory-orchestrator/SKILL.md",
+    "source": "src/memory_orchestrator_mcp/skills/memory-orchestrator/SKILL.md",
     "destination": "skills/memory-orchestrator/SKILL.md"
   }
 }

@@ -10,11 +10,8 @@ from memory_orchestrator.cli import main
 def test_install_codex_writes_mcp_hooks_and_agent_instructions(tmp_path):
     project_dir = tmp_path / "memory orchestrator"
     project_dir.mkdir()
-    (project_dir / "hooks").mkdir()
-    (project_dir / "hooks" / "user_prompt_submit.py").write_text("", encoding="utf-8")
-    (project_dir / "hooks" / "stop.py").write_text("", encoding="utf-8")
-    (project_dir / "agents").mkdir()
-    (project_dir / "agents" / "memory-orchestrator.AGENTS.md").write_text(
+    (project_dir / "src" / "memory_orchestrator_mcp" / "agents").mkdir(parents=True)
+    (project_dir / "src" / "memory_orchestrator_mcp" / "agents" / "memory-orchestrator.AGENTS.md").write_text(
         "Memory Orchestrator instructions", encoding="utf-8"
     )
 
@@ -41,6 +38,8 @@ def test_install_codex_writes_mcp_hooks_and_agent_instructions(tmp_path):
         str(project_dir.resolve()),
         "mo",
         "serve-mcp",
+        "--client",
+        "codex",
     ]
 
     hooks = json.loads((codex_dir / "hooks.json").read_text(encoding="utf-8"))

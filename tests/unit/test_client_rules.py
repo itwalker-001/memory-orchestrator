@@ -24,11 +24,8 @@ def test_load_client_rule_reads_physical_rule_file():
 def test_install_codex_from_rule_writes_config_hooks_and_instructions(tmp_path):
     project_dir = tmp_path / "memory orchestrator"
     project_dir.mkdir()
-    (project_dir / "hooks").mkdir()
-    (project_dir / "hooks" / "user_prompt_submit.py").write_text("", encoding="utf-8")
-    (project_dir / "hooks" / "stop.py").write_text("", encoding="utf-8")
-    (project_dir / "agents").mkdir()
-    (project_dir / "agents" / "memory-orchestrator.AGENTS.md").write_text(
+    (project_dir / "src" / "memory_orchestrator_mcp" / "agents").mkdir(parents=True)
+    (project_dir / "src" / "memory_orchestrator_mcp" / "agents" / "memory-orchestrator.AGENTS.md").write_text(
         "Codex instructions", encoding="utf-8"
     )
     target_home = tmp_path / "codex-home"
@@ -135,11 +132,8 @@ def test_teardown_codex_from_rule_removes_only_managed_entries(tmp_path):
 def test_install_claude_from_rule_writes_settings_and_skill(tmp_path):
     project_dir = tmp_path / "memory orchestrator"
     project_dir.mkdir()
-    (project_dir / "hooks").mkdir()
-    (project_dir / "hooks" / "user_prompt_submit.py").write_text("", encoding="utf-8")
-    (project_dir / "hooks" / "stop.py").write_text("", encoding="utf-8")
-    (project_dir / "skills" / "memory-orchestrator").mkdir(parents=True)
-    (project_dir / "skills" / "memory-orchestrator" / "SKILL.md").write_text(
+    (project_dir / "src" / "memory_orchestrator_mcp" / "skills" / "memory-orchestrator").mkdir(parents=True)
+    (project_dir / "src" / "memory_orchestrator_mcp" / "skills" / "memory-orchestrator" / "SKILL.md").write_text(
         "Claude skill", encoding="utf-8"
     )
     target_home = tmp_path / "claude-home"

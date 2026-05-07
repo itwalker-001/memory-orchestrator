@@ -16,7 +16,7 @@ class RuleInstallResult:
 
 
 def load_client_rule(client: str, *, rules_dir: Path | None = None) -> dict[str, Any]:
-    base = rules_dir or Path(__file__).parent.parent.parent / "client-rules"
+    base = rules_dir or Path(__file__).parent.parent / "memory_orchestrator_mcp" / "client_rules"
     path = base / f"{client}.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("client") != client:
