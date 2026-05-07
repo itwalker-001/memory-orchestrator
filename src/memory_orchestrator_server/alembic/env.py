@@ -4,9 +4,9 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
-from memory_orchestrator.config import get_settings
-from memory_orchestrator.db_check import ensure_database_exists, format_database_startup_error
-from memory_orchestrator.models import Base
+from memory_orchestrator_server.config import get_settings
+from memory_orchestrator_server.db_check import ensure_database_exists, format_database_startup_error
+from memory_orchestrator_server.models import Base
 
 config = context.config
 config.set_main_option("sqlalchemy.url", get_settings().db_dsn)
