@@ -158,7 +158,7 @@ def _target_dir(*, rule: dict[str, Any], target_home: Path, project_dir: Path, s
 def _variables(*, rule: dict[str, Any], project_dir: Path, scope: str) -> dict[str, str]:
     return {
         "client": str(rule["client"]),
-        "project_dir": str(project_dir),
+        "project_dir": str(project_dir).replace("\\", "/"),
         "scope": scope,
     }
 

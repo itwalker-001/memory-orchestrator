@@ -207,10 +207,11 @@ def _install_claude(scope: str) -> None:
     click.echo(f"wrote {install_result.config_path}")
 
     mcp_scope = "user" if scope == "user" else "project"
+    server_dir = str(project_dir / "memory_orchestrator_server").replace("\\", "/")
     try:
         mcp_result = subprocess.run(
             ["claude", "mcp", "add", "--scope", mcp_scope, "memory-orchestrator",
-             "--", "uv", "run", "--no-sync", "--project", str(project_dir),
+             "--", "uv", "run", "--no-sync", "--project", server_dir,
              "mo-server", "serve-mcp", "--client", "claude"],
             capture_output=True, text=True,
         )
@@ -221,7 +222,7 @@ def _install_claude(scope: str) -> None:
     else:
         click.echo(
             f"mcp add failed (run manually): claude mcp add --scope {mcp_scope} memory-orchestrator "
-            f"-- uv run --no-sync --project {project_dir} mo-server serve-mcp --client claude"
+            f"-- uv run --no-sync --project {server_dir} mo-server serve-mcp --client claude"
         )
     if install_result.instructions_path:
         click.echo(f"installed skill → {install_result.instructions_path}")
