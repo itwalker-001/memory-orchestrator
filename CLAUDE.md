@@ -24,14 +24,14 @@ uv run mo serve-http
 uv run mo doctor
 uv run mo doctor --client codex
 
-# Run unit tests (no external deps)
-uv run pytest tests/unit/
+# Run all unit tests (no external deps)
+uv run pytest src/memory_orchestrator_server/tests/unit/ src/memory_orchestrator_mcp/tests/
 
 # Run integration tests (requires Postgres on port 5433)
-uv run pytest tests/integration/
+uv run pytest src/memory_orchestrator_server/tests/integration/
 
 # Run a single test
-uv run pytest tests/unit/test_scoring.py::test_name -x
+uv run pytest src/memory_orchestrator_server/tests/unit/test_scoring.py::test_name -x
 
 # Build frontend
 cd src/memory_orchestrator_server/frontend && npm run build
@@ -39,12 +39,21 @@ cd src/memory_orchestrator_server/frontend && npm run build
 
 ## Architecture
 
-Two separate processes serve different clients:
+Memory Orchestrator is split by runtime boundary:
 
-- **`mo serve-http`** — FastAPI on port 8765. Used by hooks (`/context`, `/ingest`) and the browser UI (`/ui`). Must be started manually.
-- **`mo serve-mcp`** — MCP stdio server. Registered in `~/.claude/settings.json` or `~/.codex/config.toml` via `mo setup`; the client launches it automatically per-session.
+- **Server package**: `memory_orchestrator_server`
+  - Runs FastAPI via `mo serve-http`.
+  - Owns PostgreSQL, pgvector, FastEmbed, Alembic, repository access, UI APIs, and hook APIs.
+  - Source: `src/memory_orchestrator_server/`
+- **Client MCP package**: `memory_orchestrator_mcp`
+  - Owns hooks, client rules, client instructions (agents/skills).
+  - Must stay lightweight: no DB, SQLAlchemy, FastEmbed, pgvector, or Alembic.
+  - Source: `src/memory_orchestrator_mcp/`
+- **Compat shims**: `memory_orchestrator`
+  - Re-exports from `memory_orchestrator_server.*`. Existing code continues to work.
+  - Source: `src/memory_orchestrator/`
 
-Both processes share the same PostgreSQL database and `MemoryRepository`.
+New code should import from `memory_orchestrator_server` or `memory_orchestrator_mcp` directly.
 
 ### Request flow
 
@@ -58,16 +67,17 @@ Claude/Codex MCP call  →  mcp_server.py handler  →  repo.*()
 
 | File | Role |
 |---|---|
-| `models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `MemoryLink`, `SystemSetting` |
-| `repository.py` | All DB operations; `get_settings()` reads `system_settings` table for runtime config |
-| `router_hooks.py` | `/healthz`, `/context`, `/ingest` endpoints |
-| `router_ui.py` | `/api/memories`, `/api/projects`, `/api/settings` (PATCH persists to `system_settings`) |
-| `mcp_server.py` | MCP tools: `save_memory`, `search_memory`, `list_memories`, `delete_memory`, `promote_memory`, `ingest_session` |
-| `ingestor.py` | Reads transcript JSONL incrementally (`sessions.last_offset`), calls OpenAI-compatible API to extract memories |
-| `embedder.py` | FastEmbed local vectorization; must set `HF_HUB_OFFLINE=1` after first download |
-| `scoring.py` | Hybrid re-ranking and token-budget truncation for context injection |
-| `client_adapters.py` | Client-specific setup/teardown for Claude Code and Codex |
-| `cli.py` | `mo` CLI entry point: `setup`, `teardown`, `serve-http`, `serve-mcp`, `doctor` |
+| `src/memory_orchestrator_server/models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `MemoryLink`, `SystemSetting` |
+| `src/memory_orchestrator_server/repository.py` | All DB operations; `get_settings()` reads `system_settings` table for runtime config |
+| `src/memory_orchestrator_server/routers/hooks.py` | `/healthz`, `/context`, `/ingest` endpoints |
+| `src/memory_orchestrator_server/routers/ui.py` | `/api/memories`, `/api/projects`, `/api/settings` (PATCH persists to `system_settings`) |
+| `src/memory_orchestrator_server/ingestor.py` | Reads transcript JSONL incrementally (`sessions.last_offset`), calls OpenAI-compatible API to extract memories |
+| `src/memory_orchestrator_server/embedder.py` | FastEmbed local vectorization; must set `HF_HUB_OFFLINE=1` after first download |
+| `src/memory_orchestrator_server/scoring.py` | Hybrid re-ranking and token-budget truncation for context injection |
+| `src/memory_orchestrator/client_adapters.py` | Client-specific setup/teardown for Claude Code and Codex |
+| `src/memory_orchestrator/cli.py` | `mo` CLI entry point: `setup`, `teardown`, `serve-http`, `serve-mcp`, `doctor` |
+| `src/memory_orchestrator_mcp/hooks/user_prompt_submit.py` | UserPromptSubmit hook: injects memory context |
+| `src/memory_orchestrator_mcp/hooks/stop.py` | Stop hook: triggers session ingestion |
 
 ### Data model
 
@@ -82,13 +92,13 @@ All settings are editable at `/ui` → Settings without restart, except `db_dsn`
 
 ### Hooks
 
-- `hooks/user_prompt_submit.py` — reads Claude env or Codex hook JSON, calls `/context`, writes markdown for Claude or `hookSpecificOutput.additionalContext` JSON for Codex.
-- `hooks/stop.py` — reads transcript JSONL to count new user turns; fires `/ingest` if cooldown and min-turns thresholds are met; persists state under `~/.claude/memory-orchestrator/` or `~/.codex/memory-orchestrator/`.
+- `src/memory_orchestrator_mcp/hooks/user_prompt_submit.py` — reads Claude env or Codex hook JSON, calls `/context`, writes markdown for Claude or `hookSpecificOutput.additionalContext` JSON for Codex.
+- `src/memory_orchestrator_mcp/hooks/stop.py` — reads transcript JSONL to count new user turns; fires `/ingest` if cooldown and min-turns thresholds are met; persists state under `~/.claude/memory-orchestrator/` or `~/.codex/memory-orchestrator/`.
 - Hook commands use `uv run --no-sync --project <abs-path> python <hook.py>` — `--no-sync` prevents uv from trying to reinstall the package, which would fail with a file-lock error when `mo serve-http` is already running.
 
 ### Frontend
 
-Vue 3 + Vite SPA in `frontend/`. Served statically by FastAPI at `/ui`. Build output goes to `frontend/dist/`. After any frontend change, run `npm run build` in `frontend/`.
+Vue 3 + Vite SPA in `src/memory_orchestrator_server/frontend/`. Served statically by FastAPI at `/ui`. Build output goes to `frontend/dist/`. After any frontend change, run `npm run build` in `src/memory_orchestrator_server/frontend/`.
 
 ### Database
 
