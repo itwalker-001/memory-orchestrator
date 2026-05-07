@@ -41,7 +41,7 @@
         "value": {
           "command": "uv",
           "args": ["run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_server", "mo-server", "serve-mcp", "--client", "claude"],
-          "env": {"MO_CLIENT": "claude"}
+          "env": {"MO_CLIENT": "claude", "MO_HTTP_BASE_URL": "http://localhost:8765"}
         }
       }
     ]
