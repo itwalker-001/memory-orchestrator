@@ -336,8 +336,7 @@ async def run_stdio_server() -> None:
     import json
 
     _flog("run_stdio_server: start (HTTP bridge mode)")
-    settings = get_settings()
-    base_url = f"http://localhost:{settings.http_port}"
+    base_url = os.environ.get("MO_HTTP_BASE_URL", "http://localhost:8765").rstrip("/")
     app = Server("memory-orchestrator")
 
     @app.list_tools()
