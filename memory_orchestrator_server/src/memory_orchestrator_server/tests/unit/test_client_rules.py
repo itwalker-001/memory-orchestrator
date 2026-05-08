@@ -24,8 +24,8 @@ def test_load_client_rule_reads_physical_rule_file():
 def test_install_codex_from_rule_writes_config_hooks_and_instructions(tmp_path):
     project_dir = tmp_path / "memory orchestrator"
     project_dir.mkdir()
-    (project_dir / "src" / "memory_orchestrator_mcp" / "agents").mkdir(parents=True)
-    (project_dir / "src" / "memory_orchestrator_mcp" / "agents" / "memory-orchestrator.AGENTS.md").write_text(
+    (project_dir / "memory_orchestrator_mcp" / "src" / "memory_orchestrator_mcp" / "agents").mkdir(parents=True)
+    (project_dir / "memory_orchestrator_mcp" / "src" / "memory_orchestrator_mcp" / "agents" / "memory-orchestrator.AGENTS.md").write_text(
         "Codex instructions", encoding="utf-8"
     )
     target_home = tmp_path / "codex-home"
@@ -51,7 +51,8 @@ def test_install_codex_from_rule_writes_config_hooks_and_instructions(tmp_path):
     user_command = hooks["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
     assert "user_prompt_submit.py" in user_command
     assert "--client codex" in user_command
-    assert f'"{project_dir.resolve()}"' in user_command
+    project_fwd = str(project_dir.resolve()).replace("\\", "/")
+    assert project_fwd in user_command
     assert (target_home / "AGENTS.md").read_text(encoding="utf-8") == "Codex instructions"
     assert result.config_path == target_home / "config.toml"
     assert result.hooks_path == target_home / "hooks.json"
@@ -132,8 +133,8 @@ def test_teardown_codex_from_rule_removes_only_managed_entries(tmp_path):
 def test_install_claude_from_rule_writes_settings_and_skill(tmp_path):
     project_dir = tmp_path / "memory orchestrator"
     project_dir.mkdir()
-    (project_dir / "src" / "memory_orchestrator_mcp" / "skills" / "memory-orchestrator").mkdir(parents=True)
-    (project_dir / "src" / "memory_orchestrator_mcp" / "skills" / "memory-orchestrator" / "SKILL.md").write_text(
+    (project_dir / "memory_orchestrator_mcp" / "src" / "memory_orchestrator_mcp" / "skills" / "memory-orchestrator").mkdir(parents=True)
+    (project_dir / "memory_orchestrator_mcp" / "src" / "memory_orchestrator_mcp" / "skills" / "memory-orchestrator" / "SKILL.md").write_text(
         "Claude skill", encoding="utf-8"
     )
     target_home = tmp_path / "claude-home"

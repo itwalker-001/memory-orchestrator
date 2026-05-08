@@ -10,8 +10,8 @@ from memory_orchestrator_server.cli import main
 def test_install_codex_writes_mcp_hooks_and_agent_instructions(tmp_path):
     project_dir = tmp_path / "memory orchestrator"
     project_dir.mkdir()
-    (project_dir / "src" / "memory_orchestrator_mcp" / "agents").mkdir(parents=True)
-    (project_dir / "src" / "memory_orchestrator_mcp" / "agents" / "memory-orchestrator.AGENTS.md").write_text(
+    (project_dir / "memory_orchestrator_mcp" / "src" / "memory_orchestrator_mcp" / "agents").mkdir(parents=True)
+    (project_dir / "memory_orchestrator_mcp" / "src" / "memory_orchestrator_mcp" / "agents" / "memory-orchestrator.AGENTS.md").write_text(
         "Memory Orchestrator instructions", encoding="utf-8"
     )
 
@@ -31,11 +31,12 @@ def test_install_codex_writes_mcp_hooks_and_agent_instructions(tmp_path):
     mcp = cfg["mcp_servers"]["memory-orchestrator"]
     assert mcp["command"] == "uv"
     assert mcp["env"]["MO_CLIENT"] == "codex"
+    project_server = str((project_dir / "memory_orchestrator_server").resolve()).replace("\\", "/")
     assert mcp["args"] == [
         "run",
         "--no-sync",
         "--project",
-        str(project_dir.resolve()),
+        project_server,
         "mo-server",
         "serve-mcp",
         "--client",
@@ -48,7 +49,8 @@ def test_install_codex_writes_mcp_hooks_and_agent_instructions(tmp_path):
     assert user_hook["type"] == "command"
     assert "user_prompt_submit.py" in user_hook["command"]
     assert "--client codex" in user_hook["command"]
-    assert f'"{project_dir.resolve()}"' in user_hook["command"]
+    project_fwd = str(project_dir.resolve()).replace("\\", "/")
+    assert project_fwd in user_hook["command"]
     assert stop_hook["type"] == "command"
     assert "stop.py" in stop_hook["command"]
     assert "--client codex" in stop_hook["command"]
