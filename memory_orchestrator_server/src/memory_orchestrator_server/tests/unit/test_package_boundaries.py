@@ -28,11 +28,14 @@ def test_mcp_client_package_does_not_import_server_dependencies():
     forbidden = {
         "asyncpg",
         "fastembed",
+        "FlagEmbedding",
+        "torch",
         "pgvector",
         "sqlalchemy",
         "memory_orchestrator_server.models",
         "memory_orchestrator_server.repository",
         "memory_orchestrator_server.embedder",
+        "memory_orchestrator_server.reranker",
     }
 
     offenders = sorted(

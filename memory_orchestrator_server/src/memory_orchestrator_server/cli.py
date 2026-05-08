@@ -179,6 +179,76 @@ def doctor(client: str) -> None:
     sys.exit(0 if ok else 1)
 
 
+@main.command(name="migrate-embeddings")
+@click.option("--batch-size", default=32, show_default=True)
+def migrate_embeddings(batch_size: int) -> None:
+    """Re-embed all memories using the current embed_model."""
+    import asyncio
+    from sqlalchemy import select, update as sa_update
+    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    from memory_orchestrator_server.embedder import embed_batch
+    from memory_orchestrator_server.models import Memory, SystemSetting
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    settings = get_settings()
+
+    async def _run() -> None:
+        engine = create_async_engine(settings.db_dsn)
+        maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        async with maker() as session:
+            result = await session.execute(
+                select(SystemSetting).where(SystemSetting.key == "embed_migration_offset")
+            )
+            row = result.scalar_one_or_none()
+            offset = int(row.value) if row else 0
+
+            total_result = await session.execute(
+                select(Memory).where(Memory.superseded_by.is_(None)).order_by(Memory.id)
+            )
+            all_mems = list(total_result.scalars().all())
+            total = len(all_mems)
+            click.echo(f"Total memories: {total}, starting from offset {offset}")
+
+            processed = 0
+            for i in range(offset, total, batch_size):
+                batch = all_mems[i : i + batch_size]
+                texts = [
+                    f"{m.name} {m.description} {m.content or ''}"
+                    for m in batch
+                ]
+                vecs = await embed_batch(texts)
+                for m, vec in zip(batch, vecs):
+                    await session.execute(
+                        sa_update(Memory).where(Memory.id == m.id).values(embedding=vec)
+                    )
+                processed += len(batch)
+                new_offset = i + len(batch)
+                await session.execute(
+                    pg_insert(SystemSetting)
+                    .values(key="embed_migration_offset", value=str(new_offset), updated_at=__import__("datetime").datetime.utcnow())
+                    .on_conflict_do_update(
+                        index_elements=["key"],
+                        set_={"value": str(new_offset), "updated_at": __import__("datetime").datetime.utcnow()},
+                    )
+                )
+                await session.commit()
+                click.echo(f"  [{processed}/{total}] re-embedded")
+
+            await session.execute(
+                pg_insert(SystemSetting)
+                .values(key="embed_migration_offset", value="0", updated_at=__import__("datetime").datetime.utcnow())
+                .on_conflict_do_update(
+                    index_elements=["key"],
+                    set_={"value": "0", "updated_at": __import__("datetime").datetime.utcnow()},
+                )
+            )
+            await session.commit()
+        await engine.dispose()
+        click.echo("Migration complete.")
+
+    asyncio.run(_run())
+
+
 @main.command(name="setup")
 @click.option("--scope", type=click.Choice(["user", "project"]), default="user")
 @click.option("--client", type=click.Choice(["claude", "codex", "all"]), default="claude")
