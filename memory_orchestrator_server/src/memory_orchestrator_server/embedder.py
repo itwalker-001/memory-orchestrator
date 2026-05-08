@@ -1,32 +1,13 @@
 from __future__ import annotations
 import asyncio
-import os
 from functools import lru_cache
-from pathlib import Path
-
-from fastembed import TextEmbedding
-
-from memory_orchestrator_server.config import get_settings
-
-
-def _cache_dir() -> Path:
-    cache_dir = Path(get_settings().embed_cache_dir).expanduser()
-    if not cache_dir.is_absolute():
-        cache_dir = Path.cwd() / cache_dir
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("FASTEMBED_CACHE_PATH", str(cache_dir))
-    return cache_dir
 
 
 @lru_cache(maxsize=1)
-def _model() -> TextEmbedding:
-    settings = get_settings()
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    return TextEmbedding(
-        model_name=settings.embed_model,
-        cache_dir=str(_cache_dir()),
-        local_files_only=True,
-    )
+def _model():
+    from FlagEmbedding import BGEM3FlagModel
+    from memory_orchestrator_server.config import get_settings
+    return BGEM3FlagModel(get_settings().embed_model, use_fp16=True)
 
 
 async def embed_one(text: str) -> list[float]:
@@ -35,8 +16,8 @@ async def embed_one(text: str) -> list[float]:
 
 
 def _embed_sync(text: str) -> list[float]:
-    vectors = list(_model().embed([text]))
-    return vectors[0].tolist()
+    vecs = _model().encode([text], batch_size=1)["dense_vecs"]
+    return vecs[0].tolist()
 
 
 async def embed_batch(texts: list[str]) -> list[list[float]]:
@@ -45,7 +26,8 @@ async def embed_batch(texts: list[str]) -> list[list[float]]:
 
 
 def _embed_batch_sync(texts: list[str]) -> list[list[float]]:
-    return [v.tolist() for v in _model().embed(texts)]
+    vecs = _model().encode(texts, batch_size=32)["dense_vecs"]
+    return [v.tolist() for v in vecs]
 
 
 def ensure_loaded() -> None:
