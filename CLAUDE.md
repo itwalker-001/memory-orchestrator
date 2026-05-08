@@ -11,7 +11,9 @@ uv sync                           # Install all dependencies
 uv run alembic upgrade head       # Migrate database
 uv run mo-server setup --scope user                    # Wire into ~/.claude/settings.json
 uv run mo-server setup --client codex --scope user     # Wire into ~/.codex/
+uv run python download_models.py                       # Download BGE-M3 + reranker via ModelScope
 uv run mo-server serve-http                            # Start HTTP service on port 8765
+uv run mo-server migrate-embeddings                    # Re-embed all memories after model change
 uv run mo-server doctor                                # Check wiring
 uv run pytest                                          # All tests (unit + integration)
 uv run pytest src/memory_orchestrator_server/tests/unit/        # Unit tests only
@@ -31,13 +33,14 @@ cd memory_orchestrator_server/src/memory_orchestrator_server/frontend && npm run
 Two independently installable packages:
 
 - **`memory_orchestrator_server/`** — Server package (entry point: `mo-server`)
-  - FastAPI, PostgreSQL, pgvector, FastEmbed, Alembic, repository, frontend, MCP HTTP bridge
-  - CLI: `mo-server serve-http | serve-mcp | setup | teardown | doctor | token | migrate`
+  - FastAPI, PostgreSQL, pgvector, transformers (BGE-M3 + reranker), Alembic, repository, frontend, MCP HTTP bridge
+  - CLI: `mo-server serve-http | serve-mcp | setup | teardown | doctor | token | migrate | migrate-embeddings`
   - Depends on `memory-orchestrator-mcp` (for client rules JSON files)
+  - Models stored in `memory_orchestrator_server/models/` (downloaded via `download_models.py`)
 
 - **`memory_orchestrator_mcp/`** — Client MCP package (no entry point, zero deps)
   - Hooks, client rules (JSON), agent instructions, skill files
-  - Must stay lightweight: no DB, SQLAlchemy, FastEmbed, pgvector, or Alembic
+  - Must stay lightweight: no DB, SQLAlchemy, FlagEmbedding, torch, pgvector, or Alembic
 
 ### Request flow
 
@@ -57,6 +60,8 @@ Claude/Codex MCP call  →  local stdio MCP  →  POST /mcp/tools/call  →  ser
 | `memory_orchestrator_server/src/memory_orchestrator_server/routers/ui.py` | `/api/memories`, `/api/projects`, `/api/settings` |
 | `memory_orchestrator_server/src/memory_orchestrator_server/routers/mcp.py` | `/mcp/tools/call`, `/mcp/resources/read` |
 | `memory_orchestrator_server/src/memory_orchestrator_server/mcp_core.py` | Server-side MCP tool implementations |
+| `memory_orchestrator_server/src/memory_orchestrator_server/embedder.py` | BGE-M3 dense embeddings via `transformers.AutoModel` |
+| `memory_orchestrator_server/src/memory_orchestrator_server/reranker.py` | BGE-reranker-v2-m3 cross-encoder via `transformers.AutoModelForSequenceClassification` |
 | `memory_orchestrator_server/src/memory_orchestrator_server/mcp_server.py` | stdio MCP runner (direct DB access) |
 | `memory_orchestrator_server/src/memory_orchestrator_server/client_adapters.py` | Claude/Codex setup/teardown |
 | `memory_orchestrator_server/src/memory_orchestrator_server/client_rules.py` | Reads JSON rules from `memory_orchestrator_mcp` |
@@ -68,7 +73,7 @@ Claude/Codex MCP call  →  local stdio MCP  →  POST /mcp/tools/call  →  ser
 ### Data model
 
 - `projects`: slug → UUID. Global sentinel: `00000000-0000-0000-0000-000000000000` (slug `*`).
-- `memories`: `type` ∈ {user, feedback, project, reference}; `embedding vector(512)`; `superseded_by` for soft-delete.
+- `memories`: `type` ∈ {user, feedback, project, reference}; `embedding vector(1024)` (BGE-M3); `superseded_by` for soft-delete.
 - `system_settings`: key-value; read on every request — no restart needed for most config.
 - `sessions`: ingestion progress per session (`last_offset`, `status` ∈ pending/done/failed).
 - `api_tokens`: hashed bearer tokens. `kind='ui_admin'` → `/api/*`; `kind='mcp_client'` → `/mcp/*`.
@@ -88,7 +93,7 @@ uv run mo-server token create --kind mcp_client --name "local claude"
 
 Editable at `/ui` → Settings without restart. Keys: `hook_budget_tokens`, `hook_cooldown_sec`,
 `hook_min_turns`, `search_top_k`, `dup_threshold`, `extraction_base_url`, `extraction_model`,
-`embed_model`, `embed_dim`.
+`embed_model`, `embed_dim`, `rerank_enabled`, `rerank_model`.
 
 ### Tests
 
