@@ -38,7 +38,7 @@ async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID
     repo = MemoryRepository(session)
     query = args["query"]
     cfg = await repo.get_settings()
-    default_top_k = int(cfg.get("search_top_k") or 8)
+    default_top_k = int(cfg.get("search_top_k") or 3)
     top_k = int(args.get("top_k", default_top_k))
     types = args.get("type")
     scope_slug = args.get("project_id")

@@ -13,9 +13,10 @@ from memory_orchestrator_server.db_check import (
 )
 from memory_orchestrator_server.embedder import ensure_loaded as ensure_embedder
 from memory_orchestrator_server.reranker import ensure_loaded as ensure_reranker
+from memory_orchestrator_server.repository import MemoryRepository
 from memory_orchestrator_server.routers.hooks import make_hooks_router
 from memory_orchestrator_server.routers.mcp import make_mcp_http_router
-from memory_orchestrator_server.routers.ui import make_ui_router
+from memory_orchestrator_server.routers.ui import SETTINGS_SEED, make_ui_router
 
 
 def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: bool = False) -> FastAPI:
@@ -39,6 +40,10 @@ def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: boo
                 format_database_startup_error(settings.db_dsn, exc)
             )
             raise
+        async with maker() as session:
+            repo = MemoryRepository(session)
+            await repo.seed_settings(SETTINGS_SEED)
+            await session.commit()
         if not skip_embedder:
             ensure_embedder()
             ensure_reranker()

@@ -206,7 +206,7 @@ class MemoryRepository:
         query_embedding: list[float],
         project_ids: list[ProjectRef],
         types: list[str] | None = None,
-        top_k: int = 8,
+        top_k: int = 3,
         record_hits: bool = False,
         query: str | None = None,
     ) -> list[Hit]:
@@ -229,24 +229,38 @@ class MemoryRepository:
         result = await self.session.execute(stmt)
         rows = result.all()
 
+        cfg = await self.get_settings()
+        cosine_w = float(cfg.get("score_cosine_weight", "0.6"))
+        importance_w = float(cfg.get("score_importance_weight", "0.3"))
+        recency_w = float(cfg.get("score_recency_weight", "0.1"))
+        half_life = float(cfg.get("score_recency_half_life", "60"))
+        rerank_blend = float(cfg.get("score_rerank_blend", "0.8"))
+        type_boosts = {
+            "feedback":  float(cfg.get("score_type_feedback",  "1.2")),
+            "project":   float(cfg.get("score_type_project",   "1.0")),
+            "user":      float(cfg.get("score_type_user",      "1.0")),
+            "reference": float(cfg.get("score_type_reference", "1.0")),
+        }
+
         hits: list[Hit] = []
         for mem, dist in rows:
             sim = 1.0 - float(dist)
             score = hybrid_score(
-                cosine_sim=sim, importance=mem.importance, updated_at=mem.updated_at
+                cosine_sim=sim, importance=mem.importance, updated_at=mem.updated_at,
+                cosine_weight=cosine_w, importance_weight=importance_w,
+                recency_weight=recency_w, half_life_days=half_life,
+                type_boost=type_boosts.get(mem.type, 1.0),
             )
             hits.append(Hit(memory=mem, score=score, cosine_sim=sim))
         hits.sort(key=lambda h: -h.score)
 
-        cfg = await self.get_settings()
         if query and cfg.get("rerank_enabled", "false").lower() == "true":
             texts = [
                 f"{h.memory.name} {h.memory.description} {h.memory.content}"
                 for h in hits
             ]
             scores = reranker.rerank_scores(query, texts)
-            # blend: reranker dominates (80%) but importance+recency still influence (20%)
-            blended = [(h, 0.8 * float(s) + 0.2 * h.score) for h, s in zip(hits, scores)]
+            blended = [(h, rerank_blend * float(s) + (1 - rerank_blend) * h.score) for h, s in zip(hits, scores)]
             hits = [
                 Hit(memory=h.memory, score=final_s, cosine_sim=h.cosine_sim)
                 for h, final_s in sorted(blended, key=lambda x: -x[1])
@@ -344,6 +358,18 @@ class MemoryRepository:
                 pg_insert(SystemSetting)
                 .values(key=key, value=value, updated_at=now)
                 .on_conflict_do_update(index_elements=["key"], set_={"value": value, "updated_at": now})
+            )
+            await self.session.execute(stmt)
+
+    async def seed_settings(self, defaults: dict[str, str]) -> None:
+        """Insert missing system_settings rows; never overwrites existing values."""
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        now = utc_now()
+        for key, value in defaults.items():
+            stmt = (
+                pg_insert(SystemSetting)
+                .values(key=key, value=value, updated_at=now)
+                .on_conflict_do_nothing(index_elements=["key"])
             )
             await self.session.execute(stmt)
 

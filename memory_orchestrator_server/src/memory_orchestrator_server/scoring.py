@@ -19,9 +19,24 @@ def recency_decay(updated_at: datetime, half_life_days: float = 60.0) -> float:
     return math.exp(-age / half_life_days)
 
 
-def hybrid_score(cosine_sim: float, importance: int, updated_at: datetime) -> float:
+def hybrid_score(
+    cosine_sim: float,
+    importance: int,
+    updated_at: datetime,
+    *,
+    cosine_weight: float = 0.6,
+    importance_weight: float = 0.3,
+    recency_weight: float = 0.1,
+    half_life_days: float = 60.0,
+    type_boost: float = 1.0,
+) -> float:
     importance_norm = (importance - 1) / 4.0
-    return 0.6 * cosine_sim + 0.3 * importance_norm + 0.1 * recency_decay(updated_at)
+    base = (
+        cosine_weight * cosine_sim
+        + importance_weight * importance_norm
+        + recency_weight * recency_decay(updated_at, half_life_days)
+    )
+    return base * type_boost
 
 
 def truncate_by_budget(items: list[dict], budget: int) -> list[dict]:

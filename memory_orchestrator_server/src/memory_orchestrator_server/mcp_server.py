@@ -33,7 +33,7 @@ async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID
     repo = MemoryRepository(session)
     query = args["query"]
     cfg = await repo.get_settings()
-    default_top_k = int(cfg.get("search_top_k") or 8)
+    default_top_k = int(cfg.get("search_top_k") or 3)
     top_k = int(args.get("top_k", default_top_k))
     types = args.get("type")
     scope_slug = args.get("project_id")
@@ -164,7 +164,7 @@ def _memory_to_dict(m: Memory, *, score: float | None = None) -> dict:
 
 _TOOLS: list[Tool] = [
     Tool(name="search_memory", description="Retrieve memories by semantic similarity.",
-         inputSchema={"type": "object", "properties": {"query": {"type": "string"}, "project_id": {"type": "string"}, "type": {"type": "array", "items": {"type": "string"}}, "top_k": {"type": "integer", "default": 8}}, "required": ["query"]}),
+         inputSchema={"type": "object", "properties": {"query": {"type": "string"}, "project_id": {"type": "string"}, "type": {"type": "array", "items": {"type": "string"}}, "top_k": {"type": "integer", "default": 3}}, "required": ["query"]}),
     Tool(name="save_memory", description="Write a memory to Memory Orchestrator; returns conflicts if near-duplicate exists.",
          inputSchema={"type": "object", "properties": {"type": {"type": "string"}, "name": {"type": "string"}, "description": {"type": "string"}, "content": {"type": "string"}, "project_id": {"type": "string"}, "why": {"type": "string"}, "how_to_apply": {"type": "string"}, "importance": {"type": "integer"}, "replace_id": {"type": "string"}}, "required": ["type", "name", "description", "content"]}),
     Tool(name="list_memories", description="List memory summaries.",

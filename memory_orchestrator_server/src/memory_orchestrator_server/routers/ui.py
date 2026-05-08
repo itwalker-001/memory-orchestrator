@@ -1,5 +1,7 @@
 from __future__ import annotations
+import json
 import uuid
+from pathlib import Path
 import httpx
 from fastapi import APIRouter, Body, Header, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -11,9 +13,18 @@ from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory, Project
 from memory_orchestrator_server.repository import MemoryRepository, _sync_project_count
 from memory_orchestrator_server.time_utils import isoformat_utc, utc_now
 
-SETTINGS_KEYS = ["extraction_base_url", "extraction_model", "extraction_api_key", "embed_model", "embed_dim",
-                 "hook_cooldown_sec", "hook_min_turns", "hook_budget_tokens",
-                 "search_top_k", "dup_threshold", "db_dsn", "http_port"]
+_DEFAULTS_FILE = Path(__file__).parent.parent / "settings_defaults.json"
+SETTINGS_SEED: dict[str, str] = json.loads(_DEFAULTS_FILE.read_text())
+
+SETTINGS_KEYS = [
+    "extraction_base_url", "extraction_model", "extraction_api_key", "embed_model", "embed_dim",
+    "hook_cooldown_sec", "hook_min_turns", "hook_budget_tokens",
+    "search_top_k", "dup_threshold", "db_dsn", "http_port",
+    "rerank_enabled", "rerank_model",
+    "score_cosine_weight", "score_importance_weight", "score_recency_weight",
+    "score_recency_half_life", "score_rerank_blend",
+    "score_type_feedback", "score_type_project", "score_type_user", "score_type_reference",
+]
 
 
 class MemoryCreate(BaseModel):
@@ -50,6 +61,17 @@ class SettingsPatch(BaseModel):
     dup_threshold: str | None = None
     db_dsn: str | None = None
     http_port: str | None = None
+    rerank_enabled: str | None = None
+    rerank_model: str | None = None
+    score_cosine_weight: str | None = None
+    score_importance_weight: str | None = None
+    score_recency_weight: str | None = None
+    score_recency_half_life: str | None = None
+    score_rerank_blend: str | None = None
+    score_type_feedback: str | None = None
+    score_type_project: str | None = None
+    score_type_user: str | None = None
+    score_type_reference: str | None = None
 
 
 class BatchDeleteBody(BaseModel):
@@ -246,18 +268,12 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     async def get_settings_endpoint() -> dict:
         s = get_settings()
         defaults = {
+            **SETTINGS_SEED,
             "extraction_base_url": s.extraction_base_url,
             "extraction_model": s.extraction_model,
             "extraction_api_key": s.extraction_api_key,
             "embed_model": s.embed_model,
             "embed_dim": str(s.embed_dim),
-            "hook_cooldown_sec": "300",
-            "hook_min_turns": "1",
-            "hook_budget_tokens": "1500",
-            "search_top_k": "8",
-            "dup_threshold": "0.92",
-            "db_dsn": s.db_dsn,
-            "http_port": str(s.http_port),
         }
         async with maker() as session:
             repo = MemoryRepository(session)
@@ -398,13 +414,73 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                     m2.description AS desc2, m2.content AS content2, m2.project_id AS pid2,
                     1 - (m1.embedding <=> m2.embedding) AS similarity
                 FROM memories m1
-                JOIN memories m2 ON m1.id < m2.id
+                JOIN memories m2 ON m1.id < m2.id AND m1.project_id = m2.project_id
                 WHERE m1.superseded_by IS NULL
                   AND m2.superseded_by IS NULL
                   AND m1.embedding IS NOT NULL
                   AND m2.embedding IS NOT NULL
                   {where_extra}
                   AND 1 - (m1.embedding <=> m2.embedding) >= :threshold
+                ORDER BY similarity DESC
+                LIMIT :limit
+            """), params)
+            rows = result.fetchall()
+            proj_result = await s.execute(select(Project))
+            slug_map = {p.id: p.slug for p in proj_result.scalars().all()}
+        pairs = []
+        for row in rows:
+            pairs.append({
+                "id1": str(row.id1), "type1": row.type1, "name1": row.name1,
+                "description1": row.desc1, "content1": row.content1,
+                "project_slug1": slug_map.get(row.pid1, "*"),
+                "id2": str(row.id2), "type2": row.type2, "name2": row.name2,
+                "description2": row.desc2, "content2": row.content2,
+                "project_slug2": slug_map.get(row.pid2, "*"),
+                "similarity": round(float(row.similarity), 3),
+            })
+        return pairs
+
+    @router.get("/conflicts")
+    async def find_conflicts(
+        min_sim: float = 0.50,
+        project_slug: str | None = None,
+        type: str | None = None,
+        limit: int = 200,
+    ) -> list[dict]:
+        from sqlalchemy import text
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            cfg = await repo.get_settings()
+            dup_threshold = float(cfg.get("dup_threshold") or 0.92)
+            max_sim = dup_threshold - 0.01
+            params: dict = {"min_sim": min_sim, "max_sim": max_sim, "limit": limit}
+            filters = []
+            if project_slug:
+                pid = await repo.slug_to_id(project_slug)
+                if not pid:
+                    return []
+                filters.append("m1.project_id = :project_id AND m2.project_id = :project_id")
+                params["project_id"] = pid
+            if type:
+                filters.append("m1.type = :type AND m2.type = :type")
+                params["type"] = type
+            where_extra = f" AND {' AND '.join(filters)}" if filters else ""
+            result = await s.execute(text(f"""
+                SELECT
+                    m1.id AS id1, m1.type AS type1, m1.name AS name1,
+                    m1.description AS desc1, m1.content AS content1, m1.project_id AS pid1,
+                    m2.id AS id2, m2.type AS type2, m2.name AS name2,
+                    m2.description AS desc2, m2.content AS content2, m2.project_id AS pid2,
+                    1 - (m1.embedding <=> m2.embedding) AS similarity
+                FROM memories m1
+                JOIN memories m2 ON m1.id < m2.id AND m1.project_id = m2.project_id
+                WHERE m1.superseded_by IS NULL
+                  AND m2.superseded_by IS NULL
+                  AND m1.embedding IS NOT NULL
+                  AND m2.embedding IS NOT NULL
+                  {where_extra}
+                  AND 1 - (m1.embedding <=> m2.embedding) >= :min_sim
+                  AND 1 - (m1.embedding <=> m2.embedding) < :max_sim
                 ORDER BY similarity DESC
                 LIMIT :limit
             """), params)

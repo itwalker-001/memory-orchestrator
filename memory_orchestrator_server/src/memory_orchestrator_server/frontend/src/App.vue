@@ -82,7 +82,7 @@
           <button :class="['type-tab', selectedType === '' ? 'active' : '']" @click="selectedType = ''; load()">{{ t('All') }}</button>
           <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
             :class="['type-tab', 'type-tab-' + tp, selectedType === tp ? 'active' : '']"
-            @click="selectedType = tp; load()">{{ tp }}</button>
+            @click="selectedType = tp; load()">{{ t(tp) }}</button>
         </div>
       </div>
       <div class="toolbar-right">
@@ -92,6 +92,14 @@
             <rect x="5" y="5" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.3"/>
           </svg>
           {{ t('Duplicates') }}
+        </button>
+        <button @click="openConflicts" class="btn-toolbar-action" :title="t('Conflicts')">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path d="M1 10L10 1" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            <path d="M3 1H1V3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 10H10V8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ t('Conflicts') }}
         </button>
         <input ref="importFileRef" type="file" accept=".sql" style="display:none" @change="onImportFile" />
         <div class="search-wrap">
@@ -163,7 +171,7 @@
                 <span v-if="projectDisplayName(m.project_id)" class="plain-cell-text">{{ projectCellText(m.project_id) }}</span>
                 <span v-else class="hit-zero">—</span>
               </td>
-              <td class="type-col"><span :class="['tag', m.type]">{{ m.type }}</span></td>
+              <td class="type-col"><span :class="['tag', m.type]">{{ t(m.type) }}</span></td>
               <td class="name" @mouseenter="showTip($event, m.name)" @mouseleave="hideTip">{{ m.name }}</td>
               <td><div class="desc" @mouseenter="showTip($event, m.description)" @mouseleave="hideTip">{{ m.description }}</div></td>
               <td class="hit col-hits" :class="{ 'hit-active': m.hit_count > 0 }">
@@ -232,7 +240,7 @@
         <div :class="['type-stripe', detailTarget.type]"></div>
         <div :class="['write-header', 'type-header-' + detailTarget.type]">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span :class="['tag', detailTarget.type]" style="font-size:10px;padding:1px 6px">{{ detailTarget.type }}</span>
+            <span :class="['tag', detailTarget.type]" style="font-size:10px;padding:1px 6px">{{ t(detailTarget.type) }}</span>
             <span class="write-title">{{ t('Memory Details') }}</span>
           </div>
           <div class="write-header-right">
@@ -295,7 +303,7 @@
     <div v-if="settingsOpen" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <span class="modal-title">{{ t('Settings') }}</span>
+          <span class="modal-title">{{ t('Advanced') }}</span>
           <button class="modal-close" @click="settingsOpen = false">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -305,6 +313,7 @@
         </div>
         <div class="settings-tabs">
           <button :class="['settings-tab', {active: settingsTab === 'settings'}]" @click="settingsTab = 'settings'">{{ t('Settings') }}</button>
+          <button :class="['settings-tab', {active: settingsTab === 'scoring'}]" @click="settingsTab = 'scoring'">{{ t('Scoring') }}</button>
           <button :class="['settings-tab', {active: settingsTab === 'backup'}]" @click="settingsTab = 'backup'">{{ t('Backup') }}</button>
         </div>
         <div v-if="settingsTab === 'settings'" class="modal-body">
@@ -312,7 +321,7 @@
             <div class="settings-group-title">{{ t('Extraction Model') }}</div>
             <label class="field-row">
               <span class="field-label" @mouseenter="showTip($event, t('OpenAI-compatible API base URL'))" @mouseleave="hideTip">{{ t('Base URL') }}</span>
-              <input v-model="form.extraction_base_url" class="field-input" :placeholder="t('https://api.openai.com/v1')" />
+              <input v-model="form.extraction_base_url" class="field-input" placeholder="https://api.openai.com/v1" />
             </label>
             <label class="field-row">
               <span class="field-label" @mouseenter="showTip($event, t('API key for the extraction model endpoint'))" @mouseleave="hideTip">{{ t('API Key') }}</span>
@@ -379,31 +388,95 @@
             <div class="settings-group-title">{{ t('MCP / Service') }}</div>
             <label class="field-row">
               <span class="field-label" @mouseenter="showTip($event, t('Default number of memories returned by search_memory when top_k is not specified by the caller'))" @mouseleave="hideTip">{{ t('Search top_k') }}</span>
-              <input v-model="form.search_top_k" class="field-input" placeholder="8" />
+              <input v-model="form.search_top_k" class="field-input" placeholder="3" />
             </label>
             <label class="field-row">
               <span class="field-label" @mouseenter="showTip($event, t('Cosine similarity threshold (0–1) above which an existing memory is considered a duplicate on save'))" @mouseleave="hideTip">{{ t('Dup threshold') }}</span>
               <input v-model="form.dup_threshold" class="field-input" placeholder="0.92" />
             </label>
-            <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, t('PostgreSQL asyncpg connection string — requires service restart'))" @mouseleave="hideTip">{{ t('DB DSN') }}</span>
-              <input v-model="form.db_dsn" class="field-input" :placeholder="t('postgresql+asyncpg://… (restart required)')" />
-            </label>
-            <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, t('HTTP port the service listens on — requires service restart'))" @mouseleave="hideTip">{{ t('HTTP port') }}</span>
-              <input v-model="form.http_port" class="field-input" :placeholder="t('8765 (restart required)')" />
-            </label>
           </div>
+        </div>
+        <div v-else-if="settingsTab === 'scoring'" class="modal-body scoring-body">
+          <!-- Hybrid Score Weights -->
           <div class="settings-group">
-            <div class="settings-group-title">{{ t('Embed Model') }}</div>
-            <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, t('FastEmbed model name used to generate memory vectors'))" @mouseleave="hideTip">{{ t('Model name') }}</span>
-              <input v-model="form.embed_model" class="field-input" placeholder="BAAI/bge-small-zh-v1.5" />
-            </label>
-            <label class="field-row">
-              <span class="field-label" @mouseenter="showTip($event, t('Vector dimension — must match the chosen embed model'))" @mouseleave="hideTip">{{ t('Dimensions') }}</span>
-              <input v-model="form.embed_dim" class="field-input" placeholder="512" />
-            </label>
+            <div class="settings-group-title">
+              {{ t('Hybrid Score Weights') }}
+              <span class="weight-sum-badge" :class="weightSumOk ? 'ok' : 'err'">Σ = {{ weightSum }}</span>
+            </div>
+            <div class="score-row">
+              <span class="score-lbl">{{ t('Cosine') }}</span>
+              <input type="range" min="0" max="1" step="0.01" v-model="form.score_cosine_weight" class="score-slider" />
+              <input type="number" min="0" max="1" step="0.01" v-model="form.score_cosine_weight" class="score-num" />
+            </div>
+            <div class="score-row">
+              <span class="score-lbl">{{ t('Importance') }}</span>
+              <input type="range" min="0" max="1" step="0.01" v-model="form.score_importance_weight" class="score-slider" />
+              <input type="number" min="0" max="1" step="0.01" v-model="form.score_importance_weight" class="score-num" />
+            </div>
+            <div class="score-row">
+              <span class="score-lbl">{{ t('Recency') }}</span>
+              <input type="range" min="0" max="1" step="0.01" v-model="form.score_recency_weight" class="score-slider" />
+              <input type="number" min="0" max="1" step="0.01" v-model="form.score_recency_weight" class="score-num" />
+            </div>
+            <div class="weight-bar">
+              <div class="wb-seg wb-cosine" :style="{flex: wf('score_cosine_weight', 0.6)}">
+                <span v-if="wf('score_cosine_weight', 0.6) >= 0.14">{{ t('Cosine') }}</span>
+              </div>
+              <div class="wb-seg wb-importance" :style="{flex: wf('score_importance_weight', 0.3)}">
+                <span v-if="wf('score_importance_weight', 0.3) >= 0.10">{{ t('Imp.') }}</span>
+              </div>
+              <div class="wb-seg wb-recency" :style="{flex: wf('score_recency_weight', 0.1)}">
+                <span v-if="wf('score_recency_weight', 0.1) >= 0.07">{{ t('Rec.') }}</span>
+              </div>
+            </div>
+            <div v-if="!weightSumOk" class="score-warn">
+              ⚠ {{ t('Weights should sum to 1.0') }} ({{ t('current') }}: {{ weightSum }})
+            </div>
+          </div>
+
+          <!-- Recency Decay -->
+          <div class="settings-group">
+            <div class="settings-group-title">{{ t('Recency Decay') }}</div>
+            <div class="score-row">
+              <span class="score-lbl">{{ t('Half-life (days)') }}</span>
+              <input type="range" min="1" max="365" step="1" v-model="form.score_recency_half_life" class="score-slider" />
+              <input type="number" min="1" max="365" step="1" v-model="form.score_recency_half_life" class="score-num" />
+            </div>
+            <div class="score-hint">30d → {{ decayPct(30) }}% &nbsp;·&nbsp; 60d → {{ decayPct(60) }}% &nbsp;·&nbsp; 180d → {{ decayPct(180) }}%</div>
+          </div>
+
+          <!-- Type Multipliers -->
+          <div class="settings-group">
+            <div class="settings-group-title">{{ t('Type Multipliers') }}</div>
+            <div v-for="tp in ['feedback','project','user','reference']" :key="tp" class="score-row">
+              <span class="score-lbl type-lbl">{{ t(tp) }}</span>
+              <div class="type-bar-track">
+                <div class="type-bar-fill" :style="{width: typeBarPct(form['score_type_' + tp])}"></div>
+              </div>
+              <input type="number" min="0.1" max="3" step="0.1" v-model="form['score_type_' + tp]" class="score-num" />
+            </div>
+            <div class="score-hint">{{ t('1.0 = neutral · >1.0 boosts rank · <1.0 reduces rank') }}</div>
+          </div>
+
+          <!-- Reranker -->
+          <div class="settings-group">
+            <div class="settings-group-title">{{ t('Reranker') }}</div>
+            <div class="score-row">
+              <span class="score-lbl">{{ t('Enabled') }}</span>
+              <label class="score-toggle">
+                <input type="checkbox" :checked="form.rerank_enabled === 'true'" @change="form.rerank_enabled = $event.target.checked ? 'true' : 'false'" />
+                <span class="score-toggle-track"><span class="score-toggle-thumb"></span></span>
+              </label>
+              <span class="score-toggle-state">{{ form.rerank_enabled === 'true' ? t('On') : t('Off') }}</span>
+            </div>
+            <div class="score-row" :class="{dimmed: form.rerank_enabled !== 'true'}">
+              <span class="score-lbl">{{ t('Blend ratio') }}</span>
+              <input type="range" min="0" max="1" step="0.05" v-model="form.score_rerank_blend" class="score-slider" :disabled="form.rerank_enabled !== 'true'" />
+              <input type="number" min="0" max="1" step="0.05" v-model="form.score_rerank_blend" class="score-num" :disabled="form.rerank_enabled !== 'true'" />
+            </div>
+            <div class="score-hint" v-if="form.rerank_enabled === 'true'">
+              final = {{ blendFmt }}×{{ t('reranker') }} + {{ counterBlendFmt }}×{{ t('hybrid') }}
+            </div>
           </div>
         </div>
         <div v-else class="modal-body backup-tab-body">
@@ -472,7 +545,7 @@
         <div :class="['write-header', editTarget?.type ? 'type-header-' + editTarget.type : '']">
           <div class="write-header-left">
             <div style="display:flex;align-items:center;gap:8px;">
-              <span v-if="editTarget" :class="['tag', editTarget.type]" style="font-size:10px;padding:1px 6px">{{ editTarget.type }}</span>
+              <span v-if="editTarget" :class="['tag', editTarget.type]" style="font-size:10px;padding:1px 6px">{{ t(editTarget.type) }}</span>
               <span class="write-title">{{ t('Edit Memory') }}</span>
             </div>
             <div v-if="editTarget?.name" class="write-subtitle">{{ editTarget.name }}</div>
@@ -541,7 +614,7 @@
           <div class="write-type-tabs">
             <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
               :class="['type-tab', 'type-tab-' + tp, writeForm.type === tp ? 'active' : '']"
-              @click="writeForm.type = tp">{{ tp }}</button>
+              @click="writeForm.type = tp">{{ t(tp) }}</button>
           </div>
           <div class="write-section">
             <label class="write-field-label">{{ t('Name') }}</label>
@@ -621,7 +694,7 @@
           <div class="clone-source-card">
             <div class="clone-source-meta">
               <span :class="['badge', cloneSource.type]">
-                <span class="badge-dot"></span>{{ cloneSource.type }}
+                <span class="badge-dot"></span>{{ t(cloneSource.type) }}
               </span>
               <span class="clone-source-project">{{ projectDisplayName(cloneSource.project_id) || t('Global (*)') }}</span>
             </div>
@@ -741,7 +814,7 @@
           <div v-else class="dup-list">
             <div v-for="(pair, i) in duplicatePairs" :key="pair.id1 + pair.id2" class="dup-pair">
               <div class="dup-side">
-                <div class="dup-meta"><span :class="'badge badge-' + pair.type1">{{ pair.type1 }}</span><span class="dup-proj">{{ pair.project_slug1 }}</span></div>
+                <div class="dup-meta"><span :class="['badge', pair.type1]">{{ t(pair.type1) }}</span><span class="dup-proj" :title="pair.project_slug1">{{ projectSlugMap[pair.project_slug1] || pair.project_slug1 }}</span></div>
                 <div class="dup-name">{{ pair.name1 }}</div>
                 <div class="dup-desc">{{ pair.description1 }}</div>
                 <div class="dup-content">{{ pair.content1 }}</div>
@@ -752,11 +825,69 @@
                 <button class="btn-dup-skip" @click="duplicatePairs.splice(i, 1)">{{ t('Skip') }}</button>
               </div>
               <div class="dup-side">
-                <div class="dup-meta"><span :class="'badge badge-' + pair.type2">{{ pair.type2 }}</span><span class="dup-proj">{{ pair.project_slug2 }}</span></div>
+                <div class="dup-meta"><span :class="['badge', pair.type2]">{{ t(pair.type2) }}</span><span class="dup-proj" :title="pair.project_slug2">{{ projectSlugMap[pair.project_slug2] || pair.project_slug2 }}</span></div>
                 <div class="dup-name">{{ pair.name2 }}</div>
                 <div class="dup-desc">{{ pair.description2 }}</div>
                 <div class="dup-content">{{ pair.content2 }}</div>
                 <button class="btn-dup-del" @click="deleteDupMem(pair.id2, i)">{{ t('Delete') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-if="conflictsOpen" class="modal-overlay">
+      <div class="modal modal-xl">
+        <div class="modal-header">
+          <span class="modal-title">{{ t('Conflicts') }} <span v-if="!conflictsLoading" class="dup-count">({{ conflictPairs.length }})</span></span>
+          <button class="modal-close" @click="conflictsOpen = false">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="dup-toolbar">
+          <label class="dup-threshold">
+            <span>{{ t('Min similarity') }}</span>
+            <input
+              class="dup-threshold-slider"
+              type="range"
+              min="0.40"
+              max="0.85"
+              step="0.01"
+              v-model="conflictMinSim"
+              :aria-label="t('Min similarity')"
+            />
+            <output class="dup-threshold-value">{{ conflictMinSim }}</output>
+          </label>
+          <button class="dup-refresh" :disabled="conflictsLoading" @click="scanConflicts">
+            {{ conflictsLoading ? t('Loading…') : t('Scan') }}
+          </button>
+        </div>
+        <div v-if="conflictError" class="dup-error">{{ conflictError }}</div>
+        <div class="modal-body dup-modal-body">
+          <div v-if="conflictsLoading" class="empty-state">{{ t('Loading…') }}</div>
+          <div v-else-if="conflictPairs.length === 0" class="empty-state">{{ t('No conflicts found') }}</div>
+          <div v-else class="dup-list">
+            <div v-for="(pair, i) in conflictPairs" :key="pair.id1 + pair.id2" class="dup-pair">
+              <div class="dup-side">
+                <div class="dup-meta"><span :class="['badge', pair.type1]">{{ t(pair.type1) }}</span><span class="dup-proj" :title="pair.project_slug1">{{ projectSlugMap[pair.project_slug1] || pair.project_slug1 }}</span></div>
+                <div class="dup-name">{{ pair.name1 }}</div>
+                <div class="dup-desc">{{ pair.description1 }}</div>
+                <div class="dup-content">{{ pair.content1 }}</div>
+                <button class="btn-dup-del" @click="deleteConflictMem(pair.id1)">{{ t('Delete') }}</button>
+              </div>
+              <div class="dup-center">
+                <div class="dup-sim">{{ Math.round(pair.similarity * 100) }}%</div>
+                <button class="btn-dup-skip" @click="conflictPairs.splice(i, 1)">{{ t('Skip') }}</button>
+              </div>
+              <div class="dup-side">
+                <div class="dup-meta"><span :class="['badge', pair.type2]">{{ t(pair.type2) }}</span><span class="dup-proj" :title="pair.project_slug2">{{ projectSlugMap[pair.project_slug2] || pair.project_slug2 }}</span></div>
+                <div class="dup-name">{{ pair.name2 }}</div>
+                <div class="dup-desc">{{ pair.description2 }}</div>
+                <div class="dup-content">{{ pair.content2 }}</div>
+                <button class="btn-dup-del" @click="deleteConflictMem(pair.id2)">{{ t('Delete') }}</button>
               </div>
             </div>
           </div>
@@ -805,6 +936,7 @@ function t(key, vars) {
 
 const projects = ref([])
 const projectMap = computed(() => Object.fromEntries(projects.value.map(p => [p.id, p.display_name || p.slug])))
+const projectSlugMap = computed(() => Object.fromEntries(projects.value.map(p => [p.slug, p.display_name || p.slug])))
 const memories = ref([])
 const stats = ref(null)
 const selectedProject = ref('')
@@ -1167,6 +1299,49 @@ async function deleteDupMem(id, pairIdx) {
   }
 }
 
+const conflictsOpen = ref(false)
+const conflictPairs = ref([])
+const conflictsLoading = ref(false)
+const conflictError = ref('')
+const conflictMinSim = ref('0.50')
+
+async function openConflicts() {
+  conflictsOpen.value = true
+  await scanConflicts()
+}
+
+async function scanConflicts() {
+  conflictsLoading.value = true
+  conflictError.value = ''
+  conflictPairs.value = []
+  try {
+    const params = new URLSearchParams()
+    if (selectedProject.value) params.set('project_slug', selectedProject.value)
+    if (selectedType.value) params.set('type', selectedType.value)
+    params.set('min_sim', conflictMinSim.value)
+    const qs = params.toString()
+    const r = await fetch(`${BASE}/conflicts${qs ? '?' + qs : ''}`)
+    if (!r.ok) {
+      const txt = await r.text()
+      conflictError.value = `Scan failed (${r.status}): ${txt.slice(0, 180) || r.statusText}`
+      return
+    }
+    conflictPairs.value = await r.json()
+  } catch (err) {
+    conflictError.value = `Scan failed: ${err?.message || err}`
+  } finally {
+    conflictsLoading.value = false
+  }
+}
+
+async function deleteConflictMem(id) {
+  const r = await fetch(`${BASE}/memories/${id}`, { method: 'DELETE' })
+  if (r.ok || r.status === 204) {
+    conflictPairs.value = conflictPairs.value.filter(pair => pair.id1 !== id && pair.id2 !== id)
+    await load()
+  }
+}
+
 const page = ref(1)
 const pageSize = ref(20)
 const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)))
@@ -1283,7 +1458,7 @@ const availableModels = ref([])
 const isFetchingModels = ref(false)
 const modelDropOpen = ref(false)
 const modelHighlight = ref(-1)
-const form = ref({ extraction_base_url: '', extraction_model: '', extraction_api_key: '', embed_model: '', embed_dim: '', hook_cooldown_sec: '', hook_min_turns: '', hook_budget_tokens: '', search_top_k: '', dup_threshold: '', db_dsn: '', http_port: '' })
+const form = ref({ extraction_base_url: '', extraction_model: '', extraction_api_key: '', embed_model: '', embed_dim: '', hook_cooldown_sec: '', hook_min_turns: '', hook_budget_tokens: '', search_top_k: '', dup_threshold: '', db_dsn: '', http_port: '', rerank_enabled: 'false', rerank_model: '', score_cosine_weight: '', score_importance_weight: '', score_recency_weight: '', score_recency_half_life: '', score_rerank_blend: '', score_type_feedback: '', score_type_project: '', score_type_user: '', score_type_reference: '' })
 
 const modelFilteredList = computed(() => {
   if (!availableModels.value.length) return []
@@ -1342,6 +1517,23 @@ async function fetchModels() {
     isFetchingModels.value = false
   }
 }
+
+// Scoring tab helpers
+function wf(key, def) { return Math.max(0, parseFloat(form.value[key]) || def) }
+const weightSum = computed(() => {
+  const s = wf('score_cosine_weight', 0.6) + wf('score_importance_weight', 0.3) + wf('score_recency_weight', 0.1)
+  return (Math.round(s * 100) / 100).toFixed(2)
+})
+const weightSumOk = computed(() => Math.abs(parseFloat(weightSum.value) - 1.0) < 0.015)
+function decayPct(days) {
+  const h = parseFloat(form.value.score_recency_half_life) || 60
+  return Math.round(Math.exp(-days / h) * 100)
+}
+function typeBarPct(val) {
+  return Math.round(Math.min(3, Math.max(0, parseFloat(val) || 1)) / 3 * 100) + '%'
+}
+const blendFmt = computed(() => (parseFloat(form.value.score_rerank_blend) || 0.8).toFixed(2))
+const counterBlendFmt = computed(() => (1 - (parseFloat(form.value.score_rerank_blend) || 0.8)).toFixed(2))
 
 const KEY_SENTINEL = '__keep__'
 
@@ -1591,6 +1783,7 @@ h1 {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 1px 6px 1px 5px; border-radius: 20px;
   font-size: 10px; font-weight: 500; border: 1px solid transparent;
+  white-space: nowrap;
 }
 .badge strong { font-weight: 700; }
 .badge-dot { width: 5px; height: 5px; border-radius: 50%; }
@@ -2304,6 +2497,47 @@ body { margin: 0; }
 .btn-save:hover:not(:disabled) { opacity: 0.9; box-shadow: 0 0 22px -6px var(--glow); transform: translateY(-1px); }
 .btn-save:disabled { opacity: 0.45; cursor: default; }
 
+/* ── Scoring tab ─────────────────────────────────────────── */
+.scoring-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; max-height: calc(90vh - 120px); }
+.score-row { display: flex; align-items: center; gap: 8px; margin: 0; }
+.score-lbl { font-size: 11px; color: var(--text-muted); width: 78px; flex-shrink: 0; }
+.type-lbl { font-size: 11.5px; font-weight: 600; text-transform: capitalize; color: var(--text-secondary); }
+.score-slider { flex: 1; height: 4px; accent-color: var(--accent); cursor: pointer; }
+.score-num {
+  width: 54px; text-align: right; padding: 3px 5px;
+  font-size: 11px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-panel); color: var(--text-primary); outline: none;
+}
+.score-num:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.score-num:disabled { opacity: 0.4; cursor: default; }
+.score-slider:disabled { opacity: 0.3; cursor: default; }
+.score-hint { font-size: 10px; color: var(--text-muted); padding-left: 86px; margin-top: -2px; }
+.score-warn { font-size: 10.5px; color: #e05050; font-weight: 500; padding-left: 86px; margin-top: 2px; }
+.weight-sum-badge { font-size: 10.5px; font-weight: 700; margin-left: 8px; padding: 1px 7px; border-radius: 20px; }
+.weight-sum-badge.ok  { background: var(--accent-dim); color: var(--accent); }
+.weight-sum-badge.err { background: rgba(224,80,80,0.12); color: #e05050; }
+.weight-bar { display: flex; height: 16px; border-radius: 4px; overflow: hidden; gap: 1px; margin: 4px 0 2px; }
+.wb-seg { display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 600; color: #fff; transition: flex 0.15s; min-width: 2px; }
+.wb-cosine     { background: #4a87e8; }
+.wb-importance { background: #8a5bbf; }
+.wb-recency    { background: #2eb87a; }
+.type-bar-track { flex: 1; height: 7px; background: var(--border-subtle); border-radius: 4px; overflow: hidden; }
+.type-bar-fill  { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.1s; }
+.score-toggle { position: relative; display: inline-flex; align-items: center; width: 34px; height: 19px; flex-shrink: 0; }
+.score-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.score-toggle-track {
+  position: absolute; inset: 0; background: var(--border); border-radius: 19px; cursor: pointer;
+  transition: background 0.2s;
+}
+.score-toggle-thumb {
+  position: absolute; height: 13px; width: 13px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%; transition: transform 0.2s; pointer-events: none;
+}
+.score-toggle input:checked ~ .score-toggle-track { background: var(--accent); }
+.score-toggle input:checked ~ .score-toggle-track .score-toggle-thumb { transform: translateX(15px); }
+.score-toggle-state { font-size: 11px; color: var(--text-muted); min-width: 22px; }
+.score-row.dimmed { opacity: 0.38; pointer-events: none; }
+
 .modal-sm { width: 360px; }
 .modal-edit { width: 560px; }
 .modal-lg { width: 700px; }
@@ -2360,11 +2594,11 @@ body { margin: 0; }
   font-size: 12px;
 }
 .dup-list { display: flex; flex-direction: column; }
-.dup-pair { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 0; border-bottom: 1px solid var(--border); padding: 12px 16px; align-items: start; }
+.dup-pair { display: grid; grid-template-columns: 1fr 72px 1fr; gap: 0; border-bottom: 1px solid var(--border); padding: 12px 16px; align-items: start; }
 .dup-pair:last-child { border-bottom: none; }
 .dup-side { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.dup-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
-.dup-proj { font-size: 10px; color: var(--muted); font-family: monospace; }
+.dup-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; overflow: hidden; }
+.dup-proj { font-size: 10px; color: var(--muted); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .dup-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dup-desc { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dup-content {
@@ -2376,10 +2610,8 @@ body { margin: 0; }
   border-radius: 5px;
   padding: 6px 8px;
   margin: 3px 0 6px;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  max-height: 120px;
+  overflow-y: auto;
   white-space: pre-wrap;
 }
 .btn-dup-del { align-self: flex-start; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: 4px; background: transparent; color: var(--danger, #e5534b); cursor: pointer; }
