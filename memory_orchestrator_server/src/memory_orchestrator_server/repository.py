@@ -245,9 +245,11 @@ class MemoryRepository:
                 for h in hits
             ]
             scores = reranker.rerank_scores(query, texts)
+            # blend: reranker dominates (80%) but importance+recency still influence (20%)
+            blended = [(h, 0.8 * float(s) + 0.2 * h.score) for h, s in zip(hits, scores)]
             hits = [
-                Hit(memory=h.memory, score=float(s), cosine_sim=h.cosine_sim)
-                for h, s in sorted(zip(hits, scores), key=lambda x: -x[1])
+                Hit(memory=h.memory, score=final_s, cosine_sim=h.cosine_sim)
+                for h, final_s in sorted(blended, key=lambda x: -x[1])
             ]
 
         hits = hits[:top_k]
