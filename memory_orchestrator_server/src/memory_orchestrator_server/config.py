@@ -15,9 +15,9 @@ class Settings(BaseSettings):
 
     db_dsn: str = Field(default="postgresql+asyncpg://postgres:1234@localhost:5432/memory_orchestrator")
     http_port: int = 8765
-    embed_model: str = "BAAI/bge-small-zh-v1.5"
-    embed_cache_dir: str = "models"
-    embed_dim: int = 512
+    embed_model: str = "BAAI/bge-m3"
+    embed_dim: int = 1024
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
     log_level: str = "DEBUG"
 
     extraction_base_url: str = Field(default="", validation_alias="MO_EXTRACTION_BASE_URL")
