@@ -16,24 +16,31 @@ services:
   migrate:
     build: .
     command: >
-      sh -c "alembic upgrade head"
+      sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
     environment:
       MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
     depends_on:
       db:
         condition: service_healthy
 
-  api:
+  server:
     build: .
     ports:
       - "${MO_HTTP_PORT:-8765}:8765"
     environment:
       MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
       MO_HTTP_PORT: "8765"
+      MO_EMBED_MODEL: /models/BAAI/bge-m3
+      MO_RERANK_MODEL: /models/BAAI/bge-reranker-v2-m3
       MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL:-}
       MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL:-gpt-4o-mini}
       MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY:-}
+      TRANSFORMERS_OFFLINE: "1"
       HF_HUB_OFFLINE: "1"
+    volumes:
+      # Mount pre-downloaded models from the host.
+      # Override path via:  MO_MODELS_DIR=/path/to/models docker compose up
+      - ${MO_MODELS_DIR:-./memory_orchestrator_server/models}:/models:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

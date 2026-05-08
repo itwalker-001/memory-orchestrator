@@ -3,23 +3,27 @@ FROM python:3.12-slim
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
-COPY src/ src/
-COPY src/memory_orchestrator_server/alembic/ src/memory_orchestrator_server/alembic/
-COPY alembic.ini ./
-COPY src/memory_orchestrator_server/frontend/dist/ src/memory_orchestrator_server/frontend/dist/
+# CPU-only torch — avoids ~2 GB CUDA wheels
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-RUN pip install --no-cache-dir -e .
+# Copy both packages; mcp first so server's local dependency is already satisfied
+COPY memory_orchestrator_mcp/ ./memory_orchestrator_mcp/
+COPY memory_orchestrator_server/ ./memory_orchestrator_server/
 
-ENV HF_HUB_OFFLINE=1
+RUN pip install --no-cache-dir ./memory_orchestrator_mcp \
+ && pip install --no-cache-dir ./memory_orchestrator_server
+
+# Models are mounted at runtime (~3.5 GB — not baked into image).
+# Download on the host first:  cd memory_orchestrator_server && uv run python download_models.py
+ENV MO_EMBED_MODEL=/models/BAAI/bge-m3
+ENV MO_RERANK_MODEL=/models/BAAI/bge-reranker-v2-m3
 ENV MO_HTTP_PORT=8765
-
-# pre-download embedding model at build time
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-zh-v1.5')" || true
+ENV TRANSFORMERS_OFFLINE=1
+ENV HF_HUB_OFFLINE=1
 
 EXPOSE 8765
 
-CMD ["mo", "serve-http"]
+CMD ["mo-server", "serve-http"]
