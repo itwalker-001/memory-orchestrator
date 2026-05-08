@@ -6,6 +6,7 @@ from datetime import timedelta
 from sqlalchemy import delete as sa_delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from memory_orchestrator_server import reranker
 from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory, Project, SystemSetting
 from memory_orchestrator_server.scoring import hybrid_score, truncate_by_budget
 from memory_orchestrator_server.time_utils import utc_now
@@ -207,6 +208,7 @@ class MemoryRepository:
         types: list[str] | None = None,
         top_k: int = 8,
         record_hits: bool = False,
+        query: str | None = None,
     ) -> list[Hit]:
         resolved_project_ids = await self._resolve_project_refs(project_ids)
         if not resolved_project_ids:
@@ -235,6 +237,19 @@ class MemoryRepository:
             )
             hits.append(Hit(memory=mem, score=score, cosine_sim=sim))
         hits.sort(key=lambda h: -h.score)
+
+        cfg = await self.get_settings()
+        if query and cfg.get("rerank_enabled", "false").lower() == "true":
+            texts = [
+                f"{h.memory.name} {h.memory.description} {h.memory.content}"
+                for h in hits
+            ]
+            scores = reranker.rerank_scores(query, texts)
+            hits = [
+                Hit(memory=h.memory, score=float(s), cosine_sim=h.cosine_sim)
+                for h, s in sorted(zip(hits, scores), key=lambda x: -x[1])
+            ]
+
         hits = hits[:top_k]
 
         if record_hits and hits:

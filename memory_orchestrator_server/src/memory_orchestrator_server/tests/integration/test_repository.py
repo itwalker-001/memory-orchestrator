@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock, patch
 from memory_orchestrator_server.repository import MemoryRepository
 
 
@@ -61,9 +62,9 @@ async def test_delete_soft_supersedes_self(session):
 @pytest.mark.asyncio
 async def test_find_duplicates_by_embedding(session):
     repo = MemoryRepository(session)
-    v1 = [1.0] + [0.0] * 511
+    v1 = [1.0] + [0.0] * 1023
     # v1_near: [1.0, 0.3, 0, 0, ...] — cosine with v1 = 1/sqrt(1.09) ≈ 0.958 > 0.92
-    v1_near = [1.0, 0.3] + [0.0] * 510
+    v1_near = [1.0, 0.3] + [0.0] * 1022
     await repo.save(
         type="user", name="a", description="x", content="x",
         project_id="*", source="explicit", embedding=v1,
@@ -78,8 +79,8 @@ async def test_find_duplicates_by_embedding(session):
 @pytest.mark.asyncio
 async def test_find_duplicates_respects_threshold(session):
     repo = MemoryRepository(session)
-    v = [1.0] + [0.0] * 511
-    orthogonal = [0.0, 1.0] + [0.0] * 510  # cosine with v = 0, below any positive threshold
+    v = [1.0] + [0.0] * 1023
+    orthogonal = [0.0, 1.0] + [0.0] * 1022  # cosine with v = 0, below any positive threshold
     await repo.save(
         type="user", name="a", description="x", content="x",
         project_id="*", source="explicit", embedding=v,
@@ -93,8 +94,8 @@ async def test_find_duplicates_respects_threshold(session):
 @pytest.mark.asyncio
 async def test_vector_search_returns_scored_results(session):
     repo = MemoryRepository(session)
-    v1 = [1.0] + [0.0] * 511
-    v2 = [0.0, 1.0] + [0.0] * 510
+    v1 = [1.0] + [0.0] * 1023
+    v2 = [0.0, 1.0] + [0.0] * 1022
     await repo.save(
         type="user", name="first", description="x", content="x",
         project_id="*", source="explicit", embedding=v1,
@@ -112,7 +113,7 @@ async def test_vector_search_returns_scored_results(session):
 @pytest.mark.asyncio
 async def test_vector_search_filters_project(session):
     repo = MemoryRepository(session)
-    v = [1.0] + [0.0] * 511
+    v = [1.0] + [0.0] * 1023
     await repo.save(type="user", name="g", description="x", content="x",
                     project_id="*", source="explicit", embedding=v)
     await repo.save(type="project", name="p", description="x", content="x",
@@ -124,7 +125,7 @@ async def test_vector_search_filters_project(session):
 @pytest.mark.asyncio
 async def test_vector_search_updates_hit_count(session):
     repo = MemoryRepository(session)
-    v = [1.0] + [0.0] * 511
+    v = [1.0] + [0.0] * 1023
     saved = await repo.save(
         type="user", name="x", description="x", content="x",
         project_id="*", source="explicit", embedding=v,
@@ -163,3 +164,36 @@ async def test_build_context_scopes_project_memories(session):
     md = await repo.build_context(project_id="github.com/a/b", budget_tokens=2000)
     assert "no-mocks" in md
     assert "other" not in md
+
+
+@pytest.mark.asyncio
+async def test_vector_search_rerank_changes_order(session):
+    """When reranking is enabled, cross-encoder scores override hybrid ordering."""
+    repo = MemoryRepository(session)
+    v1 = [1.0] + [0.0] * 1023
+    v2 = [0.0, 1.0] + [0.0] * 1022
+    await repo.save(
+        type="user", name="first-cosine", description="best cosine match",
+        content="best cosine", project_id="*", source="explicit", embedding=v1,
+    )
+    await repo.save(
+        type="user", name="second-cosine", description="second best cosine",
+        content="second best", project_id="*", source="explicit", embedding=v2,
+    )
+    # Without rerank: first-cosine wins (higher cosine sim to v1)
+    hits_no_rerank = await repo.search(
+        query_embedding=v1, project_ids=["*"], top_k=2
+    )
+    assert hits_no_rerank[0].memory.name == "first-cosine"
+
+    # With rerank: mock reranker to prefer second-cosine
+    def mock_rerank_scores(query, texts):
+        return [0.1, 0.9]
+
+    with patch("memory_orchestrator_server.repository.reranker") as mock_mod:
+        mock_mod.rerank_scores.side_effect = mock_rerank_scores
+        with patch.object(repo, "get_settings", new=AsyncMock(return_value={"rerank_enabled": "true", "search_top_k": "8"})):
+            hits_reranked = await repo.search(
+                query_embedding=v1, project_ids=["*"], top_k=2, query="test query"
+            )
+    assert hits_reranked[0].memory.name == "second-cosine"
