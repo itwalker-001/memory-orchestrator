@@ -146,13 +146,19 @@
               <input type="checkbox" class="row-check" ref="selectAllRef"
                 :checked="allSelected" @change="toggleSelectAll" />
             </th>
-            <th class="source-col"></th>
-            <th>{{ t('Project') }}</th>
-            <th class="type-col">{{ t('Type') }}</th>
-            <th>{{ t('Name') }}</th>
-            <th>{{ t('Description') }}</th>
-            <th class="sortable col-hits" @click="toggleSort('hits')">{{ t('Hits') }}<span class="sort-icon" v-if="sortBy === 'hits'">{{ sortDesc ? '↓' : '↑' }}</span></th>
-            <th class="sortable col-updated" @click="toggleSort('time')">{{ t('Updated') }}<span class="sort-icon" v-if="sortBy === 'time'">{{ sortDesc ? '↓' : '↑' }}</span></th>
+            <th class="source-col" :title="t('Source')"></th>
+            <!-- project: folder icon -->
+            <th><span class="th-inner"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>{{ t('Project') }}</span></th>
+            <th class="type-col"><span class="th-inner"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>{{ t('Type') }}</span></th>
+            <th><span class="th-inner"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>{{ t('Name') }}</span></th>
+            <!-- description: align-left icon -->
+            <th><span class="th-inner"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>{{ t('Description') }}</span></th>
+            <th class="sortable col-hits" @click="toggleSort('hits')">
+              <span class="th-inner"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>{{ t('Hits') }}<span class="sort-icon" v-if="sortBy === 'hits'">{{ sortDesc ? '↓' : '↑' }}</span></span>
+            </th>
+            <th class="sortable col-updated" @click="toggleSort('time')">
+              <span class="th-inner"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{{ t('Updated') }}<span class="sort-icon" v-if="sortBy === 'time'">{{ sortDesc ? '↓' : '↑' }}</span></span>
+            </th>
             <th class="col-actions"></th>
           </tr>
         </thead>
@@ -175,7 +181,7 @@
               <td class="name" @mouseenter="showTip($event, m.name)" @mouseleave="hideTip">{{ m.name }}</td>
               <td><div class="desc" @mouseenter="showTip($event, m.description)" @mouseleave="hideTip">{{ m.description }}</div></td>
               <td class="hit col-hits" :class="{ 'hit-active': m.hit_count > 0 }">
-                <span v-if="m.hit_count > 0" class="hit-pill">{{ m.hit_count }}</span>
+                <span v-if="m.hit_count > 0" class="hit-num">{{ m.hit_count }}</span>
                 <span v-else class="hit-zero">—</span>
               </td>
               <td class="date col-updated"><span :title="fmtDate(m.updated_at)">{{ relTime(m.updated_at) }}</span></td>
@@ -235,9 +241,8 @@
   </div>
   <Teleport to="body">
     <div v-if="tip.visible" class="tooltip-popup" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
-    <div v-if="detailTarget" class="write-overlay">
-      <div class="write-panel detail-panel">
-        <div :class="['type-stripe', detailTarget.type]"></div>
+    <div v-if="detailTarget" class="modal-overlay" @click.self="detailTarget = null">
+      <div class="detail-modal">
         <div :class="['write-header', 'type-header-' + detailTarget.type]">
           <div style="display:flex;align-items:center;gap:8px;">
             <span :class="['tag', detailTarget.type]" style="font-size:10px;padding:1px 6px">{{ t(detailTarget.type) }}</span>
@@ -257,7 +262,7 @@
             </button>
           </div>
         </div>
-        <div class="write-body">
+        <div class="detail-modal-body">
           <div class="detail-hero">
             <div class="detail-hero-name">{{ detailTarget.name }}</div>
             <div v-if="detailTarget.description" class="detail-hero-desc">{{ detailTarget.description }}</div>
@@ -539,9 +544,8 @@
         </div>
       </div>
     </div>
-    <div v-if="editTarget" class="write-overlay">
-      <div class="write-panel">
-        <div :class="['type-stripe', editTarget?.type]"></div>
+    <div v-if="editTarget" class="modal-overlay" @click.self="editTarget = null">
+      <div class="write-modal">
         <div :class="['write-header', editTarget?.type ? 'type-header-' + editTarget.type : '']">
           <div class="write-header-left">
             <div style="display:flex;align-items:center;gap:8px;">
@@ -596,8 +600,8 @@
         </div>
       </div>
     </div>
-    <div v-if="writeOpen" class="write-overlay">
-      <div class="write-panel">
+    <div v-if="writeOpen" class="modal-overlay" @click.self="writeOpen = false">
+      <div class="write-modal">
         <div class="write-header">
           <span class="write-title">{{ t('New Memory') }}</span>
           <div class="write-header-right">
@@ -1968,10 +1972,19 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 thead { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: 0 1px 0 var(--border), 0 10px 22px -18px var(--shadow); }
 th {
   padding: 5px 10px; text-align: left;
-  color: var(--text-muted); font-weight: 500; font-size: 11px;
-  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); font-weight: 600; font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.07em;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.th-inner {
+  display: inline-flex; align-items: center; gap: 5px;
+}
+[data-theme="dark"] th {
+  color: var(--accent);
+  opacity: 0.55;
+  border-bottom-color: rgba(0,212,138,0.18);
 }
 
 tbody tr {
@@ -1987,6 +2000,16 @@ tbody tr.type-feedback td.col-check { border-left: 3px solid var(--green); }
 tbody tr.type-project td.col-check { border-left: 3px solid var(--blue); }
 tbody tr.type-user td.col-check { border-left: 3px solid var(--purple); }
 tbody tr.type-reference td.col-check { border-left: 3px solid var(--orange); }
+[data-theme="dark"] tbody tr.type-feedback td.col-check { box-shadow: inset 3px 0 8px -2px rgba(0,212,138,0.35); }
+[data-theme="dark"] tbody tr.type-project td.col-check { box-shadow: inset 3px 0 8px -2px rgba(0,200,245,0.35); }
+[data-theme="dark"] tbody tr.type-user td.col-check { box-shadow: inset 3px 0 8px -2px rgba(176,144,248,0.35); }
+[data-theme="dark"] tbody tr.type-reference td.col-check { box-shadow: inset 3px 0 8px -2px rgba(240,160,48,0.35); }
+/* Row hover — glow left line */
+[data-theme="dark"] tbody tr.type-feedback:hover td { box-shadow: none; }
+[data-theme="dark"] tbody tr.type-feedback:hover td.col-check { box-shadow: inset 3px 0 12px -1px rgba(0,212,138,0.6); }
+[data-theme="dark"] tbody tr.type-project:hover td.col-check { box-shadow: inset 3px 0 12px -1px rgba(0,200,245,0.6); }
+[data-theme="dark"] tbody tr.type-user:hover td.col-check { box-shadow: inset 3px 0 12px -1px rgba(176,144,248,0.6); }
+[data-theme="dark"] tbody tr.type-reference:hover td.col-check { box-shadow: inset 3px 0 12px -1px rgba(240,160,48,0.6); }
 
 td {
   padding: 4px 10px;
@@ -2006,6 +2029,10 @@ tbody tr:last-child td { border-bottom: none; }
 .tag.project   { background: var(--blue-dim);   color: var(--blue);   border-color: var(--blue-border); }
 .tag.user      { background: var(--purple-dim); color: var(--purple); border-color: var(--purple-border); }
 .tag.reference { background: var(--orange-dim); color: var(--orange); border-color: var(--orange-border); }
+[data-theme="dark"] .tag.feedback { box-shadow: 0 0 8px rgba(0,212,138,0.20); }
+[data-theme="dark"] .tag.project   { box-shadow: 0 0 8px rgba(0,200,245,0.20); }
+[data-theme="dark"] .tag.user      { box-shadow: 0 0 8px rgba(176,144,248,0.20); }
+[data-theme="dark"] .tag.reference { box-shadow: 0 0 8px rgba(240,160,48,0.20); }
 
 .project-cell { max-width: 180px; }
 .type-col { }
@@ -2025,9 +2052,11 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .source-icon { width: 15px; height: 15px; display: block; opacity: 0.95; }
 .name {
-  font-weight: 500; max-width: 180px; color: var(--text-primary);
+  font-weight: 600; max-width: 180px; color: var(--text-primary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+[data-theme="dark"] .name { color: #D8F0FA; }
+[data-theme="dark"] tbody tr:hover .name { color: #fff; }
 .desc {
   color: var(--text-secondary); max-width: 320px;
   display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
@@ -2042,7 +2071,11 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .imp-fill {
   height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
   transition: width 300ms ease;
+}
+[data-theme="dark"] .imp-fill {
+  box-shadow: 0 0 6px var(--accent);
 }
 .imp-num { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 
@@ -2054,7 +2087,18 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 2px 8px; border-radius: 4px;
   font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
   min-width: 28px; text-align: center;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
 }
+[data-theme="dark"] .hit-pill {
+  box-shadow: 0 0 8px rgba(0,200,245,0.25);
+}
+.hit-num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+[data-theme="dark"] .hit-num { color: rgba(0,200,245,0.7); }
 .hit-zero { color: var(--text-muted); }
 
 .date { color: var(--text-muted); white-space: nowrap; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -2265,27 +2309,106 @@ pre {
 }
 
 .md-body {
-  color: var(--text-secondary); font-size: 13px; line-height: 1.7;
-  background: var(--bg); padding: 10px 12px;
+  color: var(--text-secondary); font-size: 13px; line-height: 1.75;
+  background: var(--bg); padding: 12px 14px;
   border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
 }
-.md-body p { margin: 0 0 8px; }
+/* paragraphs */
+.md-body p { margin: 0 0 9px; }
 .md-body p:last-child { margin-bottom: 0; }
-.md-body h1,.md-body h2,.md-body h3 { color: var(--text-primary); font-weight: 600; margin: 12px 0 6px; }
+
+/* headings — monospace + left accent bar */
+.md-body h1,.md-body h2,.md-body h3 {
+  color: var(--text-primary); font-weight: 700; margin: 14px 0 6px;
+  font-family: 'JetBrains Mono','Cascadia Code',ui-monospace,monospace;
+  display: flex; align-items: center; gap: 8px; letter-spacing: 0.02em;
+}
+.md-body h1::before,.md-body h2::before,.md-body h3::before {
+  content: ''; display: inline-block; flex-shrink: 0;
+  background: var(--accent); border-radius: 1px;
+  box-shadow: 0 0 6px var(--accent);
+}
+.md-body h1::before { width: 3px; height: 15px; }
+.md-body h2::before { width: 3px; height: 13px; }
+.md-body h3::before { width: 2px; height: 11px; opacity: 0.7; }
 .md-body h1 { font-size: 15px; } .md-body h2 { font-size: 14px; } .md-body h3 { font-size: 13px; }
-.md-body ul { list-style-type: disc; padding-left: 20px; margin: 6px 0 10px; }
-.md-body ol { list-style-type: decimal; padding-left: 20px; margin: 6px 0 10px; }
-.md-body ul ul { list-style-type: circle; margin: 2px 0 2px; }
-.md-body ul ul ul { list-style-type: square; }
-.md-body li { margin: 3px 0; line-height: 1.6; display: list-item; }
-.md-body code { background: var(--surface-2); border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--accent); }
-.md-body pre { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
-.md-body pre code { background: none; border: none; padding: 0; color: var(--text-primary); }
-.md-body blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--text-muted); margin: 6px 0; }
-.md-body strong { color: var(--text-primary); font-weight: 600; }
-.md-body a { color: var(--accent); text-decoration: none; }
-.md-body a:hover { text-decoration: underline; }
-.md-body hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+
+/* lists — tech markers */
+.md-body ul { list-style: none; padding-left: 16px; margin: 6px 0 10px; }
+.md-body ol { list-style-type: decimal; padding-left: 22px; margin: 6px 0 10px; color: var(--accent); }
+.md-body ol li { color: var(--text-secondary); }
+.md-body ul ul { margin: 2px 0 2px; }
+.md-body li { margin: 4px 0; line-height: 1.65; display: list-item; position: relative; }
+.md-body ul > li::before {
+  content: '›'; position: absolute; left: -14px;
+  color: var(--accent); font-weight: 700; font-size: 13px; line-height: 1.65;
+}
+.md-body ul ul > li::before { content: '·'; left: -12px; opacity: 0.6; }
+
+/* inline code — glow */
+.md-body code {
+  background: var(--surface-2); border: 1px solid var(--border);
+  padding: 1px 5px; border-radius: 3px;
+  font-family: 'JetBrains Mono','Cascadia Code',ui-monospace,monospace;
+  font-size: 11.5px; color: var(--accent-strong);
+  box-shadow: 0 0 6px rgba(0,212,138,0.18);
+}
+
+/* code blocks — terminal style */
+.md-body pre {
+  position: relative;
+  background: var(--bg-secondary, var(--bg));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 5px; padding: 12px 14px 10px;
+  overflow-x: auto; margin: 10px 0;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.15), 0 0 8px rgba(0,212,138,0.06);
+}
+.md-body pre::before {
+  content: '● ● ●'; position: absolute; top: 6px; right: 10px;
+  font-size: 8px; letter-spacing: 3px;
+  color: var(--border); pointer-events: none;
+}
+.md-body pre code {
+  background: none; border: none; padding: 0;
+  color: var(--text-primary); box-shadow: none;
+  font-size: 12px; line-height: 1.6;
+}
+
+/* blockquote — accent glow strip */
+.md-body blockquote {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-dim);
+  padding: 7px 12px; color: var(--text-muted);
+  margin: 8px 0; border-radius: 0 4px 4px 0;
+  box-shadow: inset 0 0 12px rgba(0,212,138,0.04);
+  font-style: italic;
+}
+
+/* strong — accent color */
+.md-body strong { color: var(--accent-strong); font-weight: 700; }
+
+/* links */
+.md-body a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(0,212,138,0.3); }
+.md-body a:hover { border-bottom-color: var(--accent); }
+
+/* table */
+.md-body table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+.md-body th {
+  background: var(--accent-dim); color: var(--accent);
+  font-family: 'JetBrains Mono',ui-monospace,monospace; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 6px 10px; border: 1px solid var(--border); text-align: left;
+}
+.md-body td { padding: 5px 10px; border: 1px solid var(--border-subtle); color: var(--text-secondary); vertical-align: top; }
+.md-body tr:nth-child(even) td { background: rgba(0,0,0,0.04); }
+
+/* hr — gradient line */
+.md-body hr {
+  border: none; height: 1px; margin: 12px 0;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  opacity: 0.4;
+}
 
 .meta-row {
   display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
@@ -2378,11 +2501,19 @@ pre {
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(0,212,138,0.22);
+  box-shadow: 0 0 4px rgba(0,212,138,0.4);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,212,138,0.5);
+}
+[data-theme="dark"] * { scrollbar-color: rgba(0,212,138,0.25) transparent; }
 
 body { margin: 0; }
 
@@ -2713,23 +2844,16 @@ body { margin: 0; }
 .type-stripe.user     { background: var(--purple); }
 .type-stripe.reference { background: var(--orange); }
 
-/* ── Write panel (Linear-style slide-in) ── */
-@keyframes write-panel-in {
-  from { opacity: 0; transform: translateX(24px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-.write-overlay {
-  position: fixed; inset: 0; z-index: 1000;
-  display: flex; justify-content: flex-end;
-  pointer-events: none;
-}
-.write-panel {
-  width: 480px; max-width: 95vw;
-  background: var(--surface); border-left: 1px solid var(--border);
+/* ── Write / Edit modal (centered) ── */
+.write-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 60vw; max-width: 60vw;
+  max-height: 88vh;
   display: flex; flex-direction: column;
-  height: 100%; box-shadow: -18px 0 52px var(--shadow), 0 0 36px -24px var(--glow);
-  animation: write-panel-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  pointer-events: all;
+  box-shadow: 0 24px 70px var(--shadow), 0 0 0 1px rgba(0,212,138,0.06), 0 0 40px -28px var(--glow);
+  animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 .write-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -2755,8 +2879,21 @@ body { margin: 0; }
 .write-header.type-header-project  { background: linear-gradient(90deg, var(--blue-dim),  transparent 72%); }
 .write-header.type-header-user     { background: linear-gradient(90deg, var(--purple-dim), transparent 72%); }
 .write-header.type-header-reference { background: linear-gradient(90deg, var(--orange-dim), transparent 72%); }
-/* detail panel same width as edit panel */
-.detail-panel { width: 480px; }
+/* detail modal — centered, wider */
+.detail-modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 60vw; max-width: 60vw;
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 24px 70px var(--shadow), 0 0 0 1px rgba(0,212,138,0.06), 0 0 40px -28px var(--glow);
+  animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+.detail-modal-body {
+  flex: 1; overflow-y: auto;
+  padding: 0 20px 20px;
+}
 /* inline edit button in panel header */
 .btn-header-edit {
   background: transparent; color: var(--text-muted);
