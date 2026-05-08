@@ -12,6 +12,7 @@ from memory_orchestrator_server.db_check import (
     format_database_startup_error,
 )
 from memory_orchestrator_server.embedder import ensure_loaded as ensure_embedder
+from memory_orchestrator_server.reranker import ensure_loaded as ensure_reranker
 from memory_orchestrator_server.routers.hooks import make_hooks_router
 from memory_orchestrator_server.routers.mcp import make_mcp_http_router
 from memory_orchestrator_server.routers.ui import make_ui_router
@@ -40,6 +41,7 @@ def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: boo
             raise
         if not skip_embedder:
             ensure_embedder()
+            ensure_reranker()
 
     app.include_router(make_hooks_router(engine=engine, maker=maker, skip_embedder=skip_embedder))
     app.include_router(make_ui_router(maker=maker))

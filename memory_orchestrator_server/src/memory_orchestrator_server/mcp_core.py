@@ -54,7 +54,10 @@ async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID
     else:
         project_ids = list({project_uuid, GLOBAL_PROJECT_ID})
     qvec = await embed_one(query)
-    hits = await repo.search(query_embedding=qvec, project_ids=project_ids, types=types, top_k=top_k, record_hits=True)
+    hits = await repo.search(
+        query_embedding=qvec, project_ids=project_ids, types=types,
+        top_k=top_k, record_hits=True, query=query,
+    )
     return [_memory_to_dict(h.memory, score=h.score) for h in hits]
 
 

@@ -17,7 +17,7 @@ from memory_orchestrator_server.mcp_contract import (
 )
 from memory_orchestrator_server.repository import MemoryRepository
 
-FAKE_EMB = [1.0] + [0.0] * 511
+FAKE_EMB = [1.0] + [0.0] * 1023
 PATCH = "memory_orchestrator_server.mcp_core.embed_one"
 
 
