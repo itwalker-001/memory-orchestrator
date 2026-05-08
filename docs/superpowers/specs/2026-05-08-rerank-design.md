@@ -44,7 +44,7 @@ pgvector cosine → top_k×3 candidates → hybrid_score sort → top_k   (uncha
 | File | Change |
 |------|--------|
 | `embedder.py` | Replace `fastembed.TextEmbedding` with `FlagEmbedding.BGEM3FlagModel`. Singleton loaded at module import. `embed_one(text) → list[float]`, `embed_batch(texts) → list[list[float]]` signatures unchanged. |
-| `reranker.py` | **New.** `FlagReranker` singleton. `rerank(query: str, candidates: list[Memory], top_k: int) → list[ScoredMemory]`. Returns hybrid-score order unchanged if reranker is disabled or raises. |
+| `reranker.py` | **New.** `FlagReranker` singleton. `rerank(query: str, candidates: list[SearchHit], top_k: int) → list[SearchHit]` (same `SearchHit` type as existing search results, with `.score` replaced by cross-encoder score). Returns hybrid-score order unchanged if reranker is disabled or raises. |
 | `repository.py` | `search(query_embedding, query, project_ids, types, top_k, record_hits)` — adds `query: str \| None = None`. When `rerank_enabled` and `query` provided, replaces hybrid sort with `reranker.rerank()`. |
 | `mcp_core.py` | `handle_search_memory` passes `args["query"]` to `repo.search()`. |
 | `routers/hooks.py` | `build_context()` passes the hook query string to `repo.search()`. |
@@ -77,7 +77,7 @@ uv run alembic upgrade head          # vector(512) → vector(1024), existing ro
 uv run mo-server migrate-embeddings  # re-embed all memories in batches of 32
 ```
 
-During migration, memories with NULL embeddings are excluded from vector search (exact-match fallback remains). Progress is resumable: `embed_migration_offset` in `system_settings` tracks the last processed row ID.
+During migration, memories with NULL embeddings are silently excluded from vector search results — they won't appear in MCP search or hook context until re-embedded. The UI's text filter (ILIKE) is unaffected. Progress is resumable: `embed_migration_offset` in `system_settings` tracks the last processed row ID.
 
 ---
 
