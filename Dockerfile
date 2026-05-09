@@ -1,4 +1,17 @@
+# TORCH_INDEX controls which torch variant is installed:
+#   cpu  (default) — ~250 MB, no GPU
+#   cu121           — CUDA 12.1, requires nvidia-container-toolkit on host
+#   cu124           — CUDA 12.4
+#
+# Example GPU build:
+#   docker build --build-arg TORCH_INDEX=cu121 -t mo-server:gpu .
+#
+# The running container automatically uses GPU if available (torch.cuda.is_available()).
+ARG TORCH_INDEX=cpu
+
 FROM python:3.12-slim
+
+ARG TORCH_INDEX
 
 WORKDIR /app
 
@@ -6,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# CPU-only torch — avoids ~2 GB CUDA wheels
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch \
+    --index-url https://download.pytorch.org/whl/${TORCH_INDEX}
 
 # Copy both packages; mcp first so server's local dependency is already satisfied
 COPY memory_orchestrator_mcp/ ./memory_orchestrator_mcp/
