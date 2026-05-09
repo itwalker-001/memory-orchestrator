@@ -66,6 +66,7 @@ class ApiToken(Base):
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     owner_user: Mapped[str | None] = mapped_column(Text)
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -2,7 +2,20 @@ from __future__ import annotations
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import HTTPException as FastAPIHTTPException
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+
+class SPAStaticFiles(StaticFiles):
+    """Serve index.html for any path that doesn't match a static file (SPA fallback)."""
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except (StarletteHTTPException, FastAPIHTTPException) as exc:
+            if getattr(exc, "status_code", None) == 404:
+                return await super().get_response("index.html", scope)
+            raise
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from memory_orchestrator_server.config import get_settings
@@ -54,6 +67,6 @@ def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: boo
 
     _dist = Path(__file__).parent / "frontend" / "dist"
     if _dist.exists():
-        app.mount("/ui", StaticFiles(directory=str(_dist), html=True), name="ui")
+        app.mount("/ui", SPAStaticFiles(directory=str(_dist), html=True), name="ui")
 
     return app

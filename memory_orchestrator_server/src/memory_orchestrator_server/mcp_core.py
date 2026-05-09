@@ -17,7 +17,6 @@ from memory_orchestrator_server.mcp_contract import (
     RESOURCE_GUIDE,
     RESOURCE_PROJECT_PREFIX,
     RESOURCE_RECENT,
-    TOOLS,
     list_memory_resource_templates,
     list_memory_resources,
     memory_resource_guide,

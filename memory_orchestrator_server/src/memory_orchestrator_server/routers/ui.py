@@ -3,7 +3,8 @@ import json
 import uuid
 from pathlib import Path
 import httpx
-from fastapi import APIRouter, Body, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func, update as sa_update
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -84,7 +85,132 @@ class BatchMoveBody(BaseModel):
 
 
 def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
-    router = APIRouter(prefix="/api")
+    from memory_orchestrator_server.auth_tokens import (
+        TOKEN_KIND_UI, UI_SESSION_TTL, auth_dependency, check_token_valid, _db_has_tokens, env_token_for_kind,
+    )
+
+    outer = APIRouter()
+    public = APIRouter(prefix="/api")
+    _auth_dep = auth_dependency(maker=maker, kind=TOKEN_KIND_UI)
+    router = APIRouter(prefix="/api", dependencies=[Depends(_auth_dep)])
+
+    # ── Public: login / logout ────────────────────────────────────────────────
+
+    @public.post("/login", status_code=200)
+    async def login(body: dict = Body(...)) -> JSONResponse:
+        token = str(body.get("token") or "").strip()
+        async with maker() as s:
+            env_tok = env_token_for_kind(TOKEN_KIND_UI)
+            db_has = await _db_has_tokens(s, TOKEN_KIND_UI)
+            auth_required = bool(env_tok or db_has)
+            if auth_required:
+                if not token:
+                    raise HTTPException(status_code=401, detail="token required")
+                if not await check_token_valid(s, TOKEN_KIND_UI, token):
+                    raise HTTPException(status_code=401, detail="invalid token")
+        response = JSONResponse(content={"ok": True})
+        if token:
+            response.set_cookie(
+                key="mo_ui_session",
+                value=token,
+                httponly=True,
+                samesite="strict",
+                path="/",
+                max_age=UI_SESSION_TTL,
+            )
+        return response
+
+    @public.post("/logout", status_code=200)
+    async def logout() -> JSONResponse:
+        response = JSONResponse(content={"ok": True})
+        response.delete_cookie(key="mo_ui_session", path="/", samesite="strict")
+        return response
+
+    # ── Token management (protected) ─────────────────────────────────────────
+
+    @router.get("/tokens")
+    async def list_tokens() -> list[dict]:
+        from memory_orchestrator_server.models import ApiToken
+        async with maker() as s:
+            result = await s.execute(
+                select(ApiToken).where(ApiToken.revoked_at.is_(None)).order_by(ApiToken.created_at)
+            )
+            rows = result.scalars().all()
+        return [
+            {
+                "id": str(t.id),
+                "name": t.name,
+                "kind": t.kind,
+                "enabled": t.enabled,
+                "created_at": isoformat_utc(t.created_at),
+                "last_used_at": isoformat_utc(t.last_used_at) if t.last_used_at else None,
+            }
+            for t in rows
+        ]
+
+    class TokenCreate(BaseModel):
+        kind: str
+        name: str
+
+    class TokenPatch(BaseModel):
+        enabled: bool | None = None
+        name: str | None = None
+
+    @router.post("/tokens", status_code=201)
+    async def create_token(body: TokenCreate = Body(...)) -> dict:
+        import hashlib
+        import secrets
+        from memory_orchestrator_server.models import ApiToken
+
+        if body.kind not in ("ui_admin", "mcp_client"):
+            raise HTTPException(status_code=422, detail="kind must be ui_admin or mcp_client")
+        raw = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw.encode()).hexdigest()
+        async with maker() as s:
+            existing = (await s.execute(
+                select(ApiToken).where(
+                    ApiToken.name == body.name,
+                    ApiToken.kind == body.kind,
+                    ApiToken.revoked_at.is_(None),
+                ).limit(1)
+            )).scalars().first()
+            if existing is not None:
+                existing.token_hash = token_hash
+                tid = str(existing.id)
+                action = "rotated"
+            else:
+                tok = ApiToken(name=body.name, kind=body.kind, token_hash=token_hash)
+                s.add(tok)
+                await s.flush()
+                tid = str(tok.id)
+                action = "created"
+            await s.commit()
+        return {"id": tid, "token": raw, "action": action}
+
+    @router.patch("/tokens/{token_id}", status_code=200)
+    async def patch_token(token_id: uuid.UUID, body: TokenPatch = Body(...)) -> dict:
+        from memory_orchestrator_server.models import ApiToken
+        async with maker() as s:
+            tok = await s.get(ApiToken, token_id)
+            if not tok or tok.revoked_at is not None:
+                raise HTTPException(status_code=404, detail="not found")
+            if body.enabled is not None:
+                tok.enabled = body.enabled
+            if body.name is not None:
+                tok.name = body.name
+            await s.commit()
+        return {"ok": True}
+
+    @router.delete("/tokens/{token_id}", status_code=200)
+    async def revoke_token(token_id: uuid.UUID) -> dict:
+        from memory_orchestrator_server.models import ApiToken
+        async with maker() as s:
+            tok = await s.get(ApiToken, token_id)
+            if not tok or tok.revoked_at is not None:
+                raise HTTPException(status_code=404, detail="not found")
+            tok.revoked_at = utc_now()
+            await s.commit()
+        return {"ok": True}
 
     async def _pg_dsn() -> str:
         async with maker() as s:
@@ -544,4 +670,44 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             raise HTTPException(status_code=500, detail=stderr.decode(errors="replace")[:1000])
         return {"ok": True}
 
-    return router
+    @public.post("/register", status_code=201)
+    async def register_client(body: dict = Body(...)) -> dict:
+        """Issue a new mcp_client token for a remote client (no auth required — localhost only).
+
+        Body: {"hostname": str, "ip": str, "client": str}
+        Returns: {"token": "<plaintext>"}
+        """
+        import hashlib
+        import secrets
+        from memory_orchestrator_server.models import ApiToken
+
+        hostname = str(body.get("hostname") or "unknown")
+        ip = str(body.get("ip") or "unknown")
+        client = str(body.get("client") or "unknown")
+        name = f"auto:{client}@{hostname}({ip})"
+
+        from datetime import datetime, timezone
+        from sqlalchemy import select
+
+        raw = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw.encode()).hexdigest()
+
+        async with maker() as s:
+            existing = (await s.execute(
+                select(ApiToken).where(
+                    ApiToken.name == name,
+                    ApiToken.kind == "mcp_client",
+                    ApiToken.revoked_at.is_(None),
+                )
+            )).scalar_one_or_none()
+            if existing is not None:
+                existing.token_hash = token_hash
+            else:
+                s.add(ApiToken(name=name, kind="mcp_client", token_hash=token_hash))
+            await s.commit()
+
+        return {"token": raw, "name": name}
+
+    outer.include_router(public)
+    outer.include_router(router)
+    return outer

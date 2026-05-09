@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import os
 
-from fastapi import Header, HTTPException
+from fastapi import Cookie, Header, HTTPException, Response
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -13,6 +13,7 @@ from memory_orchestrator_server.time_utils import utc_now
 
 TOKEN_KIND_MCP = "mcp_client"
 TOKEN_KIND_UI = "ui_admin"
+UI_SESSION_TTL = 1800  # 30 minutes; refreshed on every authenticated request
 
 
 def hash_token(token: str) -> str:
@@ -31,7 +32,7 @@ def bearer_token(authorization: str | None) -> str | None:
 
 def env_token_for_kind(kind: str) -> str | None:
     if kind == TOKEN_KIND_MCP:
-        token = os.environ.get("MO_MCP_TOKEN") or os.environ.get("MO_SERVER_TOKEN")
+        token = os.environ.get("MO_MCP_TOKEN")
     elif kind == TOKEN_KIND_UI:
         token = os.environ.get("MO_UI_TOKEN")
     else:
@@ -39,15 +40,33 @@ def env_token_for_kind(kind: str) -> str | None:
     return (token or "").strip() or None
 
 
+async def check_token_valid(session: AsyncSession, kind: str, token: str) -> bool:
+    """Return True if token is valid for kind (env or DB). No side effects."""
+    env = env_token_for_kind(kind)
+    if env and hmac.compare_digest(token, env):
+        return True
+    h = hash_token(token)
+    result = await session.execute(
+        select(ApiToken).where(
+            ApiToken.kind == kind,
+            ApiToken.token_hash == h,
+            ApiToken.revoked_at.is_(None),
+            ApiToken.enabled.is_(True),
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def require_token_kind(
     *,
     session: AsyncSession,
     kind: str,
     authorization: str | None,
+    cookie_token: str | None = None,
 ) -> ApiToken | None:
-    token = bearer_token(authorization)
+    token = bearer_token(authorization) or (cookie_token or "").strip() or None
     configured_env_token = env_token_for_kind(kind)
-    db_has_tokens = await _db_has_tokens(session)
+    db_has_tokens = await _db_has_tokens(session, kind)
 
     if configured_env_token or db_has_tokens:
         if not token:
@@ -64,6 +83,7 @@ async def require_token_kind(
             ApiToken.kind == kind,
             ApiToken.token_hash == token_hash,
             ApiToken.revoked_at.is_(None),
+            ApiToken.enabled.is_(True),
         )
     )
     api_token = result.scalar_one_or_none()
@@ -79,16 +99,45 @@ async def require_token_kind(
     return api_token
 
 
-async def _db_has_tokens(session: AsyncSession) -> bool:
+async def _db_has_tokens(session: AsyncSession, kind: str) -> bool:
     result = await session.execute(
-        select(ApiToken.id).where(ApiToken.revoked_at.is_(None)).limit(1)
+        select(ApiToken.id).where(
+            ApiToken.kind == kind,
+            ApiToken.revoked_at.is_(None),
+            ApiToken.enabled.is_(True),
+        ).limit(1)
     )
     return result.scalar_one_or_none() is not None
 
 
 def auth_dependency(*, maker: async_sessionmaker, kind: str):
-    async def _require(authorization: str | None = Header(default=None)) -> None:
-        async with maker() as session:
-            await require_token_kind(session=session, kind=kind, authorization=authorization)
-            await session.commit()
-    return _require
+    if kind == TOKEN_KIND_UI:
+        async def _require(
+            response: Response,
+            authorization: str | None = Header(default=None),
+            mo_ui_session: str | None = Cookie(default=None),
+        ) -> None:
+            async with maker() as session:
+                await require_token_kind(
+                    session=session, kind=kind,
+                    authorization=authorization,
+                    cookie_token=mo_ui_session,
+                )
+                await session.commit()
+            # Refresh cookie expiry on every authenticated request
+            if mo_ui_session and not bearer_token(authorization):
+                response.set_cookie(
+                    key="mo_ui_session",
+                    value=mo_ui_session,
+                    httponly=True,
+                    samesite="strict",
+                    path="/",
+                    max_age=UI_SESSION_TTL,
+                )
+        return _require
+    else:
+        async def _require(authorization: str | None = Header(default=None)) -> None:  # type: ignore[misc]
+            async with maker() as session:
+                await require_token_kind(session=session, kind=kind, authorization=authorization)
+                await session.commit()
+        return _require

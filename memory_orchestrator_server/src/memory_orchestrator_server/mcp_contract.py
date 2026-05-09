@@ -1,6 +1,31 @@
 from __future__ import annotations
+from dataclasses import dataclass, field
 
-from mcp.types import Resource, ResourceTemplate, Tool
+# Minimal dataclasses replacing mcp.types — server only needs the schemas,
+# not the full MCP protocol library.
+
+@dataclass
+class Tool:
+    name: str
+    description: str
+    inputSchema: dict = field(default_factory=dict)
+
+
+@dataclass
+class Resource:
+    name: str
+    uri: str
+    description: str = ""
+    mimeType: str = "text/plain"
+
+
+@dataclass
+class ResourceTemplate:
+    name: str
+    uriTemplate: str
+    description: str = ""
+    mimeType: str = "text/plain"
+
 
 TOOLS: list[Tool] = [
     Tool(name="search_memory", description="Retrieve memories by semantic similarity.",
@@ -26,16 +51,16 @@ RESOURCE_MIME = "text/markdown"
 def list_memory_resources() -> list[Resource]:
     return [
         Resource(name="Memory Orchestrator MCP guide", uri=RESOURCE_GUIDE, mimeType=RESOURCE_MIME,
-                 description="Read-only guide for memory-orchestrator. Writes are available through the MCP tool save_memory on this server, not resources/templates."),
+                 description="Read-only guide for memory-orchestrator."),
         Resource(name="Recent memories", uri=RESOURCE_RECENT, mimeType=RESOURCE_MIME,
-                 description="Read-only summary of recent memories. To write memories, call the save_memory tool from this MCP server."),
+                 description="Read-only summary of recent memories."),
     ]
 
 
 def list_memory_resource_templates() -> list[ResourceTemplate]:
     return [
         ResourceTemplate(name="Project memories", uriTemplate="memory://project/{slug}", mimeType=RESOURCE_MIME,
-                         description="Read-only summary of memories for a project slug. To write memories, call the save_memory tool from this MCP server with project_id."),
+                         description="Read-only summary of memories for a project slug."),
     ]
 
 
@@ -49,10 +74,6 @@ def memory_resource_guide() -> str:
         "- `save_memory` to write memories.",
         "- `promote_memory` to change importance or scope.",
         "- `delete_memory` to remove memories.", "",
-        "Call the `save_memory` tool from this `memory-orchestrator` MCP server. Some "
-        "clients may display that as `memory-orchestrator.save_memory`, but the tool "
-        "name exposed by this server is `save_memory`.", "",
-        "Resources are read-only discovery/context surfaces. Do not infer that writing is "
-        "unavailable because resources/templates are read-only; write by calling "
-        "the `save_memory` tool.",
+        "Call the `save_memory` tool from this `memory-orchestrator` MCP server.",
+        "Resources are read-only discovery/context surfaces.",
     ])

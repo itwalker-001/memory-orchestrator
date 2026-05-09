@@ -1,18 +1,10 @@
 from __future__ import annotations
 import asyncio
 import json
-import os
-import subprocess
 import sys
 from pathlib import Path
 import click
 
-from memory_orchestrator_server.client_adapters import install_codex, teardown_codex
-from memory_orchestrator_server.client_rules import (
-    install_client_from_rule,
-    load_client_rule,
-    teardown_client_from_rule,
-)
 from memory_orchestrator_server.config import get_settings
 
 
@@ -34,34 +26,9 @@ def main() -> None:
     """Memory Orchestrator server CLI."""
 
 
-@main.command()
-def serve() -> None:
-    """Run HTTP API and MCP stdio server concurrently."""
-    import uvicorn
-    from memory_orchestrator_server.http_app import create_app
-    from memory_orchestrator_server.mcp_server import run_stdio_server
-
-    _preflight_database()
-    settings = get_settings()
-    app = create_app()
-    config = uvicorn.Config(app, host="127.0.0.1", port=settings.http_port, log_level=settings.log_level.lower())
-
-    async def _main() -> None:
-        server = uvicorn.Server(config)
-        http_task = asyncio.create_task(server.serve())
-        mcp_task = asyncio.create_task(run_stdio_server())
-        done, pending = await asyncio.wait({http_task, mcp_task}, return_when=asyncio.FIRST_EXCEPTION)
-        for p in pending:
-            p.cancel()
-        for d in done:
-            d.result()
-
-    asyncio.run(_main())
-
-
 @main.command(name="serve-http")
 def serve_http() -> None:
-    """Run only HTTP API."""
+    """Run HTTP API."""
     import logging.config
     import uvicorn
     from memory_orchestrator_server.http_app import create_app
@@ -109,25 +76,15 @@ def serve_http() -> None:
     )
 
 
-@main.command(name="serve-mcp")
-@click.option("--client", type=click.Choice(["claude", "codex"]), default=None,
-              help="Override MO_CLIENT env var.")
-def serve_mcp(client: str | None) -> None:
-    """Run only MCP stdio server."""
-    if client:
-        os.environ["MO_CLIENT"] = client
-    from memory_orchestrator_server.mcp_server import run_stdio_server
-    asyncio.run(run_stdio_server())
-
-
 @main.command()
-@click.option("--client", type=click.Choice(["claude", "codex", "all"]), default="claude")
-def doctor(client: str) -> None:
-    """Check DB, embedder, and client settings wiring."""
+def doctor() -> None:
+    """Check DB connectivity and HTTP service health."""
     import urllib.request
     ok = True
     settings = get_settings()
-    click.echo(f"config: db_dsn={settings.db_dsn}")
+    import re
+    safe_dsn = re.sub(r"://[^@]+@", "://*:*@", settings.db_dsn)
+    click.echo(f"config: db_dsn={safe_dsn}")
     click.echo(f"config: http_port={settings.http_port}")
     try:
         with urllib.request.urlopen(f"http://localhost:{settings.http_port}/healthz", timeout=1) as r:
@@ -136,46 +93,6 @@ def doctor(client: str) -> None:
     except Exception as e:
         click.echo(f"healthz: FAIL ({e})")
         ok = False
-    if client in {"claude", "all"}:
-        settings_path = Path.home() / ".claude" / "settings.json"
-        if settings_path.exists():
-            try:
-                cfg = json.loads(settings_path.read_text(encoding="utf-8"))
-                mcp = cfg.get("mcpServers", {}).get("memory-orchestrator")
-                hooks = cfg.get("hooks", {})
-                click.echo(f"claude mcp entry: {'ok' if mcp else 'MISSING'}")
-                click.echo(f"claude hooks: {sorted(hooks.keys())}")
-                if not mcp:
-                    ok = False
-            except Exception as e:
-                click.echo(f"claude settings parse: FAIL ({e})")
-                ok = False
-        else:
-            click.echo("claude settings: NOT FOUND")
-            ok = False
-    if client in {"codex", "all"}:
-        codex_dir = _codex_home()
-        codex_cfg = codex_dir / "config.toml"
-        codex_hooks = codex_dir / "hooks.json"
-        if codex_cfg.exists():
-            try:
-                import tomllib
-                cfg = tomllib.loads(codex_cfg.read_text(encoding="utf-8"))
-                mcp = cfg.get("mcp_servers", {}).get("memory-orchestrator")
-                features = cfg.get("features", {})
-                click.echo(f"codex mcp entry: {'ok' if mcp else 'MISSING'}")
-                click.echo(f"codex hooks feature: {'ok' if features.get('codex_hooks') else 'MISSING'}")
-                if not mcp:
-                    ok = False
-            except Exception as e:
-                click.echo(f"codex config parse: FAIL ({e})")
-                ok = False
-        else:
-            click.echo("codex config: NOT FOUND")
-            ok = False
-        click.echo(f"codex hooks file: {'ok' if codex_hooks.exists() else 'MISSING'}")
-        if not codex_hooks.exists():
-            ok = False
     sys.exit(0 if ok else 1)
 
 
@@ -183,7 +100,6 @@ def doctor(client: str) -> None:
 @click.option("--batch-size", default=32, show_default=True)
 def migrate_embeddings(batch_size: int) -> None:
     """Re-embed all memories using the current embed_model."""
-    import asyncio
     from sqlalchemy import select, update as sa_update
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
     from memory_orchestrator_server.embedder import embed_batch
@@ -212,10 +128,7 @@ def migrate_embeddings(batch_size: int) -> None:
             processed = 0
             for i in range(offset, total, batch_size):
                 batch = all_mems[i : i + batch_size]
-                texts = [
-                    f"{m.name} {m.description} {m.content or ''}"
-                    for m in batch
-                ]
+                texts = [f"{m.name} {m.description} {m.content or ''}" for m in batch]
                 vecs = await embed_batch(texts)
                 for m, vec in zip(batch, vecs):
                     await session.execute(
@@ -249,127 +162,6 @@ def migrate_embeddings(batch_size: int) -> None:
     asyncio.run(_run())
 
 
-@main.command(name="setup")
-@click.option("--scope", type=click.Choice(["user", "project"]), default="user")
-@click.option("--client", type=click.Choice(["claude", "codex", "all"]), default="claude")
-def install_hooks(scope: str, client: str) -> None:
-    """Wire hooks, mcp servers, and instructions into supported clients."""
-    if client in {"claude", "all"}:
-        _install_claude(scope)
-    if client in {"codex", "all"}:
-        project_dir = Path(__file__).parent.parent.parent.parent.resolve()
-        result = install_codex(home=_codex_home(), project_dir=project_dir, scope=scope)
-        click.echo(f"codex config: {result.config_path}")
-        click.echo(f"codex hooks: {result.hooks_path}")
-        click.echo(f"codex instructions: {result.agents_path}")
-
-
-def _install_claude(scope: str) -> None:
-    project_dir = Path(__file__).parent.parent.parent.parent.resolve()
-    target_home = Path.home() / ".claude" if scope == "user" else Path.cwd() / ".claude"
-    install_result = install_client_from_rule(
-        rule=load_client_rule("claude"),
-        target_home=target_home,
-        project_dir=project_dir,
-        scope=scope,
-    )
-    click.echo(f"wrote {install_result.config_path}")
-
-    # Auto-create a mcp_client token and inject it so stdio MCP can authenticate.
-    if install_result.config_path:
-        _create_and_inject_mcp_token(install_result.config_path)
-        click.echo("injected MO_MCP_TOKEN into mcpServers.memory-orchestrator.env")
-
-    mcp_scope = "user" if scope == "user" else "project"
-    server_dir = str(project_dir / "memory_orchestrator_server").replace("\\", "/")
-    try:
-        mcp_result = subprocess.run(
-            ["claude", "mcp", "add", "--scope", mcp_scope, "memory-orchestrator",
-             "--", "uv", "run", "--no-sync", "--project", server_dir,
-             "mo-server", "serve-mcp", "--client", "claude"],
-            capture_output=True, text=True,
-        )
-    except FileNotFoundError:
-        mcp_result = None
-    if mcp_result is not None and mcp_result.returncode == 0:
-        click.echo(f"mcp: {mcp_result.stdout.strip()}")
-    else:
-        click.echo(
-            f"mcp add failed (run manually): claude mcp add --scope {mcp_scope} memory-orchestrator "
-            f"-- uv run --no-sync --project {server_dir} mo-server serve-mcp --client claude"
-        )
-    if install_result.instructions_path:
-        click.echo(f"installed skill → {install_result.instructions_path}")
-
-
-@main.command(name="teardown")
-@click.option("--scope", type=click.Choice(["user", "project"]), default="user")
-@click.option("--client", type=click.Choice(["claude", "codex", "all"]), default="claude")
-def uninstall_hooks(scope: str, client: str) -> None:
-    """Remove Memory Orchestrator wiring from supported clients."""
-    if client in {"claude", "all"}:
-        _teardown_claude(scope)
-    if client in {"codex", "all"}:
-        project_dir = Path(__file__).parent.parent.parent.parent.resolve()
-        teardown_codex(home=_codex_home(), project_dir=project_dir, scope=scope)
-        click.echo("codex cleaned")
-
-
-def _teardown_claude(scope: str) -> None:
-    project_dir = Path(__file__).parent.parent.parent.parent.resolve()
-    target_home = Path.home() / ".claude" if scope == "user" else Path.cwd() / ".claude"
-    teardown_client_from_rule(
-        rule=load_client_rule("claude"),
-        target_home=target_home,
-        project_dir=project_dir,
-        scope=scope,
-    )
-    click.echo(f"cleaned {target_home / 'settings.json'}")
-
-
-def _create_and_inject_mcp_token(settings_path: Path) -> None:
-    """Create a fresh mcp_client token in the DB and write it to settings.json.
-
-    Token hash is one-way; we always generate a new token on each setup run so
-    the plaintext is available to inject.  Previous tokens remain valid.
-    """
-    import hashlib
-    import secrets
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-    from sqlalchemy.orm import sessionmaker
-    from memory_orchestrator_server.models import ApiToken
-
-    raw = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw.encode()).hexdigest()
-
-    async def _insert() -> None:
-        engine = create_async_engine(get_settings().db_dsn)
-        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-        async with async_session() as session:
-            session.add(ApiToken(name="setup-auto", kind="mcp_client", token_hash=token_hash))
-            await session.commit()
-        await engine.dispose()
-
-    try:
-        asyncio.run(_insert())
-    except Exception as exc:
-        click.echo(f"  warning: could not create mcp_client token: {exc}", err=True)
-        return
-
-    data = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
-    (data.setdefault("mcpServers", {})
-         .setdefault("memory-orchestrator", {})
-         .setdefault("env", {}))["MO_MCP_TOKEN"] = raw
-    settings_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _codex_home() -> Path:
-    configured = os.environ.get("CODEX_HOME")
-    if configured:
-        return Path(configured)
-    return Path.home() / ".codex"
-
-
 # ---------------------------------------------------------------------------
 # token subcommands
 # ---------------------------------------------------------------------------
@@ -393,16 +185,31 @@ def token_create(kind: str, name: str) -> None:
     raw = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
 
+    action = "created"
+
     async def _create() -> None:
+        nonlocal action
+        from sqlalchemy import select
         engine = create_async_engine(get_settings().db_dsn)
         async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with async_session() as session:
-            session.add(ApiToken(name=name, kind=kind, token_hash=token_hash))
+            existing = (await session.execute(
+                select(ApiToken).where(
+                    ApiToken.name == name,
+                    ApiToken.kind == kind,
+                    ApiToken.revoked_at.is_(None),
+                ).limit(1)
+            )).scalars().first()
+            if existing is not None:
+                existing.token_hash = token_hash
+                action = "rotated"
+            else:
+                session.add(ApiToken(name=name, kind=kind, token_hash=token_hash))
             await session.commit()
         await engine.dispose()
 
     asyncio.run(_create())
-    click.echo(f"Token created  kind={kind}  name={name}")
+    click.echo(f"Token {action}  kind={kind}  name={name}")
     click.echo(f"Token value (save this — shown only once):")
     click.echo(f"  {raw}")
 

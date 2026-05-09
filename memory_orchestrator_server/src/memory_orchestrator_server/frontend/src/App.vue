@@ -56,6 +56,19 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
+        <a v-if="!loginOpen" :href="currentPage === 'admin' ? '/ui/' : '/ui/admin'" class="btn-theme btn-admin" :title="currentPage === 'admin' ? t('Memories') : t('Admin')">
+          <svg v-if="currentPage !== 'admin'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </a>
+        <button v-if="!loginOpen" @click="logout" class="btn-theme btn-logout" :title="t('Logout')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
         <button @click="load" class="btn-refresh" :class="{ loading: isLoading }" :title="t('Refresh')">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" :class="{ spinning: isLoading }">
             <path d="M13 7A6 6 0 1 1 7 1a6 6 0 0 1 4.243 1.757L13 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -66,7 +79,7 @@
       </div>
     </header>
 
-    <div class="toolbar">
+    <div v-if="currentPage !== 'admin'" class="toolbar">
       <div class="filter-bar">
         <div class="filter-project-wrap">
           <span class="filter-at">@</span>
@@ -127,7 +140,7 @@
       </div>
     </div>
 
-    <div class="table-wrap">
+    <div v-if="currentPage !== 'admin'" class="table-wrap">
       <table>
         <colgroup>
           <col style="width:36px">
@@ -224,7 +237,7 @@
       </table>
     </div>
 
-    <div class="footer" v-if="filtered.length > 0">
+    <div class="footer" v-if="currentPage !== 'admin' && filtered.length > 0">
       <div class="pagination">
         <button class="page-btn" :disabled="page === 1" @click="page = 1">«</button>
         <button class="page-btn" :disabled="page === 1" @click="page--">‹</button>
@@ -238,9 +251,137 @@
         </select>
       </div>
     </div>
+    <!-- ── Admin page ── -->
+    <div v-if="currentPage === 'admin'" class="admin-page">
+      <div class="admin-section">
+        <div class="admin-section-header">
+          <span class="admin-section-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            {{ t('API Tokens') }}
+          </span>
+          <button class="btn-new admin-create-toggle" @click="adminCreateOpen = !adminCreateOpen">
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            {{ t('New') }}
+          </button>
+        </div>
+
+        <div v-if="adminCreateOpen" class="admin-create-form">
+          <select v-model="adminNewKind" class="admin-select">
+            <option value="ui_admin">ui_admin</option>
+            <option value="mcp_client">mcp_client</option>
+          </select>
+          <input v-model="adminNewName" class="admin-input" :placeholder="t('Name…')" @keydown.enter="adminCreate" />
+          <button class="btn-save admin-create-btn" :disabled="!adminNewName || adminCreating" @click="adminCreate">
+            {{ adminCreating ? t('Saving…') : t('Create') }}
+          </button>
+          <button class="btn-cancel" @click="adminCreateOpen = false">{{ t('Cancel') }}</button>
+        </div>
+
+        <div v-if="adminCreatedToken" class="admin-new-token-banner">
+          <span class="admin-new-token-label">{{ t('Token value (save this — shown only once):') }}</span>
+          <code class="admin-new-token-value copyable" @click="copy(adminCreatedToken)" :title="t('Click to copy')">{{ adminCreatedToken }}</code>
+          <span class="copy-hint" v-if="copied === adminCreatedToken">{{ t('Copied') }}</span>
+          <button class="btn-cancel admin-dismiss" @click="adminCreatedToken = ''">{{ t('Close') }}</button>
+        </div>
+
+        <div v-if="adminLoading" class="admin-empty">{{ t('Loading…') }}</div>
+        <div v-else-if="!adminTokens.length" class="admin-empty">{{ t('No tokens yet.') }}</div>
+        <table v-else class="admin-table">
+          <thead>
+            <tr>
+              <th>{{ t('Kind') }}</th>
+              <th>{{ t('Name') }}</th>
+              <th>{{ t('Status') }}</th>
+              <th>{{ t('Created') }}</th>
+              <th>{{ t('Last used') }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="tok in adminTokens" :key="tok.id" :class="{ 'admin-row-disabled': !tok.enabled }">
+              <td><span :class="['admin-kind-badge', tok.kind === 'ui_admin' ? 'admin-kind-ui' : 'admin-kind-mcp']">{{ tok.kind }}</span></td>
+              <td class="admin-name-cell">{{ tok.name }}</td>
+              <td>
+                <button
+                  :class="['admin-toggle', tok.enabled ? 'admin-toggle-on' : 'admin-toggle-off']"
+                  @click="adminToggle(tok)"
+                  :title="tok.enabled ? t('Disable') : t('Enable')"
+                >
+                  <span class="admin-toggle-knob"></span>
+                </button>
+                <span class="admin-status-text">{{ tok.enabled ? t('Enabled') : t('Disabled') }}</span>
+              </td>
+              <td class="admin-date">{{ relTime(tok.created_at) }}</td>
+              <td class="admin-date">{{ tok.last_used_at ? relTime(tok.last_used_at) : '—' }}</td>
+              <td class="admin-actions-cell">
+                <button class="btn-del admin-revoke" @click="adminRevoke(tok)" :title="t('Revoke')">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                  {{ t('Revoke') }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
   <Teleport to="body">
     <div v-if="tip.visible" class="tooltip-popup" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
+    <div v-if="loginOpen" class="modal-overlay login-overlay">
+      <div class="login-modal">
+        <div class="login-logo">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="ll-bg" x1="4" y1="3" x2="28" y2="29" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#0f172a"/><stop offset="1" stop-color="#1d4ed8"/>
+              </linearGradient>
+              <linearGradient id="ll-line" x1="8" y1="8" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#67e8f9"/><stop offset="1" stop-color="#a7f3d0"/>
+              </linearGradient>
+            </defs>
+            <rect x="1" y="1" width="30" height="30" rx="7" fill="url(#ll-bg)"/>
+            <path d="M8 11.5H12.2L15.5 8.5H20.5" stroke="url(#ll-line)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 20.5H12.2L15.5 23.5H24" stroke="url(#ll-line)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M11 16H21" stroke="#93c5fd" stroke-width="2" stroke-linecap="round"/>
+            <path d="M20.5 8.5L24 12V20.5" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="8" cy="11.5" r="2" fill="#22d3ee"/>
+            <circle cx="8" cy="20.5" r="2" fill="#22d3ee"/>
+            <circle cx="11" cy="16" r="2.3" fill="#bfdbfe"/>
+            <circle cx="21" cy="16" r="2.3" fill="#bfdbfe"/>
+            <circle cx="24" cy="12" r="2" fill="#34d399"/>
+            <circle cx="24" cy="20.5" r="2" fill="#34d399"/>
+          </svg>
+          <span class="login-title">Memory Orchestrator</span>
+        </div>
+        <p class="login-subtitle">{{ t('Enter your UI admin token to continue') }}</p>
+        <form class="login-form" @submit.prevent="submitLogin">
+          <input
+            ref="loginInputRef"
+            v-model="loginInput"
+            class="login-input"
+            type="password"
+            :placeholder="t('Paste token here…')"
+            autocomplete="current-password"
+            autofocus
+          />
+          <div v-if="loginError" class="login-error">{{ loginError }}</div>
+          <div class="login-actions">
+            <button class="login-btn" type="submit" :disabled="!loginInput || loginLoading">
+              <svg v-if="loginLoading" width="13" height="13" viewBox="0 0 13 13" fill="none" class="spinning">
+                <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.5" stroke-dasharray="8 16" stroke-linecap="round"/>
+              </svg>
+              <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              {{ t('Sign in') }}
+            </button>
+            <button class="login-skip" type="button" :disabled="loginLoading" @click="skipLogin">
+              {{ t('Skip') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
     <div v-if="detailTarget" class="modal-overlay" @click.self="detailTarget = null">
       <div class="detail-modal">
         <div :class="['write-header', 'type-header-' + detailTarget.type]">
@@ -924,6 +1065,71 @@ async function copy(text) {
 
 const BASE = '/api'
 
+// ── Auth ──
+const loginOpen = ref(false)
+const loginInput = ref('')
+const loginError = ref('')
+const loginLoading = ref(false)
+
+function apiFetch(url, opts = {}) {
+  return fetch(url, opts)
+}
+
+async function submitLogin() {
+  loginLoading.value = true
+  loginError.value = ''
+  try {
+    const r = await fetch(`${BASE}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: loginInput.value }),
+    })
+    if (r.status === 401) {
+      loginError.value = t('Invalid token')
+      return
+    }
+    loginOpen.value = false
+    loginInput.value = ''
+    projects.value = await apiFetch(`${BASE}/projects`).then(r => r.json())
+    await load()
+  } catch (e) {
+    loginError.value = e.message
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+async function skipLogin() {
+  loginLoading.value = true
+  loginError.value = ''
+  try {
+    const r = await fetch(`${BASE}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: '' }),
+    })
+    if (r.status === 401) {
+      loginError.value = t('Server requires a token — please enter one')
+      return
+    }
+    loginOpen.value = false
+    projects.value = await apiFetch(`${BASE}/projects`).then(r => r.json())
+    await load()
+  } catch (e) {
+    loginError.value = e.message
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+async function logout() {
+  await fetch(`${BASE}/logout`, { method: 'POST' })
+  loginOpen.value = true
+  memories.value = []
+  projects.value = []
+  stats.value = null
+}
+
 // ── i18n ──
 const lang = ref(localStorage.getItem('mo-lang') || 'en')
 const _locales = { en: enLocale, zh: zhLocale }
@@ -961,10 +1167,12 @@ async function load() {
     params.set('limit', '200')
     params.set('sort_by', sortBy.value)
     params.set('sort_desc', sortDesc.value ? 'true' : 'false')
-    const [mems, st] = await Promise.all([
-      fetch(`${BASE}/memories?${params}`).then(r => r.json()),
-      fetch(`${BASE}/stats${selectedProject.value ? '?project_slug=' + selectedProject.value : ''}`).then(r => r.json())
+    const [memsRes, stRes] = await Promise.all([
+      apiFetch(`${BASE}/memories?${params}`),
+      apiFetch(`${BASE}/stats${selectedProject.value ? '?project_slug=' + selectedProject.value : ''}`)
     ])
+    if (memsRes.status === 401) { loginOpen.value = true; return }
+    const [mems, st] = await Promise.all([memsRes.json(), stRes.json()])
     memories.value = mems
     stats.value = st
   } finally {
@@ -979,7 +1187,7 @@ async function confirmDelete() {
   if (!deleteTarget.value) return
   isDeleting.value = true
   try {
-    await fetch(`${BASE}/memories/${deleteTarget.value.id}`, { method: 'DELETE' })
+    await apiFetch(`${BASE}/memories/${deleteTarget.value.id}`, { method: 'DELETE' })
     deleteTarget.value = null
     await load()
   } finally {
@@ -1005,7 +1213,7 @@ async function moveMemory(m) {
   isMoving.value[m.id] = true
   moveError.value[m.id] = ''
   try {
-    const r = await fetch(`${BASE}/memories/${m.id}/move?project_slug=${encodeURIComponent(slug)}`, { method: 'PATCH' })
+    const r = await apiFetch(`${BASE}/memories/${m.id}/move?project_slug=${encodeURIComponent(slug)}`, { method: 'PATCH' })
     if (!r.ok) {
       const err = await r.json().catch(() => ({}))
       moveError.value[m.id] = `Failed: ${err.detail || r.statusText}`
@@ -1037,7 +1245,7 @@ async function doClone() {
   isCloning.value = true
   cloneError.value = ''
   try {
-    const r = await fetch(`${BASE}/memories/${cloneSource.value.id}/clone?project_slug=${encodeURIComponent(cloneSlug.value)}`, { method: 'POST' })
+    const r = await apiFetch(`${BASE}/memories/${cloneSource.value.id}/clone?project_slug=${encodeURIComponent(cloneSlug.value)}`, { method: 'POST' })
     if (!r.ok) {
       const err = await r.json().catch(() => ({}))
       cloneError.value = err.detail || r.statusText
@@ -1072,7 +1280,7 @@ async function saveEdit() {
   isEditSaving.value = true
   editError.value = ''
   try {
-    const r = await fetch(`${BASE}/memories/${editTarget.value.id}`, {
+    const r = await apiFetch(`${BASE}/memories/${editTarget.value.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(editForm.value),
@@ -1113,7 +1321,7 @@ async function submitWrite() {
     if (!payload.project_id) delete payload.project_id
     if (!payload.why) delete payload.why
     if (!payload.how_to_apply) delete payload.how_to_apply
-    const r = await fetch(`${BASE}/memories`, {
+    const r = await apiFetch(`${BASE}/memories`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -1157,7 +1365,7 @@ async function bulkDelete() {
   isBulkDeleting.value = true
   try {
     const ids = [...selectedIds.value]
-    const r = await fetch(`${BASE}/memories/batch-delete`, {
+    const r = await apiFetch(`${BASE}/memories/batch-delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
@@ -1175,7 +1383,7 @@ async function bulkMove() {
   isBulkMoving.value = true
   try {
     const ids = [...selectedIds.value]
-    const r = await fetch(`${BASE}/memories/batch-move`, {
+    const r = await apiFetch(`${BASE}/memories/batch-move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids, project_slug: bulkMoveTarget.value }),
@@ -1196,7 +1404,7 @@ const importModalOpen = ref(false)
 const importProgress = ref({ done: 0, total: 0, skipped: 0, errors: 0, running: false })
 
 async function exportMemories() {
-  const r = await fetch(`${BASE}/backup`)
+  const r = await apiFetch(`${BASE}/backup`)
   if (!r.ok) { alert('Backup failed: ' + (await r.text())); return }
   const blob = await r.blob()
   const cd = r.headers.get('Content-Disposition') || ''
@@ -1223,7 +1431,7 @@ async function confirmImport() {
   try {
     const fd = new FormData()
     fd.append('file', importPreview.value.file)
-    const r = await fetch(`${BASE}/restore`, { method: 'POST', body: fd })
+    const r = await apiFetch(`${BASE}/restore`, { method: 'POST', body: fd })
     if (!r.ok) {
       const text = await r.text()
       importProgress.value.errors = 1
@@ -1262,7 +1470,7 @@ function normalizeDuplicateThreshold(value) {
 async function openDuplicates() {
   duplicatesOpen.value = true
   try {
-    const settings = await fetch(`${BASE}/settings`).then(r => r.ok ? r.json() : null)
+    const settings = await apiFetch(`${BASE}/settings`).then(r => r.ok ? r.json() : null)
     duplicateThreshold.value = normalizeDuplicateThreshold(settings?.dup_threshold || '0.92')
   } catch {
     duplicateThreshold.value = '0.92'
@@ -1281,7 +1489,7 @@ async function scanDuplicates() {
     duplicateThreshold.value = normalizeDuplicateThreshold(duplicateThreshold.value)
     params.set('threshold', duplicateThreshold.value)
     const qs = params.toString()
-    const r = await fetch(`${BASE}/duplicates${qs ? '?' + qs : ''}`)
+    const r = await apiFetch(`${BASE}/duplicates${qs ? '?' + qs : ''}`)
     if (!r.ok) {
       const text = await r.text()
       duplicateError.value = `Scan failed (${r.status}): ${text.slice(0, 180) || r.statusText}`
@@ -1296,7 +1504,7 @@ async function scanDuplicates() {
 }
 
 async function deleteDupMem(id, pairIdx) {
-  const r = await fetch(`${BASE}/memories/${id}`, { method: 'DELETE' })
+  const r = await apiFetch(`${BASE}/memories/${id}`, { method: 'DELETE' })
   if (r.ok || r.status === 204) {
     duplicatePairs.value = duplicatePairs.value.filter(pair => pair.id1 !== id && pair.id2 !== id)
     await load()
@@ -1324,7 +1532,7 @@ async function scanConflicts() {
     if (selectedType.value) params.set('type', selectedType.value)
     params.set('min_sim', conflictMinSim.value)
     const qs = params.toString()
-    const r = await fetch(`${BASE}/conflicts${qs ? '?' + qs : ''}`)
+    const r = await apiFetch(`${BASE}/conflicts${qs ? '?' + qs : ''}`)
     if (!r.ok) {
       const txt = await r.text()
       conflictError.value = `Scan failed (${r.status}): ${txt.slice(0, 180) || r.statusText}`
@@ -1339,7 +1547,7 @@ async function scanConflicts() {
 }
 
 async function deleteConflictMem(id) {
-  const r = await fetch(`${BASE}/memories/${id}`, { method: 'DELETE' })
+  const r = await apiFetch(`${BASE}/memories/${id}`, { method: 'DELETE' })
   if (r.ok || r.status === 204) {
     conflictPairs.value = conflictPairs.value.filter(pair => pair.id1 !== id && pair.id2 !== id)
     await load()
@@ -1514,7 +1722,7 @@ async function fetchModels() {
     const headers = {}
     if (key && key !== '***' && key !== KEY_SENTINEL && key !== '')
       headers['X-Api-Key'] = key
-    const models = await fetch(`${BASE}/models?${params}`, { headers }).then(r => r.ok ? r.json() : [])
+    const models = await apiFetch(`${BASE}/models?${params}`, { headers }).then(r => r.ok ? r.json() : [])
     availableModels.value = models
     if (models.length) modelDropOpen.value = true
   } finally {
@@ -1542,7 +1750,7 @@ const counterBlendFmt = computed(() => (1 - (parseFloat(form.value.score_rerank_
 const KEY_SENTINEL = '__keep__'
 
 async function openSettings() {
-  const data = await fetch(`${BASE}/settings`).then(r => r.json())
+  const data = await apiFetch(`${BASE}/settings`).then(r => r.json())
   form.value = { ...data, extraction_api_key: data.extraction_api_key === '***' ? KEY_SENTINEL : (data.extraction_api_key || '') }
   availableModels.value = []
   modelDropOpen.value = false
@@ -1561,7 +1769,7 @@ async function saveSettings() {
         return v !== ''
       })
     )
-    const r = await fetch(`${BASE}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    const r = await apiFetch(`${BASE}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     if (!r.ok) {
       const err = await r.json().catch(() => ({}))
       saveHint.value = `Error ${r.status}: ${err.detail || r.statusText}`
@@ -1584,6 +1792,62 @@ function toggleTheme() {
   applyTheme()
 }
 
+// ── Admin page ──
+const currentPage = ref(window.location.pathname.replace(/\/$/, '').endsWith('/admin') ? 'admin' : 'main')
+const adminTokens = ref([])
+const adminLoading = ref(false)
+const adminCreateOpen = ref(false)
+const adminNewKind = ref('mcp_client')
+const adminNewName = ref('')
+const adminCreating = ref(false)
+const adminCreatedToken = ref('')
+
+async function adminLoad() {
+  adminLoading.value = true
+  try {
+    const r = await apiFetch(`${BASE}/tokens`)
+    if (r.status === 401) { loginOpen.value = true; return }
+    adminTokens.value = await r.json()
+  } finally {
+    adminLoading.value = false
+  }
+}
+
+async function adminCreate() {
+  if (!adminNewName.value) return
+  adminCreating.value = true
+  try {
+    const r = await apiFetch(`${BASE}/tokens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: adminNewKind.value, name: adminNewName.value }),
+    })
+    if (!r.ok) return
+    const data = await r.json()
+    adminCreatedToken.value = data.token
+    adminNewName.value = ''
+    adminCreateOpen.value = false
+    await adminLoad()
+  } finally {
+    adminCreating.value = false
+  }
+}
+
+async function adminToggle(tok) {
+  await apiFetch(`${BASE}/tokens/${tok.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: !tok.enabled }),
+  })
+  await adminLoad()
+}
+
+async function adminRevoke(tok) {
+  if (!confirm(`${t('Revoke')} "${tok.name}"?`)) return
+  await apiFetch(`${BASE}/tokens/${tok.id}`, { method: 'DELETE' })
+  await adminLoad()
+}
+
 onMounted(async () => {
   watch(someSelected, v => { if (selectAllRef.value) selectAllRef.value.indeterminate = v })
   applyTheme()
@@ -1599,8 +1863,17 @@ onMounted(async () => {
       openWrite()
     }
   })
-  projects.value = await fetch(`${BASE}/projects`).then(r => r.json())
-  await load()
+  const projRes = await apiFetch(`${BASE}/projects`)
+  if (projRes.status === 401) {
+    loginOpen.value = true
+    return
+  }
+  projects.value = await projRes.json()
+  if (currentPage.value === 'admin') {
+    await adminLoad()
+  } else {
+    await load()
+  }
 })
 </script>
 
@@ -3055,6 +3328,54 @@ tbody tr.selected:hover td.col-actions { background: var(--row-hover); }
   padding: 4px 8px; font-size: 12px; cursor: pointer; max-width: 160px;
 }
 
+/* ── Login modal ── */
+.login-overlay { background: var(--bg); }
+.login-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px 28px;
+  width: 360px;
+  max-width: 90vw;
+  display: flex; flex-direction: column; gap: 16px;
+  box-shadow: 0 8px 32px var(--shadow);
+}
+.login-logo { display: flex; align-items: center; gap: 10px; }
+.login-title { font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 15px; color: var(--text-primary); letter-spacing: 0.02em; }
+.login-subtitle { font-size: 12px; color: var(--text-secondary); margin: 0; }
+.login-form { display: flex; flex-direction: column; gap: 10px; }
+.login-input {
+  background: var(--surface-2); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 12px; font-size: 13px; font-family: 'JetBrains Mono', monospace;
+  outline: none; width: 100%;
+  transition: border-color var(--transition);
+}
+.login-input:focus { border-color: var(--accent); }
+.login-error { font-size: 12px; color: var(--red); }
+.login-btn {
+  background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius-sm);
+  padding: 9px 16px; font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: opacity var(--transition);
+}
+.login-btn:hover:not(:disabled) { opacity: 0.88; }
+.login-btn:disabled { opacity: 0.4; cursor: default; }
+.login-actions { display: flex; gap: 8px; }
+.login-actions .login-btn { flex: 1; }
+.login-skip {
+  background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 14px; font-size: 12px; cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+.login-skip:hover:not(:disabled) { background: var(--surface-2); color: var(--text-primary); }
+.login-skip:disabled { opacity: 0.4; cursor: default; }
+.btn-logout { color: var(--text-muted); }
+.btn-logout:hover { color: var(--red) !important; }
+
 /* ── Import progress ── */
 .import-progress-bar {
   width: 100%; height: 4px; background: var(--border);
@@ -3064,5 +3385,98 @@ tbody tr.selected:hover td.col-actions { background: var(--row-hover); }
   height: 100%; background: var(--accent); border-radius: 2px;
   transition: width 100ms linear;
 }
+
+/* ── Admin page ── */
+.admin-page {
+  flex: 1; padding: 16px; overflow-y: auto;
+}
+.admin-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 2px 16px var(--shadow);
+}
+.admin-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+.admin-section-title {
+  display: flex; align-items: center; gap: 7px;
+  font-family: ui-monospace, monospace; font-size: 12px; font-weight: 700;
+  color: var(--text-primary); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.admin-create-form {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+.admin-select, .admin-input {
+  background: var(--surface-2); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 10px; font-size: 12px; outline: none;
+  transition: border-color var(--transition);
+}
+.admin-select:focus, .admin-input:focus { border-color: var(--accent); }
+.admin-input { flex: 1; }
+.admin-create-btn { padding: 6px 14px; font-size: 12px; }
+.admin-new-token-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--border-subtle);
+  background: var(--green-dim); border-left: 3px solid var(--green);
+}
+.admin-new-token-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.admin-new-token-value {
+  font-family: ui-monospace, monospace; font-size: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 3px 8px; border-radius: var(--radius-sm);
+  color: var(--text-primary); word-break: break-all;
+}
+.admin-dismiss { padding: 4px 10px; font-size: 11px; margin-left: auto; }
+.admin-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.admin-table th {
+  padding: 8px 14px; text-align: left;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted); border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-panel);
+}
+.admin-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary); vertical-align: middle;
+}
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table tr:hover td { background: var(--row-hover); }
+.admin-row-disabled td { opacity: 0.55; }
+.admin-kind-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  font-family: ui-monospace, monospace;
+}
+.admin-kind-ui  { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue-border); }
+.admin-kind-mcp { background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
+.admin-name-cell { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-toggle {
+  position: relative; display: inline-flex; align-items: center;
+  width: 32px; height: 18px; border: none; border-radius: 18px;
+  cursor: pointer; transition: background 0.2s; flex-shrink: 0;
+  vertical-align: middle;
+}
+.admin-toggle-on  { background: var(--green); }
+.admin-toggle-off { background: var(--border); }
+.admin-toggle-knob {
+  position: absolute; width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; transition: transform 0.2s; top: 3px; left: 3px;
+  pointer-events: none;
+}
+.admin-toggle-on .admin-toggle-knob  { transform: translateX(14px); }
+.admin-toggle-off .admin-toggle-knob { transform: translateX(0); }
+.admin-status-text { margin-left: 7px; font-size: 11px; color: var(--text-muted); vertical-align: middle; }
+.admin-date { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+.admin-actions-cell { white-space: nowrap; }
+.admin-revoke { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 4px 10px; }
+.admin-empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.btn-admin { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
 
 </style>
