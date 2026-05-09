@@ -275,6 +275,11 @@ def _install_claude(scope: str) -> None:
     )
     click.echo(f"wrote {install_result.config_path}")
 
+    # Auto-create a mcp_client token and inject it so stdio MCP can authenticate.
+    if install_result.config_path:
+        _create_and_inject_mcp_token(install_result.config_path)
+        click.echo("injected MO_MCP_TOKEN into mcpServers.memory-orchestrator.env")
+
     mcp_scope = "user" if scope == "user" else "project"
     server_dir = str(project_dir / "memory_orchestrator_server").replace("\\", "/")
     try:
@@ -322,11 +327,146 @@ def _teardown_claude(scope: str) -> None:
     click.echo(f"cleaned {target_home / 'settings.json'}")
 
 
+def _create_and_inject_mcp_token(settings_path: Path) -> None:
+    """Create a fresh mcp_client token in the DB and write it to settings.json.
+
+    Token hash is one-way; we always generate a new token on each setup run so
+    the plaintext is available to inject.  Previous tokens remain valid.
+    """
+    import hashlib
+    import secrets
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from memory_orchestrator_server.models import ApiToken
+
+    raw = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+
+    async def _insert() -> None:
+        engine = create_async_engine(get_settings().db_dsn)
+        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with async_session() as session:
+            session.add(ApiToken(name="setup-auto", kind="mcp_client", token_hash=token_hash))
+            await session.commit()
+        await engine.dispose()
+
+    try:
+        asyncio.run(_insert())
+    except Exception as exc:
+        click.echo(f"  warning: could not create mcp_client token: {exc}", err=True)
+        return
+
+    data = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
+    (data.setdefault("mcpServers", {})
+         .setdefault("memory-orchestrator", {})
+         .setdefault("env", {}))["MO_MCP_TOKEN"] = raw
+    settings_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 def _codex_home() -> Path:
     configured = os.environ.get("CODEX_HOME")
     if configured:
         return Path(configured)
     return Path.home() / ".codex"
+
+
+# ---------------------------------------------------------------------------
+# token subcommands
+# ---------------------------------------------------------------------------
+
+@main.group()
+def token() -> None:
+    """Manage API tokens (ui_admin / mcp_client)."""
+
+
+@token.command(name="create")
+@click.option("--kind", type=click.Choice(["ui_admin", "mcp_client"]), required=True)
+@click.option("--name", required=True, help="Human-readable label for this token.")
+def token_create(kind: str, name: str) -> None:
+    """Create a new API token and print it (shown only once)."""
+    import hashlib
+    import secrets
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from memory_orchestrator_server.models import ApiToken
+
+    raw = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+
+    async def _create() -> None:
+        engine = create_async_engine(get_settings().db_dsn)
+        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with async_session() as session:
+            session.add(ApiToken(name=name, kind=kind, token_hash=token_hash))
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(_create())
+    click.echo(f"Token created  kind={kind}  name={name}")
+    click.echo(f"Token value (save this — shown only once):")
+    click.echo(f"  {raw}")
+
+
+@token.command(name="list")
+def token_list() -> None:
+    """List all active (non-revoked) API tokens."""
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import select
+    from memory_orchestrator_server.models import ApiToken
+
+    async def _list() -> list[ApiToken]:
+        engine = create_async_engine(get_settings().db_dsn)
+        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with async_session() as session:
+            rows = (await session.execute(
+                select(ApiToken).where(ApiToken.revoked_at.is_(None)).order_by(ApiToken.created_at)
+            )).scalars().all()
+        await engine.dispose()
+        return rows
+
+    rows = asyncio.run(_list())
+    if not rows:
+        click.echo("No active tokens.")
+        return
+    click.echo(f"{'ID':<36}  {'KIND':<12}  {'NAME'}")
+    click.echo("-" * 70)
+    for t in rows:
+        click.echo(f"{t.id}  {t.kind:<12}  {t.name}")
+
+
+@token.command(name="revoke")
+@click.argument("token_id")
+def token_revoke(token_id: str) -> None:
+    """Revoke an API token by ID."""
+    import uuid
+    from datetime import datetime, timezone
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import select
+    from memory_orchestrator_server.models import ApiToken
+
+    async def _revoke() -> bool:
+        engine = create_async_engine(get_settings().db_dsn)
+        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        async with async_session() as session:
+            row = (await session.execute(
+                select(ApiToken).where(ApiToken.id == uuid.UUID(token_id))
+            )).scalar_one_or_none()
+            if row is None:
+                await engine.dispose()
+                return False
+            row.revoked_at = datetime.now(timezone.utc)
+            await session.commit()
+        await engine.dispose()
+        return True
+
+    found = asyncio.run(_revoke())
+    if found:
+        click.echo(f"Token {token_id} revoked.")
+    else:
+        click.echo(f"Token {token_id} not found.", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
