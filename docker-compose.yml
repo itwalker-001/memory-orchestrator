@@ -66,4 +66,10 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${MO_HTTP_PORT:-8765}/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 45
+      start_period: 30s
     restart: unless-stopped
