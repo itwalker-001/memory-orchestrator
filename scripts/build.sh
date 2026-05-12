@@ -86,11 +86,10 @@ echo "MO_DB_IMAGE=$db_tag"
 env_file="$repo_root/.env"
 set_env() {
   key="$1" val="$2"
-  if grep -q "^${key}=" "$env_file" 2>/dev/null; then
-    sed -i "s|^${key}=.*|${key}=${val}|" "$env_file"
-  else
-    echo "${key}=${val}" >> "$env_file"
-  fi
+  tmp="$(mktemp)"
+  grep -v "^${key}=" "$env_file" > "$tmp" 2>/dev/null || true
+  echo "${key}=${val}" >> "$tmp"
+  mv "$tmp" "$env_file"
 }
 set_env MO_BASE_IMAGE "$tag"
 set_env MO_DB_IMAGE "$db_tag"
