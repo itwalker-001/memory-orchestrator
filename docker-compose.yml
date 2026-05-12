@@ -13,7 +13,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${MO_DB_PASSWORD}
     ports:
-      - "${MO_DB_PORT}:5432"
+      - "${MO_DB_HOST_PORT}:${MO_DB_PORT}"
     command: >
       postgres
       -c shared_preload_libraries=age,vector
@@ -25,23 +25,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
-  migrate:
-    image: memory-orchestrator-server:latest
-    container_name: memory-orchestrator-migrate
-    build:
-      context: ./memory_orchestrator_server
-      dockerfile: Dockerfile
-      args:
-        BASE_IMAGE: ${MO_BASE_IMAGE}
-        TORCH_INDEX: ${TORCH_INDEX}
-    command: >
-      sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
-    environment:
-      MO_DB_DSN: ${MO_DB_DSN}
-    depends_on:
-      db:
-        condition: service_healthy
 
   server:
     image: memory-orchestrator-server:latest
@@ -56,7 +39,7 @@ services:
     ports:
       - "${MO_HTTP_PORT}:8765"
     environment:
-      MO_DB_DSN: ${MO_DB_DSN}
+      MO_DB_DSN: postgresql+asyncpg://${POSTGRES_USER}:${MO_DB_PASSWORD}@${MO_DB_HOST}:${MO_DB_PORT}/${POSTGRES_DB}
       MO_HTTP_HOST: ${MO_HTTP_HOST}
       MO_HTTP_PORT: ${MO_HTTP_PORT}
       MO_EMBED_MODEL: ${MO_EMBED_MODEL}
@@ -66,9 +49,11 @@ services:
       MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL}
       MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL}
       MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY}
+    volumes:
+      - ${MO_MODELS_DIR}:/app/memory_orchestrator_server/models
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${MO_HTTP_PORT}/healthz')\""]
       interval: 10s

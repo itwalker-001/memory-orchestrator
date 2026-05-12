@@ -93,7 +93,26 @@ set_env() {
 }
 set_env MO_BASE_IMAGE "$tag"
 set_env MO_DB_IMAGE "$db_tag"
+
+# Construct MO_DB_DSN from component variables so host-shell overrides cannot pollute it
 echo "Updated .env: MO_BASE_IMAGE=$tag  MO_DB_IMAGE=$db_tag"
+
+# Download models if not already present on host
+models_dir="$(grep '^MO_MODELS_DIR=' "$env_file" | cut -d= -f2-)"
+case "$models_dir" in
+  /*) : ;;
+  *)  models_dir="$repo_root/$models_dir" ;;
+esac
+if [ ! -d "$models_dir/BAAI/bge-m3" ]; then
+  echo "Models not found, downloading via base image..."
+  docker run --rm \
+    -v "$models_dir:/app/memory_orchestrator_server/models" \
+    "${tag}" \
+    python /app/memory_orchestrator_server/download_models.py
+  echo "Models downloaded to $models_dir"
+else
+  echo "Models already present: $models_dir"
+fi
 
 # Ensure postgres data directory exists (Docker does not auto-create bind mount dirs)
 pgdata="$(grep '^MO_PGDATA=' "$env_file" | cut -d= -f2-)"
@@ -107,7 +126,37 @@ echo "Postgres data dir: $pgdata"
 
 compose_cmd="${COMPOSE_CMD:-docker-compose}"
 echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
-"$compose_cmd" --env-file "$env_file" up -d --build
+
+# 1. Start (and build) the database
+"$compose_cmd" --env-file "$env_file" up -d --build db
+
+# 2. Wait for database to become healthy
+echo "Waiting for database to become healthy (up to 90 s)..."
+j=0
+while [ "$j" -lt 30 ]; do
+  db_status="$(docker inspect --format='{{.State.Health.Status}}' memory-orchestrator-db 2>/dev/null || echo 'unknown')"
+  if [ "$db_status" = "healthy" ]; then
+    echo "Database healthy after $((j * 3)) s"
+    break
+  fi
+  j=$((j + 1))
+  sleep 3
+done
+
+if [ "$j" -ge 30 ]; then
+  echo "ERROR: database did not become healthy within 90 s" >&2
+  "$compose_cmd" ps
+  exit 1
+fi
+
+# 3. Run database migrations
+echo "Running database migrations..."
+"$compose_cmd" --env-file "$env_file" run --rm \
+  server \
+  sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
+
+# 4. Start the server
+"$compose_cmd" --env-file "$env_file" up -d --build server
 
 echo "Waiting for server to become healthy (up to 450 s)..."
 i=0

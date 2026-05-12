@@ -226,9 +226,9 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         import sys
         if sys.platform == "win32":
             candidates = sorted(glob.glob(f"C:/Program Files/PostgreSQL/*/bin/{name}.exe"), reverse=True)
-            if candidates:
-                return candidates[0]
-        return name
+        else:
+            candidates = sorted(glob.glob(f"/usr/lib/postgresql/*/bin/{name}"), reverse=True)
+        return candidates[0] if candidates else name
 
     @router.get("/timezone")
     async def timezone() -> dict:

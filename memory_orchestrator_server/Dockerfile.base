@@ -7,11 +7,16 @@
 FROM astral/uv:python3.13-bookworm-slim
 WORKDIR /app/memory_orchestrator_server
 
-RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
+RUN printf 'Acquire::AllowInsecureRepositories "true";\nAPT::Get::AllowUnauthenticated "true";\n' \
+      > /etc/apt/apt.conf.d/99allow-unauth \
+ && sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
       /etc/apt/sources.list \
       /etc/apt/sources.list.d/debian.sources \
       2>/dev/null || true \
- && apt-get update && apt-get install -y --no-install-recommends build-essential \
+ && echo "deb [trusted=yes] https://mirrors.aliyun.com/postgresql/repos/apt bookworm-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update && apt-get install -y --no-install-recommends \
+      build-essential postgresql-client-16 \
  && rm -rf /var/lib/apt/lists/*
 
 ENV UV_SYSTEM_PYTHON=1
@@ -22,8 +27,3 @@ COPY pyproject.toml uv.lock ./
 RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.txt \
  && uv pip install --system -r /tmp/requirements.txt
 
-COPY download_models.py ./
-RUN python download_models.py
-
-ENV MO_EMBED_MODEL=/app/memory_orchestrator_server/models/BAAI/bge-m3
-ENV MO_RERANK_MODEL=/app/memory_orchestrator_server/models/BAAI/bge-reranker-v2-m3
