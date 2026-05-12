@@ -86,10 +86,11 @@ compose_cmd="${COMPOSE_CMD:-docker-compose}"
 echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
 MO_BASE_IMAGE="$tag" MO_DB_IMAGE="$db_tag" "$compose_cmd" up -d --build
 
-echo "Waiting for HTTP health check (up to 450 s)..."
+echo "Waiting for server to become healthy (up to 450 s)..."
 i=0
 while [ "$i" -lt 90 ]; do
-  if "$compose_cmd" exec -T server python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${MO_HTTP_PORT:-8765}/healthz')" >/dev/null 2>&1; then
+  status="$(docker inspect --format='{{.State.Health.Status}}' memory-orchestrator-server 2>/dev/null || echo 'unknown')"
+  if [ "$status" = "healthy" ]; then
     echo "Service healthy after $((i * 5)) s"
     break
   fi
