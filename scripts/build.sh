@@ -88,6 +88,16 @@ sed -i "s|^MO_BASE_IMAGE=.*|MO_BASE_IMAGE=$tag|" "$env_file"
 sed -i "s|^MO_DB_IMAGE=.*|MO_DB_IMAGE=$db_tag|" "$env_file"
 echo "Updated .env: MO_BASE_IMAGE=$tag  MO_DB_IMAGE=$db_tag"
 
+# Ensure postgres data directory exists (Docker does not auto-create bind mount dirs)
+pgdata="$(grep '^MO_PGDATA=' "$env_file" | cut -d= -f2-)"
+# Resolve relative path against repo root
+case "$pgdata" in
+  /*) : ;;
+  *)  pgdata="$repo_root/$pgdata" ;;
+esac
+mkdir -p "$pgdata"
+echo "Postgres data dir: $pgdata"
+
 compose_cmd="${COMPOSE_CMD:-docker-compose}"
 echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
 "$compose_cmd" --env-file "$env_file" up -d --build
