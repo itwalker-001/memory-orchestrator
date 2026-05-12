@@ -82,11 +82,15 @@ fi
 
 echo "MO_DB_IMAGE=$db_tag"
 
-compose_cmd="${COMPOSE_CMD:-docker-compose}"
+# Write computed image tags back to .env so docker-compose uses the exact hashed images
 env_file="$repo_root/.env"
+sed -i "s|^MO_BASE_IMAGE=.*|MO_BASE_IMAGE=$tag|" "$env_file"
+sed -i "s|^MO_DB_IMAGE=.*|MO_DB_IMAGE=$db_tag|" "$env_file"
+echo "Updated .env: MO_BASE_IMAGE=$tag  MO_DB_IMAGE=$db_tag"
+
+compose_cmd="${COMPOSE_CMD:-docker-compose}"
 echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
-MO_BASE_IMAGE="$tag" MO_DB_IMAGE="$db_tag" \
-  "$compose_cmd" --env-file "$env_file" up -d --build
+"$compose_cmd" --env-file "$env_file" up -d --build
 
 echo "Waiting for server to become healthy (up to 450 s)..."
 i=0
