@@ -1,26 +1,25 @@
 services:
   db:
-    # Custom image: pgvector/pgvector:pg16 + Apache AGE
-    image: ${MO_DB_IMAGE:-memory-orchestrator-db:latest}
+    image: ${MO_DB_IMAGE}
     build:
       context: .
       dockerfile: Dockerfile.db
       args:
-        SOCKS5_PROXY: ${SOCKS5_PROXY:-socks5h://172.16.10.30:1080}
+        SOCKS5_PROXY: ${SOCKS5_PROXY}
     container_name: memory-orchestrator-db
     hostname: memory-orchestrator-db
     environment:
-      POSTGRES_DB: memory_orchestrator
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${MO_DB_PASSWORD:-mo_secret}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MO_DB_PASSWORD}
     ports:
-      - "${MO_DB_PORT:-15432}:5432"
+      - "${MO_DB_PORT}:5432"
     command: >
       postgres
       -c shared_preload_libraries=age,vector
       -c search_path=ag_catalog,"$$user",public
     volumes:
-      - ${MO_PGDATA:-./data/postgres}:/var/lib/postgresql/data
+      - ${MO_PGDATA}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -34,12 +33,12 @@ services:
       context: ./memory_orchestrator_server
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: ${MO_BASE_IMAGE:-memory-orchestrator-server-base:latest}
-        TORCH_INDEX: ${TORCH_INDEX:-cpu}
+        BASE_IMAGE: ${MO_BASE_IMAGE}
+        TORCH_INDEX: ${TORCH_INDEX}
     command: >
       sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
     environment:
-      MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
+      MO_DB_DSN: ${MO_DB_DSN}
     depends_on:
       db:
         condition: service_healthy
@@ -52,22 +51,22 @@ services:
       context: ./memory_orchestrator_server
       dockerfile: Dockerfile
       args:
-        BASE_IMAGE: ${MO_BASE_IMAGE:-memory-orchestrator-server-base:latest}
-        TORCH_INDEX: ${TORCH_INDEX:-cpu}
+        BASE_IMAGE: ${MO_BASE_IMAGE}
+        TORCH_INDEX: ${TORCH_INDEX}
     ports:
-      - "${MO_HTTP_PORT:-8765}:8765"
+      - "${MO_HTTP_PORT}:8765"
     environment:
-      MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
-      MO_HTTP_HOST: "0.0.0.0"
-      MO_HTTP_PORT: "8765"
-      MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL:-}
-      MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL:-gpt-4o-mini}
-      MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY:-}
+      MO_DB_DSN: ${MO_DB_DSN}
+      MO_HTTP_HOST: ${MO_HTTP_HOST}
+      MO_HTTP_PORT: ${MO_HTTP_PORT}
+      MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL}
+      MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL}
+      MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY}
     depends_on:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${MO_HTTP_PORT:-8765}/healthz')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${MO_HTTP_PORT}/healthz')\""]
       interval: 10s
       timeout: 5s
       retries: 45
