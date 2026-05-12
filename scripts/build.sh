@@ -82,10 +82,18 @@ fi
 
 echo "MO_DB_IMAGE=$db_tag"
 
-# Write computed image tags back to .env so docker-compose uses the exact hashed images
+# Write computed image tags back to .env (upsert: replace if exists, append if missing)
 env_file="$repo_root/.env"
-sed -i "s|^MO_BASE_IMAGE=.*|MO_BASE_IMAGE=$tag|" "$env_file"
-sed -i "s|^MO_DB_IMAGE=.*|MO_DB_IMAGE=$db_tag|" "$env_file"
+set_env() {
+  key="$1" val="$2"
+  if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+    sed -i "s|^${key}=.*|${key}=${val}|" "$env_file"
+  else
+    echo "${key}=${val}" >> "$env_file"
+  fi
+}
+set_env MO_BASE_IMAGE "$tag"
+set_env MO_DB_IMAGE "$db_tag"
 echo "Updated .env: MO_BASE_IMAGE=$tag  MO_DB_IMAGE=$db_tag"
 
 # Ensure postgres data directory exists (Docker does not auto-create bind mount dirs)
