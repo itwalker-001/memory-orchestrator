@@ -2,86 +2,97 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Package documentation
+
+Each package has its own focused docs — start there when working inside a single package:
+
+| Package | Developer guide | User guide |
+|---|---|---|
+| `memory_orchestrator_server/` | [`memory_orchestrator_server/CLAUDE.md`](memory_orchestrator_server/CLAUDE.md) | [`memory_orchestrator_server/README.md`](memory_orchestrator_server/README.md) |
+| `memory_orchestrator_mcp/` | [`memory_orchestrator_mcp/CLAUDE.md`](memory_orchestrator_mcp/CLAUDE.md) | [`memory_orchestrator_mcp/README.md`](memory_orchestrator_mcp/README.md) |
+
+This file covers cross-package concerns: end-to-end request flow, shared data model, Docker
+deployment, and the commands needed to operate the full system from the repository root.
+
 ## Commands
 
 ```bash
-# Server package (FastAPI, DB, frontend)
-cd memory_orchestrator_server
-uv sync                           # Install all dependencies
-uv run alembic upgrade head       # Migrate database
-uv run mo-server setup --scope user                    # Wire into ~/.claude/settings.json
-uv run mo-server setup --client codex --scope user     # Wire into ~/.codex/
-uv run python download_models.py                       # Download BGE-M3 + reranker via ModelScope
-uv run mo-server serve-http                            # Start HTTP service on port 8765
-uv run mo-server migrate-embeddings                    # Re-embed all memories after model change
-uv run mo-server doctor                                # Check wiring
-uv run pytest                                          # All tests (unit + integration)
-uv run pytest src/memory_orchestrator_server/tests/unit/        # Unit tests only
-uv run pytest src/memory_orchestrator_server/tests/integration/ # Integration tests (needs Postgres)
-
-# MCP client package (hooks, client rules, zero deps)
-cd memory_orchestrator_mcp
+# --- Server package (run from memory_orchestrator_server/) ---
 uv sync
-uv run pytest                     # 9 tests
+uv run alembic upgrade head
+uv run python download_models.py
+uv run mo-server serve-http                            # port 8765
+uv run mo-server setup --scope user                    # wire Claude Code
+uv run mo-server setup --client codex --scope user     # wire Codex
+uv run mo-server doctor
+uv run mo-server migrate-embeddings                    # after model change
+uv run pytest
 
-# Build frontend
-cd memory_orchestrator_server/src/memory_orchestrator_server/frontend && npm run build
+# --- MCP client package (run from memory_orchestrator_mcp/) ---
+uv sync
+uv run pytest
+
+# --- Frontend (run from memory_orchestrator_server/frontend/) ---
+npm run build
+
+# --- Docker (run from repository root) ---
+./scripts/build.sh
+DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain ./scripts/build.sh
 ```
+
+→ Full command reference: [`memory_orchestrator_server/CLAUDE.md`](memory_orchestrator_server/CLAUDE.md)
+→ Hook CLI reference: [`memory_orchestrator_mcp/CLAUDE.md`](memory_orchestrator_mcp/CLAUDE.md)
 
 ## Architecture
 
-Two independently installable packages:
+Two independently installable packages connected over HTTP:
 
-- **`memory_orchestrator_server/`** — Server package (entry point: `mo-server`)
-  - FastAPI, PostgreSQL, pgvector, transformers (BGE-M3 + reranker), Alembic, repository, frontend, MCP HTTP bridge
-  - CLI: `mo-server serve-http | serve-mcp | setup | teardown | doctor | token | migrate | migrate-embeddings`
-  - Depends on `memory-orchestrator-mcp` (for client rules JSON files)
-  - Models stored in `memory_orchestrator_server/models/` (downloaded via `download_models.py`)
-
-- **`memory_orchestrator_mcp/`** — Client MCP package (no entry point, zero deps)
-  - Hooks, client rules (JSON), agent instructions, skill files
-  - Must stay lightweight: no DB, SQLAlchemy, FlagEmbedding, torch, pgvector, or Alembic
+```
+memory_orchestrator_mcp  (hooks + MCP stdio bridge)
+        │
+        │  HTTP → localhost:8765
+        ▼
+memory_orchestrator_server  (FastAPI + PostgreSQL + ML)
+```
 
 ### Request flow
 
 ```
-UserPromptSubmit hook  →  GET /context  →  repo.build_context()  →  inject markdown
-Stop hook              →  POST /ingest  →  ingestor.py  →  LLM extraction  →  repo.save()
-Claude/Codex MCP call  →  local stdio MCP  →  POST /mcp/tools/call  →  server repo.*()
+UserPromptSubmit hook  →  GET /context        →  repo.build_context()  →  inject markdown
+Stop hook              →  POST /hooks/ingest  →  ingestor.py           →  LLM extract → repo.save()
+Claude/Codex MCP call  →  stdio MCP (mo-mcp)  →  POST /mcp/tools/call  →  repo.*()
 ```
 
-### Key modules
+### Server router layout
 
-| File | Role |
-|---|---|
-| `memory_orchestrator_server/src/memory_orchestrator_server/models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `MemoryLink`, `SystemSetting`, `ApiToken` |
-| `memory_orchestrator_server/src/memory_orchestrator_server/repository.py` | All DB operations |
-| `memory_orchestrator_server/src/memory_orchestrator_server/routers/hooks.py` | `/healthz`, `/context`, `/ingest` endpoints |
-| `memory_orchestrator_server/src/memory_orchestrator_server/routers/ui.py` | `/api/memories`, `/api/projects`, `/api/settings` |
-| `memory_orchestrator_server/src/memory_orchestrator_server/routers/mcp.py` | `/mcp/tools/call`, `/mcp/resources/read` |
-| `memory_orchestrator_server/src/memory_orchestrator_server/mcp_core.py` | Server-side MCP tool implementations |
-| `memory_orchestrator_server/src/memory_orchestrator_server/embedder.py` | BGE-M3 dense embeddings via `transformers.AutoModel` |
-| `memory_orchestrator_server/src/memory_orchestrator_server/reranker.py` | BGE-reranker-v2-m3 cross-encoder via `transformers.AutoModelForSequenceClassification` |
-| `memory_orchestrator_server/src/memory_orchestrator_server/mcp_server.py` | stdio MCP runner (direct DB access) |
-| `memory_orchestrator_server/src/memory_orchestrator_server/client_adapters.py` | Claude/Codex setup/teardown |
-| `memory_orchestrator_server/src/memory_orchestrator_server/client_rules.py` | Reads JSON rules from `memory_orchestrator_mcp` |
-| `memory_orchestrator_server/src/memory_orchestrator_server/cli.py` | `mo-server` entry point |
-| `memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/user_prompt_submit.py` | UserPromptSubmit hook |
-| `memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/stop.py` | Stop hook |
-| `memory_orchestrator_mcp/src/memory_orchestrator_mcp/client_rules/` | `claude.json`, `codex.json` |
+```
+/healthz  /context  /hooks/ingest   →  routers/hooks.py
+/mcp/tools/*  /mcp/resources/*      →  routers/mcp.py   →  mcp_core.py
+/ui/*  /api/*                       →  routers/ui.py
+                                            │
+                                      repository.py
+                                            │
+                              PostgreSQL + pgvector + Apache AGE
+```
 
-### Data model
+→ Module detail: [`memory_orchestrator_server/CLAUDE.md § Key modules`](memory_orchestrator_server/CLAUDE.md)
+→ Hook internals: [`memory_orchestrator_mcp/CLAUDE.md § Hook behavior`](memory_orchestrator_mcp/CLAUDE.md)
 
-- `projects`: slug → UUID. Global sentinel: `00000000-0000-0000-0000-000000000000` (slug `*`).
-- `memories`: `type` ∈ {user, feedback, project, reference}; `embedding vector(1024)` (BGE-M3); `superseded_by` for soft-delete.
-- `system_settings`: key-value; read on every request — no restart needed for most config.
-- `sessions`: ingestion progress per session (`last_offset`, `status` ∈ pending/done/failed).
-- `api_tokens`: hashed bearer tokens. `kind='ui_admin'` → `/api/*`; `kind='mcp_client'` → `/mcp/*`.
+## Data model
 
-### Authentication
+Defined in `memory_orchestrator_server/models.py`; consumed by both packages via HTTP.
 
-- `/api/*` requires `ui_admin` token when any DB token or `MO_UI_TOKEN` env var exists.
-- `/mcp/*` requires `mcp_client` token when any DB token or `MO_MCP_TOKEN` env var exists.
+- `projects` — slug → UUID. Global sentinel: `00000000-0000-0000-0000-000000000000` (slug `*`).
+- `memories` — `type` ∈ {user, feedback, project, reference}; `embedding vector(1024)` (BGE-M3); `superseded_by` for soft-delete chain.
+- `system_settings` — key-value; cached 60 s; editable at runtime without restart.
+- `sessions` — ingestion progress per session (`last_offset`, `status` ∈ pending/done/failed).
+- `api_tokens` — SHA256-hashed bearer tokens; `kind` ∈ {ui_admin, mcp_client}.
+
+## Authentication
+
+- `/ui/*` and `/api/*` require `ui_admin` token (or `MO_UI_TOKEN` env var).
+- `/mcp/*` requires `mcp_client` token (or `MO_MCP_TOKEN` env var).
+- No token rows in DB → auth disabled.
 
 ```bash
 # From memory_orchestrator_server/:
@@ -89,26 +100,86 @@ uv run mo-server token create --kind ui_admin --name admin
 uv run mo-server token create --kind mcp_client --name "local claude"
 ```
 
-### Runtime config (system_settings)
+`mo-server setup` auto-injects `MO_MCP_TOKEN` into the client environment.
 
-Editable at `/ui` → Settings without restart. Keys: `hook_budget_tokens`, `hook_cooldown_sec`,
-`hook_min_turns`, `search_top_k`, `dup_threshold`, `extraction_base_url`, `extraction_model`,
-`embed_model`, `embed_dim`, `rerank_enabled`, `rerank_model`.
+## Runtime config (system_settings)
 
-### Tests
+Editable at `/ui` → Settings without restart.
 
-Run from each package directory with `uv run pytest`.
+| Key | Purpose |
+|---|---|
+| `hook_budget_tokens` | Max tokens injected per UserPromptSubmit |
+| `hook_cooldown_sec` | Min seconds between Stop hook ingestions |
+| `hook_min_turns` | Min user turns before Stop hook fires |
+| `search_top_k` | Candidate count for vector search |
+| `dup_threshold` | Cosine threshold for duplicate detection |
+| `extraction_base_url` | LLM extraction endpoint (OpenAI-compatible) |
+| `extraction_model` | Model for extraction (default: `gpt-4o-mini`) |
+| `embed_model` | HuggingFace embedding model path |
+| `embed_dim` | Embedding vector dimension (default: 1024) |
+| `rerank_enabled` | Enable BGE reranker after vector search |
+| `rerank_model` | HuggingFace reranker model path |
+| `graph_enabled` | Enable Apache AGE graph reasoning |
+| `graph_hop_depth` | Max hops in graph traversal |
 
-- Server: `memory_orchestrator_server/src/memory_orchestrator_server/tests/`
-  - `unit/` — no DB required (27 tests)
-  - `integration/` — Postgres on port 5433 required (75 tests)
-    - `test_http_app.py` — HTTP endpoint coverage
-    - `test_mcp_tools.py` — MCP tool coverage
-    - `test_mcp_http.py` — MCP HTTP bridge coverage
-    - `test_repository.py` — repository layer
-    - `unit/test_package_boundaries.py` — package isolation enforcement
-- MCP: `memory_orchestrator_mcp/src/memory_orchestrator_mcp/tests/` (9 tests, no deps)
+## Tests
 
-### Database
+```bash
+# Server (from memory_orchestrator_server/)
+uv run pytest tests/unit/        # no DB required
+uv run pytest tests/integration/ # needs Postgres on port 5433
 
-PostgreSQL 16 + pgvector on port 5433. Override test DB with `MO_TEST_DB_DSN`.
+# MCP client (from memory_orchestrator_mcp/)
+uv run pytest
+```
+
+Override test DB: `MO_TEST_DB_DSN=postgresql+asyncpg://...`
+
+→ Full test file listing: [`memory_orchestrator_server/CLAUDE.md § Tests`](memory_orchestrator_server/CLAUDE.md)
+→ Hook test patterns: [`memory_orchestrator_mcp/CLAUDE.md § Tests`](memory_orchestrator_mcp/CLAUDE.md)
+
+## Database
+
+PostgreSQL 16 + pgvector + Apache AGE on port 5433.
+
+```bash
+# Local dev — after creating DB and enabling extensions:
+cd memory_orchestrator_server
+uv run alembic upgrade head
+
+# New migration:
+uv run alembic revision --autogenerate -m "describe change"
+uv run alembic upgrade head
+```
+
+→ DB setup detail: [`memory_orchestrator_server/CLAUDE.md § Database`](memory_orchestrator_server/CLAUDE.md)
+
+## Docker
+
+Root-level Docker files and the compose entry point:
+
+| Path | Role |
+|---|---|
+| `docker-compose.yml` | Compose file for `db`, `migrate`, `server` |
+| `.env` | Compose environment file |
+| `Dockerfile.db` | pgvector PostgreSQL 16 + Apache AGE image |
+| `scripts/build.sh` | Full deployment entrypoint |
+| `memory_orchestrator_server/Dockerfile.base` | Heavy base: apt deps, Python deps, BGE models |
+| `memory_orchestrator_server/Dockerfile` | App image: frontend build, source, entry points |
+
+`scripts/build.sh` manages hash-tagged images:
+
+- `memory-orchestrator-db:<hash>` — from `Dockerfile.db`
+- `memory-orchestrator-server-base:<hash>` — from `Dockerfile.base`, `pyproject.toml`, `uv.lock`, `download_models.py`
+
+The script passes `MO_DB_IMAGE` and `MO_BASE_IMAGE` into `docker-compose up -d --build`,
+waits for `/healthz`, then creates or rotates a `ui_admin` token and prints the token value.
+
+```bash
+./scripts/build.sh                                    # standard build
+./scripts/build.sh --force                            # rebuild hash images unconditionally
+DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain ./scripts/build.sh  # verbose CUDA build
+```
+
+The CUDA `torch` dependency chain is ~2.5 GiB on Linux x86_64. `Dockerfile.base` uses the
+Tsinghua PyPI mirror (`UV_INDEX_URL`) and `UV_HTTP_TIMEOUT=300` to handle large downloads.

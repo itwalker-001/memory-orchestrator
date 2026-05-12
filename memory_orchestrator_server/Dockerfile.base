@@ -1,0 +1,29 @@
+# Build context: memory_orchestrator_server/
+#
+# Base image: system packages + Python dependencies + local model files.
+# Rebuild this only when Dockerfile.base, pyproject.toml, uv.lock, or
+# download_models.py changes.
+
+FROM astral/uv:python3.13-bookworm-slim
+WORKDIR /app/memory_orchestrator_server
+
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' \
+      /etc/apt/sources.list \
+      /etc/apt/sources.list.d/debian.sources \
+      2>/dev/null || true \
+ && apt-get update && apt-get install -y --no-install-recommends build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV UV_SYSTEM_PYTHON=1
+ENV UV_INDEX_URL=https://mirrors.ustc.edu.cn/pypi/simple
+ENV UV_HTTP_TIMEOUT=300
+
+COPY pyproject.toml uv.lock ./
+RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.txt \
+ && uv pip install --system -r /tmp/requirements.txt
+
+COPY download_models.py ./
+RUN python download_models.py
+
+ENV MO_EMBED_MODEL=/app/memory_orchestrator_server/models/BAAI/bge-m3
+ENV MO_RERANK_MODEL=/app/memory_orchestrator_server/models/BAAI/bge-reranker-v2-m3

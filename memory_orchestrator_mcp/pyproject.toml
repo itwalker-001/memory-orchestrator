@@ -17,7 +17,7 @@ build-backend = "setuptools.build_meta"
 mo-mcp = "memory_orchestrator_mcp.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = [".."]
 include = ["memory_orchestrator_mcp*"]
 exclude = ["memory_orchestrator_mcp.tests*"]
 
@@ -34,4 +34,4 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["src/memory_orchestrator_mcp/tests"]
+testpaths = ["tests"]

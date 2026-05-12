@@ -1,0 +1,113 @@
+#!/bin/sh
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+repo_root="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+server_root="$repo_root/memory_orchestrator_server"
+
+image="memory-orchestrator-server-base"
+db_image="memory-orchestrator-db"
+force=0
+admin_token_name="${MO_ADMIN_TOKEN_NAME:-bootstrap-admin}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --force)
+      force=1
+      ;;
+    --image)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "missing value for --image" >&2
+        exit 2
+      fi
+      image="$1"
+      ;;
+    --admin-token-name)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "missing value for --admin-token-name" >&2
+        exit 2
+      fi
+      admin_token_name="$1"
+      ;;
+    *)
+      echo "usage: $0 [--force] [--image IMAGE] [--admin-token-name NAME]" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+cd "$server_root"
+
+hash_files="Dockerfile.base pyproject.toml uv.lock download_models.py"
+
+for file in $hash_files; do
+  if [ ! -f "$file" ]; then
+    echo "missing hash input: $file" >&2
+    exit 1
+  fi
+done
+
+hash="$(
+  sha256sum $hash_files \
+    | sha256sum \
+    | awk '{print substr($1, 1, 12)}'
+)"
+tag="${image}:${hash}"
+
+if [ "$force" -eq 0 ] && docker image inspect "$tag" >/dev/null 2>&1; then
+  echo "Base image already exists: $tag"
+else
+  docker build -f Dockerfile.base -t "$tag" -t "${image}:latest" .
+fi
+
+echo "MO_BASE_IMAGE=$tag"
+
+cd "$repo_root"
+
+db_hash="$(
+  sha256sum Dockerfile.db \
+    | sha256sum \
+    | awk '{print substr($1, 1, 12)}'
+)"
+db_tag="${db_image}:${db_hash}"
+
+if [ "$force" -eq 0 ] && docker image inspect "$db_tag" >/dev/null 2>&1; then
+  echo "Database image already exists: $db_tag"
+else
+  docker build -f Dockerfile.db -t "$db_tag" -t "${db_image}:latest" .
+fi
+
+echo "MO_DB_IMAGE=$db_tag"
+
+compose_cmd="${COMPOSE_CMD:-docker-compose}"
+echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
+MO_BASE_IMAGE="$tag" MO_DB_IMAGE="$db_tag" "$compose_cmd" up -d --build
+
+echo "Waiting for HTTP health check..."
+i=0
+while [ "$i" -lt 60 ]; do
+  if "$compose_cmd" exec -T server sh -c "wget -qO- http://127.0.0.1:\${MO_HTTP_PORT:-8765}/healthz >/dev/null" >/dev/null 2>&1; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 2
+done
+
+if [ "$i" -ge 60 ]; then
+  echo "service did not become healthy in time" >&2
+  "$compose_cmd" ps
+  exit 1
+fi
+
+token_output="$(
+  "$compose_cmd" exec -T server \
+    mo-server token create --kind ui_admin --name "$admin_token_name"
+)"
+
+echo
+echo "ADMIN TOKEN"
+echo "==========="
+echo "$token_output"
