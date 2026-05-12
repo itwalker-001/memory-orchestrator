@@ -59,9 +59,9 @@ services:
       MO_DB_DSN: ${MO_DB_DSN}
       MO_HTTP_HOST: ${MO_HTTP_HOST}
       MO_HTTP_PORT: ${MO_HTTP_PORT}
-      MO_EMBED_MODEL: /app/memory_orchestrator_server/models/BAAI/bge-m3
+      MO_EMBED_MODEL: ${MO_EMBED_MODEL}
       MO_EMBED_DIM: ${MO_EMBED_DIM}
-      MO_RERANK_MODEL: /app/memory_orchestrator_server/models/BAAI/bge-reranker-v2-m3
+      MO_RERANK_MODEL: ${MO_RERANK_MODEL}
       MO_LOG_LEVEL: ${MO_LOG_LEVEL}
       MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL}
       MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL}
