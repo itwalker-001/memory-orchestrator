@@ -83,8 +83,10 @@ fi
 echo "MO_DB_IMAGE=$db_tag"
 
 compose_cmd="${COMPOSE_CMD:-docker-compose}"
+env_file="$repo_root/.env"
 echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
-MO_BASE_IMAGE="$tag" MO_DB_IMAGE="$db_tag" "$compose_cmd" up -d --build
+MO_BASE_IMAGE="$tag" MO_DB_IMAGE="$db_tag" \
+  "$compose_cmd" --env-file "$env_file" up -d --build
 
 echo "Waiting for server to become healthy (up to 450 s)..."
 i=0
