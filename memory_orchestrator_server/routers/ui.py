@@ -3,7 +3,7 @@ import json
 import uuid
 from pathlib import Path
 import httpx
-from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func, update as sa_update
@@ -252,22 +252,6 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             tok.revoked_at = utc_now()
             await s.commit()
         return {"ok": True}
-
-    async def _pg_dsn() -> str:
-        async with maker() as s:
-            repo = MemoryRepository(s)
-            cfg = await repo.get_settings()
-        dsn = cfg.get("db_dsn") or get_settings().db_dsn
-        return dsn.replace("postgresql+asyncpg://", "postgresql://")
-
-    def _pg_bin(name: str) -> str:
-        import glob
-        import sys
-        if sys.platform == "win32":
-            candidates = sorted(glob.glob(f"C:/Program Files/PostgreSQL/*/bin/{name}.exe"), reverse=True)
-        else:
-            candidates = sorted(glob.glob(f"/usr/lib/postgresql/*/bin/{name}"), reverse=True)
-        return candidates[0] if candidates else name
 
     @router.get("/timezone")
     async def timezone() -> dict:
@@ -667,56 +651,16 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             })
         return pairs
 
-    @router.get("/backup")
-    async def backup_db():
-        import asyncio
-        import datetime
-        from fastapi.responses import Response
-        dsn = await _pg_dsn()
-        proc = await asyncio.create_subprocess_exec(
-            _pg_bin("pg_dump"), "--clean", "--if-exists", "--format=plain", dsn,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            raise HTTPException(status_code=500, detail=stderr.decode(errors="replace"))
-        ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        return Response(
-            content=stdout,
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="mo-backup-{ts}.sql"'},
-        )
-
-    @router.post("/restore", status_code=200)
-    async def restore_db(file: UploadFile):
-        import asyncio
-        import os
-        import tempfile
-        dsn = await _pg_dsn()
-        sql_bytes = await file.read()
-        with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as f:
-            f.write(sql_bytes)
-            tmp = f.name
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                _pg_bin("psql"), dsn, "-f", tmp,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
-        finally:
-            os.unlink(tmp)
-        if proc.returncode != 0:
-            raise HTTPException(status_code=500, detail=stderr.decode(errors="replace")[:1000])
-        return {"ok": True}
-
     @public.post("/register", status_code=201)
     async def register_client(body: dict = Body(...)) -> dict:
         """Issue a new mcp_client token for a remote client (no auth required — localhost only).
 
-        Body: {"name": str}  — host identifier, e.g. "BK-A-JA183(172.21.170.85)"
-        Returns: {"token": "<plaintext>"}
+        Body: {"name": str, "force": bool}
+          name  — host identifier, e.g. "BK-A-JA183(172.21.170.85)"
+          force — if false (default) and a valid token already exists for this name,
+                  return {"already_registered": true, "token": ""} without replacing.
+                  Pass force=true to rotate the token unconditionally.
+        Returns: {"token": "<plaintext>", "name": str, "already_registered": bool}
         """
         import hashlib
         import secrets
@@ -725,12 +669,9 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         hostname = str(body.get("hostname") or "unknown")
         ip = str(body.get("ip") or "")
         name = str(body.get("name") or (f"{hostname}({ip})" if ip else hostname))
+        force = bool(body.get("force", False))
 
-        from datetime import datetime, timezone
         from sqlalchemy import select
-
-        raw = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(raw.encode()).hexdigest()
 
         async with maker() as s:
             existing = (await s.execute(
@@ -738,15 +679,24 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                     ApiToken.name == name,
                     ApiToken.kind == "mcp_client",
                     ApiToken.revoked_at.is_(None),
+                    ApiToken.enabled.is_(True),
                 )
             )).scalar_one_or_none()
+
+            if existing is not None and not force:
+                # Valid token exists — don't rotate, tell client to use mo-mcp register --force
+                return {"token": "", "name": name, "already_registered": True}
+
+            raw = secrets.token_urlsafe(32)
+            token_hash = hashlib.sha256(raw.encode()).hexdigest()
+
             if existing is not None:
                 existing.token_hash = token_hash
             else:
                 s.add(ApiToken(name=name, kind="mcp_client", token_hash=token_hash))
             await s.commit()
 
-        return {"token": raw, "name": name}
+        return {"token": raw, "name": name, "already_registered": False}
 
     outer.include_router(public)
     outer.include_router(router)

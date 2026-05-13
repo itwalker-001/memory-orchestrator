@@ -60,8 +60,12 @@ def _update_claude_json_env(**kwargs: str) -> None:
 
 
 
-def _auto_register(base_url: str) -> str:
-    """Request a mcp_client token from the server via POST /api/register."""
+def _auto_register(base_url: str, force: bool = False) -> str:
+    """Request a mcp_client token from the server via POST /api/register.
+
+    If the server reports already_registered (valid token exists but we have none locally),
+    retries with force=true to rotate and obtain a fresh token.
+    """
     import json
     import socket
     import urllib.request
@@ -72,7 +76,7 @@ def _auto_register(base_url: str) -> str:
     except Exception:
         hostname, ip = "unknown", "unknown"
     name = f"{hostname}({ip})"
-    body = json.dumps({"name": name, "hostname": hostname, "ip": ip}).encode()
+    body = json.dumps({"name": name, "hostname": hostname, "ip": ip, "force": force}).encode()
     req = urllib.request.Request(
         f"{base_url}/api/register",
         data=body,
@@ -83,6 +87,9 @@ def _auto_register(base_url: str) -> str:
         with urllib.request.urlopen(req, timeout=3) as resp:
             result = json.loads(resp.read())
             token = result.get("token", "")
+            if result.get("already_registered") and not force:
+                _flog(f"auto_register: server has valid token for {name}, retrying with force=true")
+                return _auto_register(base_url, force=True)
             if token:
                 _flog(f"auto_register: obtained token for {result.get('name')}")
             return token
@@ -329,10 +336,11 @@ def setup(base_url: str, client: str) -> None:
 
 @main.command(name="register")
 @click.option("--base-url", default=None, help="HTTP server URL (default: MO_HTTP_BASE_URL or http://localhost:8765)")
-def register(base_url: str | None) -> None:
+@click.option("--force", is_flag=True, default=False, help="Rotate token even if a valid one already exists on the server.")
+def register(base_url: str | None, force: bool) -> None:
     """Register this client with the HTTP server and save the MCP token."""
     url = (base_url or os.environ.get("MO_HTTP_BASE_URL") or "http://localhost:8765").rstrip("/")
-    token = _auto_register(url)
+    token = _auto_register(url, force=force)
     if token:
         _update_claude_json_env(MO_MCP_TOKEN=token, MO_HTTP_BASE_URL=url)
         click.echo(f"Registered. MO_MCP_TOKEN + MO_HTTP_BASE_URL written to ~/.claude.json env.")
@@ -499,6 +507,10 @@ async def _run_stdio_server() -> None:
             )
             _flog(msg)
             raise RuntimeError(msg)
+        # Persist new token so this process and future sessions can authenticate
+        os.environ["MO_MCP_TOKEN"] = token
+        _update_claude_json_env(MO_MCP_TOKEN=token)
+        _flog("serve-mcp: auto-registered token saved to env + ~/.claude.json")
 
     _tools: list[Tool] = [
         Tool(name="search_memory", description="Retrieve memories by semantic similarity.",
