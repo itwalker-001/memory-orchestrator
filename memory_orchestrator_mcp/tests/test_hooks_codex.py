@@ -10,7 +10,7 @@ def _load_hook(path: str) -> dict:
 
 
 def test_user_prompt_submit_reads_codex_cwd_from_stdin(monkeypatch, tmp_path, capsys):
-    module = _load_hook("src/memory_orchestrator_mcp/hooks/user_prompt_submit.py")
+    module = _load_hook("hooks/user_prompt_submit.py")
     monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
     monkeypatch.setattr(sys, "argv", ["user_prompt_submit.py", "--client", "codex"])
     monkeypatch.setattr(sys, "stdin", _FakeStdin(json.dumps({"cwd": str(tmp_path)})))
@@ -31,7 +31,7 @@ def test_user_prompt_submit_reads_codex_cwd_from_stdin(monkeypatch, tmp_path, ca
 
 
 def test_user_prompt_submit_keeps_claude_plain_stdout(monkeypatch, tmp_path, capsys):
-    module = _load_hook("src/memory_orchestrator_mcp/hooks/user_prompt_submit.py")
+    module = _load_hook("hooks/user_prompt_submit.py")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.delenv("MO_CLIENT", raising=False)
     monkeypatch.setattr(sys, "argv", ["user_prompt_submit.py"])
@@ -51,7 +51,7 @@ def test_stop_reads_codex_cwd_and_state_dir(monkeypatch, tmp_path):
     codex_home = tmp_path / "codex-home"
     codex_cwd = tmp_path / "repo"
     codex_cwd.mkdir()
-    module = _load_hook("src/memory_orchestrator_mcp/hooks/stop.py")
+    module = _load_hook("hooks/stop.py")
     monkeypatch.setattr(sys, "argv", ["stop.py", "--client", "codex"])
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)

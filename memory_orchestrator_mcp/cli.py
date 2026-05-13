@@ -71,7 +71,8 @@ def _auto_register(base_url: str) -> str:
         ip = socket.gethostbyname(hostname)
     except Exception:
         hostname, ip = "unknown", "unknown"
-    body = json.dumps({"hostname": hostname, "ip": ip, "client": _client_name()}).encode()
+    name = f"{hostname}({ip})"
+    body = json.dumps({"name": name, "hostname": hostname, "ip": ip}).encode()
     req = urllib.request.Request(
         f"{base_url}/api/register",
         data=body,
@@ -114,26 +115,163 @@ def main() -> None:
     """Memory Orchestrator MCP client CLI."""
 
 
+def _hook_cmd(mcp_dir: str, name: str, client: str, base_url: str) -> str:
+    return (
+        f"uv run --no-sync --project {mcp_dir} "
+        f"python {mcp_dir}/hooks/{name}.py --client {client} --base-url {base_url}"
+    )
+
+
+_AGENTS_BEGIN = "<!-- memory-orchestrator:begin -->"
+_AGENTS_END = "<!-- memory-orchestrator:end -->"
+
+
+def _install_agents_md(mcp_dir: Path, codex_home: Path) -> None:
+    """Merge our AGENTS.md block into ~/.codex/AGENTS.md using section markers."""
+    import re
+    agents_src = mcp_dir / "agents" / "memory-orchestrator.AGENTS.md"
+    if not agents_src.exists():
+        return
+    agents_dst = codex_home / "AGENTS.md"
+    our_content = agents_src.read_text(encoding="utf-8").strip()
+    block = f"{_AGENTS_BEGIN}\n{our_content}\n{_AGENTS_END}"
+    if agents_dst.exists():
+        existing = agents_dst.read_text(encoding="utf-8")
+        if _AGENTS_BEGIN in existing:
+            new_text = re.sub(
+                rf"{re.escape(_AGENTS_BEGIN)}.*?{re.escape(_AGENTS_END)}",
+                block,
+                existing,
+                flags=re.DOTALL,
+            )
+        else:
+            new_text = existing.rstrip("\n") + "\n\n" + block + "\n"
+    else:
+        new_text = block + "\n"
+    agents_dst.write_text(new_text, encoding="utf-8")
+
+
+def _remove_agents_md(codex_home: Path) -> None:
+    """Remove our section from ~/.codex/AGENTS.md; delete file only if it becomes empty."""
+    import re
+    agents_dst = codex_home / "AGENTS.md"
+    if not agents_dst.exists():
+        return
+    text = agents_dst.read_text(encoding="utf-8")
+    if _AGENTS_BEGIN not in text:
+        return
+    new_text = re.sub(
+        rf"\n?{re.escape(_AGENTS_BEGIN)}.*?{re.escape(_AGENTS_END)}\n?",
+        "",
+        text,
+        flags=re.DOTALL,
+    ).strip("\n")
+    if new_text:
+        agents_dst.write_text(new_text + "\n", encoding="utf-8")
+    else:
+        agents_dst.unlink()
+    click.echo(f"removed memory-orchestrator section from {agents_dst}")
+
+
+def _setup_codex(base_url: str, mcp_dir: str) -> None:
+    """Write ~/.codex/config.toml and ~/.codex/hooks.json for Codex."""
+    import json
+    import re
+
+    codex_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+    codex_home.mkdir(parents=True, exist_ok=True)
+    config_path = codex_home / "config.toml"
+    hooks_path = codex_home / "hooks.json"
+
+    # --- 1. Patch config.toml ---
+    text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+
+    # Replace deprecated codex_hooks with hooks in [features]
+    text = re.sub(r"(?m)^codex_hooks\s*=.*\n?", "", text)
+    if re.search(r"(?m)^\[features\]", text):
+        if not re.search(r"(?m)^hooks\s*=", text):
+            text = re.sub(r"(?m)^(\[features\])", r"\1\nhooks = true", text)
+    else:
+        text += "\n[features]\nhooks = true\n"
+
+    # Remove all existing memory-orchestrator MCP sections
+    filtered, skip = [], False
+    for line in text.splitlines(keepends=True):
+        if re.match(r"^\[mcp_servers\.memory-orchestrator", line):
+            skip = True
+        elif re.match(r"^\[", line) and skip:
+            skip = False
+        if not skip:
+            filtered.append(line)
+    text = "".join(filtered).rstrip() + "\n"
+
+    # Append updated MCP server config
+    text += (
+        f"\n[mcp_servers.memory-orchestrator]\n"
+        f'command = "uv"\n'
+        f'args = ["run", "--no-sync", "--project", "{mcp_dir}", "mo-mcp", "serve-mcp", "--client", "codex"]\n'
+        f"\n[mcp_servers.memory-orchestrator.env]\n"
+        f'MO_CLIENT = "codex"\n'
+        f'MO_HTTP_BASE_URL = "{base_url}"\n'
+    )
+    config_path.write_text(text, encoding="utf-8")
+    click.echo(f"[1/3] config.toml: [features] hooks=true, MCP server updated")
+
+    # --- 2. Write hooks.json (new Codex array format, string commands) ---
+    hooks_data = {
+        "hooks": {
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", "codex", base_url)}]}],
+            "Stop": [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", "codex", base_url)}]}],
+        }
+    }
+    hooks_path.write_text(json.dumps(hooks_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    click.echo(f"[2/3] hooks.json written")
+
+    # --- 3. Register token → write to config.toml env ---
+    token = _auto_register(base_url)
+    if token:
+        cfg_text = config_path.read_text(encoding="utf-8")
+        if re.search(r"(?m)^MO_MCP_TOKEN\s*=", cfg_text):
+            cfg_text = re.sub(r"(?m)^MO_MCP_TOKEN\s*=.*", f'MO_MCP_TOKEN = "{token}"', cfg_text)
+        else:
+            cfg_text = cfg_text.rstrip() + f'\nMO_MCP_TOKEN = "{token}"\n'
+        config_path.write_text(cfg_text, encoding="utf-8")
+        click.echo(f"[3/3] registered token → written to config.toml env")
+    else:
+        click.echo(f"[3/3] ERROR: MO_MCP_TOKEN is required — server unreachable at {base_url}", err=True)
+        sys.exit(1)
+
+    # --- 4. Install AGENTS.md (section-marker merge, never overwrites other content) ---
+    _install_agents_md(Path(mcp_dir), codex_home)
+    click.echo(f"[4/4] AGENTS.md installed → {codex_home / 'AGENTS.md'}")
+
+    click.echo("")
+    click.echo("Done. Restart Codex for changes to take effect.")
+
+
 @main.command(name="setup")
-@click.option("--base-url", default="http://localhost:8765",
-              help="HTTP server URL", show_default=True)
+@click.option("--base-url", prompt="Memory Orchestrator server URL", help="e.g. http://172.16.10.124:8765")
 @click.option("--client", type=click.Choice(["claude", "codex"]), default="claude",
               show_default=True)
 def setup(base_url: str, client: str) -> None:
-    """Configure MCP on this machine: write settings.json + register token.
+    """Configure MCP on this machine: write client config + register token.
 
     Run this once on a new machine after the server is up.
-    Then restart Claude Code.
     """
     import json
     import subprocess
     import sys
 
     base_url = base_url.rstrip("/")
-    # memory_orchestrator_mcp/ package dir (3 levels up from this file)
-    mcp_dir = str(Path(__file__).parent.parent.parent.resolve()).replace("\\", "/")
+    # memory_orchestrator_mcp/ package dir (same dir as this file)
+    mcp_dir = str(Path(__file__).parent.resolve()).replace("\\", "/")
 
-    # --- 1. Register MCP server via claude mcp add -------------------------
+    if client == "codex":
+        _setup_codex(base_url, mcp_dir)
+        return
+
+    # --- Claude setup ---
+    # 1. Register MCP server via claude mcp add
     import platform
     _shell = platform.system() == "Windows"
     subprocess.run(
@@ -155,31 +293,35 @@ def setup(base_url: str, client: str) -> None:
         sys.exit(1)
     click.echo(f"[1/3] claude mcp add: ok")
 
-    # --- 2. Write hooks to settings.json -----------------------------------
+    # 2. Write hooks to settings.json
     settings = _settings_path()
     data = json.loads(settings.read_text(encoding="utf-8")) if settings.exists() else {}
-
-    hook_cmd = lambda name: (
-        f"uv run --no-sync --project {mcp_dir} "
-        f"python {mcp_dir}/src/memory_orchestrator_mcp/hooks/{name}.py --client {client}"
-    )
     data.setdefault("hooks", {})
-    data["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": hook_cmd("user_prompt_submit")}]}]
-    data["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": hook_cmd("stop")}]}]
+    data["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", client, base_url)}]}]
+    data["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", client, base_url)}]}]
 
     settings.parent.mkdir(parents=True, exist_ok=True)
     settings.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     _update_claude_json_env(MO_HTTP_BASE_URL=base_url)
     click.echo(f"[2/3] hooks written  (MO_HTTP_BASE_URL={base_url})")
 
-    # --- 3. Register token + write to claude.json env --------------------
+    # 3. Register token + write to claude.json env
     token = _auto_register(base_url)
     if token:
         _update_claude_json_env(MO_MCP_TOKEN=token)
         click.echo(f"[3/3] registered token → written to ~/.claude.json env")
     else:
-        click.echo("[3/3] warning: could not reach server to register token.", err=True)
-        click.echo(f"      run later:  mo-mcp register --base-url {base_url}", err=True)
+        click.echo(f"[3/3] ERROR: MO_MCP_TOKEN is required — server unreachable at {base_url}", err=True)
+        sys.exit(1)
+
+    # 4. Install SKILL.md
+    import shutil
+    skill_src = Path(mcp_dir) / "skills" / "memory-orchestrator" / "SKILL.md"
+    skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator" / "SKILL.md"
+    if skill_src.exists():
+        skill_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(skill_src, skill_dst)
+        click.echo(f"[4/4] SKILL.md installed → {skill_dst}")
 
     click.echo("")
     click.echo("Done. Open a NEW terminal / restart Claude Code for env vars to take effect.")
@@ -199,12 +341,58 @@ def register(base_url: str | None) -> None:
 
 
 @main.command(name="teardown")
+@click.option("--client", type=click.Choice(["claude", "codex"]), default="claude", show_default=True)
 @click.option("--scope", type=click.Choice(["user", "project"]), default="user")
-def teardown(scope: str) -> None:
-    """Remove Memory Orchestrator MCP wiring from Claude Code."""
+def teardown(client: str, scope: str) -> None:
+    """Remove Memory Orchestrator MCP wiring from Claude Code or Codex."""
     import json
+    import shutil
     import subprocess
 
+    if client == "codex":
+        import re
+        codex_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+        config_path = codex_home / "config.toml"
+        hooks_path = codex_home / "hooks.json"
+
+        # Remove MCP server section from config.toml
+        if config_path.exists():
+            text = config_path.read_text(encoding="utf-8")
+            filtered, skip = [], False
+            for line in text.splitlines(keepends=True):
+                if re.match(r"^\[mcp_servers\.memory-orchestrator", line):
+                    skip = True
+                elif re.match(r"^\[", line) and skip:
+                    skip = False
+                if not skip:
+                    filtered.append(line)
+            new_text = "".join(filtered)
+            if new_text != text:
+                config_path.write_text(new_text, encoding="utf-8")
+                click.echo(f"cleaned {config_path}")
+
+        # Remove hooks.json entries
+        if hooks_path.exists():
+            try:
+                hooks_data = json.loads(hooks_path.read_text(encoding="utf-8"))
+                changed = False
+                for key in ["UserPromptSubmit", "Stop"]:
+                    if key in hooks_data.get("hooks", {}):
+                        del hooks_data["hooks"][key]
+                        changed = True
+                if changed:
+                    hooks_path.write_text(json.dumps(hooks_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                    click.echo(f"cleaned {hooks_path}")
+            except Exception as e:
+                click.echo(f"hooks.json cleanup failed: {e}", err=True)
+
+        # Remove AGENTS.md section (section-marker safe removal)
+        _remove_agents_md(codex_home)
+
+        click.echo("Done.")
+        return
+
+    # --- Claude teardown ---
     p = _settings_path()
     if p.exists():
         data = json.loads(p.read_text(encoding="utf-8"))
@@ -232,6 +420,12 @@ def teardown(scope: str) -> None:
             click.echo("mcp remove: ok")
     except FileNotFoundError:
         pass
+
+    # Remove SKILL.md
+    skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator"
+    if skill_dst.exists():
+        shutil.rmtree(skill_dst)
+        click.echo(f"removed {skill_dst}")
 
 
 @main.command(name="doctor")
@@ -297,7 +491,14 @@ async def _run_stdio_server() -> None:
 
     if not token_from_file and not token_from_env:
         _flog("serve-mcp: no token found, attempting auto-register")
-        _auto_register(base_url)
+        token = _auto_register(base_url)
+        if not token:
+            msg = (
+                "MO_MCP_TOKEN is required but not set and auto-registration failed.\n"
+                f"Run:  mo-mcp setup --client <claude|codex> --base-url {base_url}"
+            )
+            _flog(msg)
+            raise RuntimeError(msg)
 
     _tools: list[Tool] = [
         Tool(name="search_memory", description="Retrieve memories by semantic similarity.",

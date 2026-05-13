@@ -197,5 +197,13 @@
   "Create": "创建",
   "Name…": "名称…",
   "No tokens yet.": "暂无令牌",
-  "Token value (save this — shown only once):": "令牌值（请保存 — 仅显示一次）："
+  "Token value (save this — shown only once):": "令牌值（请保存 — 仅显示一次）：",
+  "Reset token": "重置令牌",
+  "Revoke token": "撤销令牌",
+  "Reset token desc": "这将生成一个新的令牌值，当前令牌将立即失效。",
+  "Revoke token desc": "该令牌将被永久删除，无法再使用。",
+  "Processing…": "处理中…",
+  "Graph": "图谱",
+  "Graph enabled": "图谱启用",
+  "Hop depth": "跳数深度"
 }

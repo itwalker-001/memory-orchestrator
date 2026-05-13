@@ -2,7 +2,10 @@ import uuid
 import pytest
 from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import select
+from memory_orchestrator_server.auth_tokens import hash_token
 from memory_orchestrator_server.http_app import create_app
+from memory_orchestrator_server.models import ApiToken
 from memory_orchestrator_server.repository import MemoryRepository
 
 FAKE_EMB = [1.0] + [0.0] * 511
@@ -123,6 +126,37 @@ async def test_projects_hide_empty(engine, session):
     slugs = [p["slug"] for p in r.json()]
     assert "github.com/full/proj" in slugs
     assert "github.com/empty/proj" not in slugs
+
+
+@pytest.mark.asyncio
+async def test_ui_token_reset_returns_new_value_once(engine):
+    async with engine.begin() as conn:
+        await conn.exec_driver_sql("TRUNCATE api_tokens")
+
+    async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
+        created = await c.post("/api/tokens", json={"kind": "ui_admin", "name": "admin"})
+        assert created.status_code == 201
+        original = created.json()
+
+        reset = await c.post(
+            f"/api/tokens/{original['id']}/reset",
+            headers={"Authorization": f"Bearer {original['token']}"},
+        )
+
+    assert reset.status_code == 200
+    body = reset.json()
+    assert body["id"] == original["id"]
+    assert body["action"] == "rotated"
+    assert body["token"]
+    assert body["token"] != original["token"]
+
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(select(ApiToken).where(ApiToken.id == uuid.UUID(original["id"])))
+        ).scalar_one()
+    assert row.revoked_at is None
+    assert row.token_hash == hash_token(body["token"])
+    assert row.token_hash != hash_token(original["token"])
 
 
 # ── UI router: memories CRUD ──────────────────────────────────────────────────

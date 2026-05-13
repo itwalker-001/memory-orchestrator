@@ -197,5 +197,13 @@
   "Create": "Create",
   "Name…": "Name…",
   "No tokens yet.": "No tokens yet.",
-  "Token value (save this — shown only once):": "Token value (save this — shown only once):"
+  "Token value (save this — shown only once):": "Token value (save this — shown only once):",
+  "Reset token": "Reset Token",
+  "Revoke token": "Revoke Token",
+  "Reset token desc": "This generates a new token value. The current token will stop working immediately.",
+  "Revoke token desc": "This token will be permanently deleted and can no longer be used.",
+  "Processing…": "Processing…",
+  "Graph": "Graph",
+  "Graph enabled": "Graph enabled",
+  "Hop depth": "Hop depth"
 }

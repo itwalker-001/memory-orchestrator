@@ -33,6 +33,8 @@ while [ "$#" -gt 0 ]; do
       ;;
     *)
       echo "usage: $0 [--force] [--image IMAGE] [--admin-token-name NAME]" >&2
+      echo "  (no flags)  rebuild app image using cached base; always recompiles server code" >&2
+      echo "  --force     also rebuild base image (heavy: Python deps + ML models)" >&2
       exit 2
       ;;
   esac
@@ -94,7 +96,8 @@ set_env() {
 set_env MO_BASE_IMAGE "$tag"
 set_env MO_DB_IMAGE "$db_tag"
 
-# Construct MO_DB_DSN from component variables so host-shell overrides cannot pollute it
+# MO_DB_DSN is not written to .env; docker-compose.yml assembles it inline from
+# POSTGRES_USER / MO_DB_PASSWORD / MO_DB_HOST / MO_DB_PORT / POSTGRES_DB.
 echo "Updated .env: MO_BASE_IMAGE=$tag  MO_DB_IMAGE=$db_tag"
 
 # Download models if not already present on host
@@ -125,29 +128,44 @@ mkdir -p "$pgdata"
 echo "Postgres data dir: $pgdata"
 
 compose_cmd="${COMPOSE_CMD:-docker-compose}"
+# --force also passes --no-cache to compose so the app layer is rebuilt without Docker cache
+compose_build_opts=""
+[ "$force" -eq 1 ] && compose_build_opts="--no-cache"
 echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
 
+# wait_healthy <container> <max_seconds> <interval_seconds> <label>
+# Polls docker health status; exits 1 immediately on unhealthy or timeout.
+wait_healthy() {
+  container="$1" max_sec="$2" interval="$3" label="$4"
+  elapsed=0
+  echo "Waiting for ${label} to become healthy (up to ${max_sec} s)..."
+  while [ "$elapsed" -le "$max_sec" ]; do
+    h="$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo 'missing')"
+    case "$h" in
+      healthy)
+        echo "${label} healthy after ${elapsed} s"
+        return 0
+        ;;
+      unhealthy)
+        echo "ERROR: ${label} is unhealthy" >&2
+        docker logs --tail 30 "$container" >&2 2>/dev/null || true
+        return 1
+        ;;
+    esac
+    sleep "$interval"
+    elapsed=$((elapsed + interval))
+  done
+  echo "ERROR: ${label} did not become healthy within ${max_sec} s" >&2
+  docker logs --tail 30 "$container" >&2 2>/dev/null || true
+  return 1
+}
+
 # 1. Start (and build) the database
-"$compose_cmd" --env-file "$env_file" up -d --build db
+# shellcheck disable=SC2086
+"$compose_cmd" --env-file "$env_file" up -d --build $compose_build_opts db
 
 # 2. Wait for database to become healthy
-echo "Waiting for database to become healthy (up to 90 s)..."
-j=0
-while [ "$j" -lt 30 ]; do
-  db_status="$(docker inspect --format='{{.State.Health.Status}}' memory-orchestrator-db 2>/dev/null || echo 'unknown')"
-  if [ "$db_status" = "healthy" ]; then
-    echo "Database healthy after $((j * 3)) s"
-    break
-  fi
-  j=$((j + 1))
-  sleep 3
-done
-
-if [ "$j" -ge 30 ]; then
-  echo "ERROR: database did not become healthy within 90 s" >&2
-  "$compose_cmd" ps
-  exit 1
-fi
+wait_healthy memory-orchestrator-db 90 1 "Database" || { "$compose_cmd" ps; exit 1; }
 
 # 3. Run database migrations
 echo "Running database migrations..."
@@ -155,25 +173,16 @@ echo "Running database migrations..."
   server \
   sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
 
-# 4. Start the server
-"$compose_cmd" --env-file "$env_file" up -d --build server
+# 4. Build server image — CACHE_BUST forces app layer to always recompile;
+#    --force also passes --no-cache to skip all Docker layer cache.
+cache_bust="$(date +%s)"
+# shellcheck disable=SC2086
+"$compose_cmd" --env-file "$env_file" build $compose_build_opts \
+  --build-arg "CACHE_BUST=${cache_bust}" \
+  server
+"$compose_cmd" --env-file "$env_file" up -d server
 
-echo "Waiting for server to become healthy (up to 450 s)..."
-i=0
-while [ "$i" -lt 90 ]; do
-  status="$(docker inspect --format='{{.State.Health.Status}}' memory-orchestrator-server 2>/dev/null || echo 'unknown')"
-  if [ "$status" = "healthy" ]; then
-    echo "Service healthy after $((i * 5)) s"
-    break
-  fi
-  i=$((i + 1))
-  sleep 5
-done
-
-if [ "$i" -ge 90 ]; then
-  echo "WARNING: health check timed out after 450 s — service may still be starting" >&2
-  "$compose_cmd" ps
-fi
+wait_healthy memory-orchestrator-server 450 2 "Service" || "$compose_cmd" ps
 
 token_output="$(
   "$compose_cmd" exec -T server \

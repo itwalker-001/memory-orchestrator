@@ -12,8 +12,16 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-_DEFAULT_PORT = 8765
+_DEFAULT_BASE_URL = "http://localhost:8765"
 _TIMEOUT = 2.0
+
+
+def _base_url() -> str:
+    if "--base-url" in sys.argv:
+        idx = sys.argv.index("--base-url")
+        if idx + 1 < len(sys.argv):
+            return sys.argv[idx + 1].rstrip("/")
+    return os.environ.get("MO_HTTP_BASE_URL", _DEFAULT_BASE_URL).rstrip("/")
 
 
 def _client_name() -> str:
@@ -121,7 +129,7 @@ def main() -> int:
     event = _read_event()
     cwd = _event_cwd(event)
     project_id = _detect_project_id(cwd)
-    url = f"http://localhost:{_DEFAULT_PORT}/context?project_slug={urllib.parse.quote(project_id)}&client={_client_name()}"
+    url = f"{_base_url()}/context?project_slug={urllib.parse.quote(project_id)}&client={_client_name()}"
     try:
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:

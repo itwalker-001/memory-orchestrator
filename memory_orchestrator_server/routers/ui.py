@@ -3,7 +3,7 @@ import json
 import uuid
 from pathlib import Path
 import httpx
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func, update as sa_update
@@ -25,6 +25,7 @@ SETTINGS_KEYS = [
     "score_cosine_weight", "score_importance_weight", "score_recency_weight",
     "score_recency_half_life", "score_rerank_blend",
     "score_type_feedback", "score_type_project", "score_type_user", "score_type_reference",
+    "graph_enabled", "graph_hop_depth",
 ]
 
 
@@ -73,6 +74,8 @@ class SettingsPatch(BaseModel):
     score_type_project: str | None = None
     score_type_user: str | None = None
     score_type_reference: str | None = None
+    graph_enabled: str | None = None
+    graph_hop_depth: str | None = None
 
 
 class BatchDeleteBody(BaseModel):
@@ -92,6 +95,14 @@ class TokenCreate(BaseModel):
 class TokenPatch(BaseModel):
     enabled: bool | None = None
     name: str | None = None
+
+
+def _new_token_pair() -> tuple[str, str]:
+    import secrets
+    from memory_orchestrator_server.auth_tokens import hash_token
+
+    raw = secrets.token_urlsafe(32)
+    return raw, hash_token(raw)
 
 
 def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
@@ -160,14 +171,11 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
 
     @router.post("/tokens", status_code=201)
     async def create_token(body: TokenCreate = Body(...)) -> dict:
-        import hashlib
-        import secrets
         from memory_orchestrator_server.models import ApiToken
 
         if body.kind not in ("ui_admin", "mcp_client"):
             raise HTTPException(status_code=422, detail="kind must be ui_admin or mcp_client")
-        raw = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(raw.encode()).hexdigest()
+        raw, token_hash = _new_token_pair()
         async with maker() as s:
             existing = (await s.execute(
                 select(ApiToken).where(
@@ -188,6 +196,37 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 action = "created"
             await s.commit()
         return {"id": tid, "token": raw, "action": action}
+
+    @router.post("/tokens/{token_id}/reset", status_code=200)
+    async def reset_token(
+        token_id: uuid.UUID,
+        authorization: str | None = Header(default=None),
+        mo_ui_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        from memory_orchestrator_server.auth_tokens import bearer_token, hash_token
+        from memory_orchestrator_server.models import ApiToken
+
+        raw, token_hash = _new_token_pair()
+        current_hash = hash_token(bearer_token(authorization) or (mo_ui_session or ""))
+        refresh_session = False
+        async with maker() as s:
+            tok = await s.get(ApiToken, token_id)
+            if not tok or tok.revoked_at is not None:
+                raise HTTPException(status_code=404, detail="not found")
+            refresh_session = tok.kind == TOKEN_KIND_UI and tok.token_hash == current_hash
+            tok.token_hash = token_hash
+            await s.commit()
+        response = JSONResponse(content={"id": str(token_id), "token": raw, "action": "rotated"})
+        if refresh_session:
+            response.set_cookie(
+                key="mo_ui_session",
+                value=raw,
+                httponly=True,
+                samesite="strict",
+                path="/",
+                max_age=UI_SESSION_TTL,
+            )
+        return response
 
     @router.patch("/tokens/{token_id}", status_code=200)
     async def patch_token(token_id: uuid.UUID, body: TokenPatch = Body(...)) -> dict:
@@ -676,7 +715,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     async def register_client(body: dict = Body(...)) -> dict:
         """Issue a new mcp_client token for a remote client (no auth required — localhost only).
 
-        Body: {"hostname": str, "ip": str, "client": str}
+        Body: {"name": str}  — host identifier, e.g. "BK-A-JA183(172.21.170.85)"
         Returns: {"token": "<plaintext>"}
         """
         import hashlib
@@ -684,9 +723,8 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         from memory_orchestrator_server.models import ApiToken
 
         hostname = str(body.get("hostname") or "unknown")
-        ip = str(body.get("ip") or "unknown")
-        client = str(body.get("client") or "unknown")
-        name = f"auto:{client}@{hostname}({ip})"
+        ip = str(body.get("ip") or "")
+        name = str(body.get("name") or (f"{hostname}({ip})" if ip else hostname))
 
         from datetime import datetime, timezone
         from sqlalchemy import select

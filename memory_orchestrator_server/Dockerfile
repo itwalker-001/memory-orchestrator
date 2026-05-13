@@ -10,12 +10,16 @@ FROM node:20-slim AS frontend-builder
 WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm ci --registry=https://registry.npmmirror.com
+ARG CACHE_BUST=0
 COPY frontend/ ./
 RUN npm run build
 
 # ── Stage 1: app — project source + entry points ──────────────────────────────
 FROM ${BASE_IMAGE}
 
+# CACHE_BUST is set to $(date +%s) by build.sh so this layer and everything
+# below always re-runs, even when source files appear unchanged to Docker.
+ARG CACHE_BUST=0
 COPY . /app/memory_orchestrator_server/
 COPY --from=frontend-builder /frontend/dist \
   /app/memory_orchestrator_server/frontend/dist/

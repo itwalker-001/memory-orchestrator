@@ -8,15 +8,15 @@
     "managed_paths": [["mcp_servers", "memory-orchestrator"]],
     "patches": [
       {
-        "path": ["features", "codex_hooks"],
+        "path": ["features", "hooks"],
         "value": true
       },
       {
         "path": ["mcp_servers", "memory-orchestrator"],
         "value": {
           "command": "uv",
-          "args": ["run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_server", "mo-server", "serve-mcp", "--client", "codex"],
-          "env": {"MO_CLIENT": "codex", "MO_HTTP_BASE_URL": "http://localhost:8765"}
+          "args": ["run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_mcp", "mo-mcp", "serve-mcp", "--client", "codex"],
+          "env": {"MO_CLIENT": "codex", "MO_HTTP_BASE_URL": "{base_url}"}
         }
       }
     ]
@@ -25,18 +25,30 @@
     "format": "json",
     "path": "hooks.json",
     "events": {
-      "UserPromptSubmit": {
-        "type": "command",
-        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_server", "python", "{project_dir}/memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/user_prompt_submit.py", "--client", "codex"]
-      },
-      "Stop": {
-        "type": "command",
-        "command": ["uv", "run", "--no-sync", "--project", "{project_dir}/memory_orchestrator_server", "python", "{project_dir}/memory_orchestrator_mcp/src/memory_orchestrator_mcp/hooks/stop.py", "--client", "codex"]
-      }
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "uv run --no-sync --project {project_dir}/memory_orchestrator_mcp python {project_dir}/memory_orchestrator_mcp/hooks/user_prompt_submit.py --client codex --base-url {base_url}"
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "uv run --no-sync --project {project_dir}/memory_orchestrator_mcp python {project_dir}/memory_orchestrator_mcp/hooks/stop.py --client codex --base-url {base_url}"
+            }
+          ]
+        }
+      ]
     }
   },
   "instructions": {
-    "source": "memory_orchestrator_mcp/src/memory_orchestrator_mcp/agents/memory-orchestrator.AGENTS.md",
+    "source": "memory_orchestrator_mcp/agents/memory-orchestrator.AGENTS.md",
     "destination": "AGENTS.md"
   }
 }
