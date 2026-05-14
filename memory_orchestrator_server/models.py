@@ -102,6 +102,9 @@ class ProjectSkeletonNode(Base):
     prompt_hint: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     is_builtin: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    tags: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), nullable=False, default=list, server_default="{}"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
