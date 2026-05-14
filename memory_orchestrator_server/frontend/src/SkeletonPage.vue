@@ -1,6 +1,7 @@
+<!-- frontend/src/SkeletonPage.vue -->
 <template>
   <div class="sk-app" :class="{ dark: isDark }">
-    <!-- Login overlay (same as App.vue) -->
+    <!-- Login overlay -->
     <div v-if="loginOpen" class="modal-overlay login-overlay">
       <div class="login-modal">
         <div class="login-title">Memory Orchestrator</div>
@@ -15,102 +16,93 @@
     </div>
 
     <template v-if="!loginOpen">
-      <header class="sk-header">
-        <span class="sk-logo">Memory Orchestrator</span>
-        <nav class="sk-nav">
-          <router-link to="/memories" class="sk-nav-link">→ Memories</router-link>
-        </nav>
-        <div class="sk-header-right">
-          <button @click="isDark = !isDark" class="btn-icon" title="Toggle theme">◑</button>
-        </div>
-      </header>
+      <AppHeader
+        :isDark="isDark" :lang="lang" :loginOpen="loginOpen"
+        @toggle-theme="isDark = !isDark" @toggle-lang="toggleLang"
+        @open-settings="router.push('/settings')"
+        @open-admin="router.push('/tokens')"
+        @logout="logout"
+      >
+        <template #nav>
+          <router-link to="/memories">→ Memories</router-link>
+        </template>
+      </AppHeader>
 
       <div class="sk-body">
-        <!-- Left: project list -->
-        <aside class="sk-sidebar">
-          <div class="sk-sidebar-title">Projects</div>
-          <ul class="sk-project-list">
-            <li v-for="p in projects" :key="p.id"
-              :class="['sk-project-item', { active: selectedProject?.id === p.id }]"
-              @click="selectProject(p)">
-              {{ p.display_name || p.slug }}
-              <span class="sk-mem-count">{{ p.memory_count }}</span>
-            </li>
-          </ul>
-          <div v-if="showNewProject" class="sk-new-project-form">
-            <input v-model="newProjectName" class="sk-input" placeholder="Project name…"
-              @keydown.enter="createProject" ref="newProjectInput" />
-            <button class="btn-sm btn-primary" :disabled="!newProjectName || isCreatingProject"
-              @click="createProject">
-              {{ isCreatingProject ? '…' : 'Create' }}
-            </button>
-            <button class="btn-sm" @click="showNewProject = false">✕</button>
-          </div>
-          <button v-else class="btn-new-project" @click="openNewProject">+ New Project</button>
-        </aside>
+        <!-- Column 1: Icon strip -->
+        <ProjectIconStrip
+          :projects="projects"
+          :activeId="selectedProject?.id"
+          @select="selectProject"
+          @create="openNewProjectModal"
+        />
 
-        <!-- Right: skeleton tree -->
-        <main class="sk-main" v-if="selectedProject">
-          <div class="sk-main-header">
-            <span class="sk-project-title">{{ selectedProject.display_name || selectedProject.slug }}</span>
-            <button class="btn-sm btn-secondary" @click="openTokenModal">+ Token</button>
-            <button class="btn-sm btn-danger" @click="confirmDeleteProject">Delete Project</button>
-          </div>
+        <!-- Column 2: Tree panel -->
+        <SkeletonTreePanel
+          v-if="selectedProject"
+          :nodes="skeletonTree"
+          :selectedId="selectedNode?.id"
+          :projName="selectedProject.display_name || selectedProject.slug"
+          :memoryCountMap="memoryCountMap"
+          @select="selectNode"
+          @patch="onPatch"
+          @delete="onDelete"
+          @context-menu="openContextMenu"
+          @reorder="onReorder"
+        />
+        <div v-else class="tree-empty">选择或创建项目</div>
 
-          <div class="sk-skeleton" v-if="skeletonTree.length">
-            <div class="sk-tree-title">Skeleton</div>
-            <ul class="sk-tree">
-              <sk-node
-                v-for="node in skeletonTree" :key="node.id"
-                :node="node"
-                :selected-node-id="selectedNode?.id"
-                @select="selectNode"
-                @patch="patchNode"
-                @delete="deleteNode"
-              />
-            </ul>
-          </div>
-
-          <!-- Node detail -->
-          <div class="sk-node-detail" v-if="selectedNode">
-            <div class="sk-node-detail-title">{{ selectedNode.name }}</div>
-            <div class="sk-prompt-hint-wrap">
-              <label class="sk-field-label">Prompt hint</label>
-              <input class="sk-input" v-model="editingPromptHint"
-                @blur="savePromptHint" @keydown.enter="savePromptHint"
-                placeholder="Guide text shown when creating memories in this section…" />
-            </div>
-            <div class="sk-node-memories-header">
-              <span class="sk-field-label">Memories ({{ nodeMemories.length }})</span>
-              <button class="btn-sm btn-primary" @click="openAddMemory">+ Add Memory</button>
-            </div>
-            <ul class="sk-memory-list">
-              <li v-for="m in nodeMemories" :key="m.id" class="sk-memory-item">
-                <span :class="['badge', m.type]">{{ m.type }}</span>
-                <span class="sk-mem-name">{{ m.name }}</span>
-                <button class="btn-icon btn-danger-sm" @click="unlinkMemory(m.id)" title="Unlink">✕</button>
-              </li>
-            </ul>
-          </div>
-        </main>
-
-        <main class="sk-main sk-main-empty" v-else>
-          <p>Select or create a project to see its skeleton.</p>
-        </main>
+        <!-- Column 3: Detail panel -->
+        <NodeDetailPanel
+          :node="selectedNode"
+          :memories="nodeMemories"
+          :all-tags="allTags"
+          @save-hint="onSaveHint"
+          @update-tags="onUpdateTags"
+          @add-memory="addMemoryOpen = true"
+          @unlink-memory="unlinkMemory"
+        />
       </div>
     </template>
 
-    <!-- Add Memory Modal -->
+    <!-- Context menu -->
+    <ContextMenu
+      :visible="ctxVisible"
+      :x="ctxX"
+      :y="ctxY"
+      :depth="ctxDepth"
+      @add-child="onAddChild"
+      @rename="onRenameNode"
+      @manage-tags="focusTags"
+      @delete="onDeleteNode"
+    />
+
+    <!-- New project modal -->
+    <div v-if="newProjectOpen" class="modal-overlay" @click.self="newProjectOpen = false">
+      <div class="modal" style="max-width:380px">
+        <div class="modal-header">
+          <span class="modal-title">新建项目</span>
+          <button class="modal-close" @click="newProjectOpen = false">✕</button>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+          <input class="sk-input" v-model="newProjectName" placeholder="项目名称…"
+            @keydown.enter="createProject" ref="newProjectInput" />
+          <button class="btn-save" :disabled="!newProjectName || isCreatingProject" @click="createProject">
+            {{ isCreatingProject ? '创建中…' : '创建' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add memory modal -->
     <div v-if="addMemoryOpen" class="modal-overlay" @click.self="addMemoryOpen = false">
       <div class="write-modal">
         <div class="write-header">
-          <span class="write-title">New Memory → {{ selectedNode?.name }}</span>
+          <span class="write-title">新记忆 → {{ selectedNode?.name }}</span>
           <button class="modal-close" @click="addMemoryOpen = false">✕</button>
         </div>
         <div class="write-body">
-          <p v-if="selectedNode?.prompt_hint" class="sk-prompt-hint-text">
-            {{ selectedNode.prompt_hint }}
-          </p>
+          <p v-if="selectedNode?.prompt_hint" class="sk-prompt-hint-text">{{ selectedNode.prompt_hint }}</p>
           <div class="write-type-tabs">
             <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
               :class="['type-tab', 'type-tab-'+tp, memForm.type === tp ? 'active' : '']"
@@ -128,45 +120,13 @@
             <label class="write-field-label">Content</label>
             <textarea class="write-input write-textarea" v-model="memForm.content" rows="5" />
           </div>
-          <div v-if="memForm.type === 'feedback' || memForm.type === 'project'" class="write-section">
-            <label class="write-field-label">Why</label>
-            <input class="write-input" v-model="memForm.why" placeholder="Reason…" />
-          </div>
-          <div v-if="memForm.type === 'feedback' || memForm.type === 'project'" class="write-section">
-            <label class="write-field-label">How to apply</label>
-            <input class="write-input" v-model="memForm.how_to_apply" placeholder="When / how to use…" />
-          </div>
           <p v-if="memError" class="save-hint err">{{ memError }}</p>
         </div>
         <div class="write-footer">
           <button class="btn-cancel" @click="addMemoryOpen = false">Cancel</button>
-          <button class="btn-save" :disabled="isMemSaving || !memForm.name || !memForm.content"
-            @click="submitAddMemory">
+          <button class="btn-save" :disabled="isMemSaving || !memForm.name || !memForm.content" @click="submitAddMemory">
             {{ isMemSaving ? 'Saving…' : 'Write' }}
           </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Token Modal -->
-    <div v-if="tokenModalOpen" class="modal-overlay" @click.self="tokenModalOpen = false">
-      <div class="modal" style="max-width:420px">
-        <div class="modal-header">
-          <span class="modal-title">New Project Token</span>
-          <button class="modal-close" @click="tokenModalOpen = false">✕</button>
-        </div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
-          <input class="sk-input" v-model="newTokenName" placeholder="Token name…" />
-          <div v-if="!newTokenValue">
-            <button class="btn-save" :disabled="!newTokenName || isCreatingToken" @click="createToken">
-              {{ isCreatingToken ? 'Creating…' : 'Create Token' }}
-            </button>
-          </div>
-          <div v-else class="token-reveal">
-            <p style="color:var(--warn);font-size:12px">Shown once — copy now!</p>
-            <code class="token-code" @click="copyToken">{{ newTokenValue }}</code>
-            <button class="btn-sm" @click="copyToken">Copy</button>
-          </div>
         </div>
       </div>
     </div>
@@ -174,31 +134,41 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { BASE, apiFetch, apiJSON } from './api.js'
+import AppHeader from './AppHeader.vue'
+import ProjectIconStrip from './ProjectIconStrip.vue'
+import SkeletonTreePanel from './SkeletonTreePanel.vue'
+import NodeDetailPanel from './NodeDetailPanel.vue'
+import ContextMenu from './ContextMenu.vue'
 
-// ── Theme ──
-const isDark = ref(document.documentElement.classList.contains('dark') ||
-  window.matchMedia('(prefers-color-scheme: dark)').matches)
-watch(isDark, v => document.documentElement.classList.toggle('dark', v))
+const router = useRouter()
 
-// ── Auth ──
+// ── Theme + lang ──────────────────────────────────────────────────────────────
+const isDark = ref(
+  document.documentElement.getAttribute('data-theme') === 'dark' ||
+  (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
+)
+watch(isDark, v => document.documentElement.setAttribute('data-theme', v ? 'dark' : 'light'))
+const lang = ref(localStorage.getItem('mo-lang') || 'en')
+function toggleLang() { lang.value = lang.value === 'en' ? 'zh' : 'en'; localStorage.setItem('mo-lang', lang.value) }
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
 const loginOpen = ref(false)
 const loginInput = ref('')
 const loginError = ref('')
 const loginLoading = ref(false)
 
 async function submitLogin() {
-  loginLoading.value = true
-  loginError.value = ''
+  loginLoading.value = true; loginError.value = ''
   try {
     const r = await fetch(`${BASE}/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: loginInput.value }),
     })
     if (r.status === 401) { loginError.value = 'Invalid token'; return }
-    loginOpen.value = false
-    loginInput.value = ''
+    loginOpen.value = false; loginInput.value = ''
     await loadProjects()
   } catch (e) { loginError.value = e.message }
   finally { loginLoading.value = false }
@@ -217,7 +187,12 @@ async function skipLogin() {
   } finally { loginLoading.value = false }
 }
 
-// ── Projects ──
+async function logout() {
+  await fetch(`${BASE}/logout`, { method: 'POST' })
+  loginOpen.value = true
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
 const projects = ref([])
 const selectedProject = ref(null)
 
@@ -226,25 +201,25 @@ async function loadProjects() {
     const r = await apiFetch(`${BASE}/projects`)
     if (r.status === 401) { loginOpen.value = true; return }
     projects.value = await r.json()
-  } catch (e) { loginOpen.value = true }
+  } catch { loginOpen.value = true }
 }
 
-function selectProject(p) {
+async function selectProject(p) {
   selectedProject.value = p
   selectedNode.value = null
   nodeMemories.value = []
-  loadSkeleton(p.id)
+  await loadSkeleton(p.id)
 }
 
-const showNewProject = ref(false)
+const newProjectOpen = ref(false)
 const newProjectName = ref('')
 const isCreatingProject = ref(false)
 const newProjectInput = ref(null)
 
-function openNewProject() {
-  showNewProject.value = true
+function openNewProjectModal() {
   newProjectName.value = ''
-  setTimeout(() => newProjectInput.value?.focus(), 50)
+  newProjectOpen.value = true
+  nextTick(() => newProjectInput.value?.focus())
 }
 
 async function createProject() {
@@ -256,138 +231,158 @@ async function createProject() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug, display_name: newProjectName.value }),
     })
-    showNewProject.value = false
-    newProjectName.value = ''
+    newProjectOpen.value = false
     await loadProjects()
-    selectProject(p)
+    await selectProject(p)
   } catch (e) { alert(e.message) }
   finally { isCreatingProject.value = false }
 }
 
-async function confirmDeleteProject() {
-  if (!selectedProject.value) return
-  if (!confirm(`Delete project "${selectedProject.value.display_name}"?`)) return
-  await apiFetch(`${BASE}/projects/${selectedProject.value.id}`, { method: 'DELETE' })
-  selectedProject.value = null
-  skeletonTree.value = []
-  await loadProjects()
-}
-
-// ── Skeleton ──
+// ── Skeleton tree ─────────────────────────────────────────────────────────────
 const skeletonTree = ref([])
 const selectedNode = ref(null)
 const nodeMemories = ref([])
-const editingPromptHint = ref('')
+
+function flattenTree(nodes, acc = []) {
+  for (const n of nodes) { acc.push(n); if (n.children?.length) flattenTree(n.children, acc) }
+  return acc
+}
+const flatNodes = computed(() => flattenTree(skeletonTree.value))
+const allTags = computed(() => [...new Set(flatNodes.value.flatMap(n => n.tags || []))].sort())
+
+const memoryCountMap = ref({})
 
 async function loadSkeleton(projectId) {
-  const tree = await apiJSON(`${BASE}/projects/${projectId}/skeleton`)
-  skeletonTree.value = tree
+  skeletonTree.value = await apiJSON(`${BASE}/projects/${projectId}/skeleton`)
 }
 
-function selectNode(node) {
+async function selectNode(node) {
   selectedNode.value = node
-  editingPromptHint.value = node.prompt_hint || ''
-  loadNodeMemories(node.id)
+  nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${node.id}/memories`)
+  memoryCountMap.value = { ...memoryCountMap.value, [node.id]: nodeMemories.value.length }
 }
 
-async function loadNodeMemories(nodeId) {
-  nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${nodeId}/memories`)
-}
-
-async function savePromptHint() {
-  if (!selectedNode.value) return
-  await apiFetch(`${BASE}/skeleton-nodes/${selectedNode.value.id}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt_hint: editingPromptHint.value }),
-  })
-  selectedNode.value.prompt_hint = editingPromptHint.value
-  loadSkeleton(selectedProject.value.id)
-}
-
-async function patchNode(nodeId, patch) {
-  await apiFetch(`${BASE}/skeleton-nodes/${nodeId}`, {
+// ── Patch / delete ────────────────────────────────────────────────────────────
+async function onPatch({ id, patch }) {
+  await apiFetch(`${BASE}/skeleton-nodes/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   })
   await loadSkeleton(selectedProject.value.id)
+  if (selectedNode.value?.id === id) {
+    const updated = flatNodes.value.find(n => n.id === id)
+    if (updated) selectedNode.value = updated
+  }
 }
 
-async function deleteNode(nodeId) {
-  if (!confirm('Delete this node and unlink its memories?')) return
+async function onDelete(nodeId) {
+  if (!confirm('删除此节点并取消关联其记忆？')) return
   const r = await apiFetch(`${BASE}/skeleton-nodes/${nodeId}`, { method: 'DELETE' })
-  if (r.status === 409) { alert('Cannot delete a builtin node.'); return }
+  if (r.status === 409) { alert('内置节点无法删除。'); return }
   if (selectedNode.value?.id === nodeId) { selectedNode.value = null; nodeMemories.value = [] }
+  await loadSkeleton(selectedProject.value.id)
+}
+
+async function onSaveHint(hint) {
+  await onPatch({ id: selectedNode.value.id, patch: { prompt_hint: hint } })
+}
+
+async function onUpdateTags(tags) {
+  await onPatch({ id: selectedNode.value.id, patch: { tags } })
+  if (selectedNode.value) selectedNode.value = { ...selectedNode.value, tags }
+}
+
+async function onReorder(orderedIds) {
+  await apiFetch(`${BASE}/skeleton-nodes/reorder`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: selectedProject.value.id, ordered_ids: orderedIds }),
+  })
   await loadSkeleton(selectedProject.value.id)
 }
 
 async function unlinkMemory(memoryId) {
   await apiFetch(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories/${memoryId}`, { method: 'DELETE' })
-  await loadNodeMemories(selectedNode.value.id)
+  nodeMemories.value = nodeMemories.value.filter(m => m.id !== memoryId)
+  memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
 }
 
-// ── Add Memory ──
+// ── Context menu ──────────────────────────────────────────────────────────────
+const ctxVisible = ref(false)
+const ctxX = ref(0)
+const ctxY = ref(0)
+const ctxDepth = ref(0)
+const ctxNode = ref(null)
+
+function openContextMenu({ x, y, node, depth }) {
+  ctxX.value = x; ctxY.value = y; ctxDepth.value = depth; ctxNode.value = node
+  ctxVisible.value = true
+}
+
+function closeContextMenu() { ctxVisible.value = false; ctxNode.value = null }
+
+onMounted(() => {
+  document.addEventListener('click', closeContextMenu)
+})
+
+async function onAddChild() {
+  closeContextMenu()
+  if (!ctxNode.value) return
+  const name = prompt('子节点名称：')
+  if (!name?.trim()) return
+  await apiJSON(`${BASE}/skeleton-nodes`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: selectedProject.value.id, parent_id: ctxNode.value.id, name: name.trim() }),
+  })
+  await loadSkeleton(selectedProject.value.id)
+}
+
+function onRenameNode() {
+  closeContextMenu()
+  if (!ctxNode.value) return
+  const name = prompt('新名称：', ctxNode.value.name)
+  if (name?.trim() && name !== ctxNode.value.name) {
+    onPatch({ id: ctxNode.value.id, patch: { name: name.trim() } })
+  }
+}
+
+function focusTags() {
+  closeContextMenu()
+  if (ctxNode.value) selectNode(ctxNode.value)
+}
+
+async function onDeleteNode() {
+  const node = ctxNode.value
+  closeContextMenu()
+  if (node) await onDelete(node.id)
+}
+
+// ── Add memory ────────────────────────────────────────────────────────────────
 const addMemoryOpen = ref(false)
 const isMemSaving = ref(false)
 const memError = ref('')
-const memForm = ref({ type: 'project', name: '', description: '', content: '', why: '', how_to_apply: '' })
-
-function openAddMemory() {
-  memForm.value = { type: 'project', name: '', description: '', content: '', why: '', how_to_apply: '' }
-  memError.value = ''
-  addMemoryOpen.value = true
-}
+const memForm = ref({ type: 'project', name: '', description: '', content: '' })
 
 async function submitAddMemory() {
   if (!memForm.value.name || !memForm.value.content) return
-  isMemSaving.value = true
-  memError.value = ''
+  isMemSaving.value = true; memError.value = ''
   try {
-    const payload = { ...memForm.value, project_id: selectedProject.value.id }
-    if (!payload.why) delete payload.why
-    if (!payload.how_to_apply) delete payload.how_to_apply
     const mem = await apiJSON(`${BASE}/memories`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...memForm.value, project_id: selectedProject.value.id }),
     })
     await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memory_id: mem.id }),
     })
     addMemoryOpen.value = false
-    await loadNodeMemories(selectedNode.value.id)
+    memForm.value = { type: 'project', name: '', description: '', content: '' }
+    nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`)
+    memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
   } catch (e) { memError.value = e.message }
   finally { isMemSaving.value = false }
 }
 
-// ── Token ──
-const tokenModalOpen = ref(false)
-const newTokenName = ref('')
-const newTokenValue = ref('')
-const isCreatingToken = ref(false)
-
-function openTokenModal() {
-  newTokenName.value = ''
-  newTokenValue.value = ''
-  tokenModalOpen.value = true
-}
-
-async function createToken() {
-  isCreatingToken.value = true
-  try {
-    const data = await apiJSON(`${BASE}/tokens`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'project_token', name: newTokenName.value, project_id: selectedProject.value.id }),
-    })
-    newTokenValue.value = data.token
-  } catch (e) { alert(e.message) }
-  finally { isCreatingToken.value = false }
-}
-
-async function copyToken() {
-  await navigator.clipboard.writeText(newTokenValue.value)
-}
-
-// ── Init ──
+// ── Init ──────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   const r = await apiFetch(`${BASE}/projects`)
   if (r.status === 401) { loginOpen.value = true; return }
@@ -395,106 +390,11 @@ onMounted(async () => {
 })
 </script>
 
-<script>
-// SkNode recursive component for skeleton tree
-export default {
-  components: {
-    SkNode: {
-      name: 'SkNode',
-      props: ['node', 'selectedNodeId'],
-      emits: ['select', 'patch', 'delete'],
-      data() { return { hovering: false, editing: false, editName: '' } },
-      methods: {
-        startEdit() { this.editName = this.node.name; this.editing = true },
-        saveEdit() {
-          if (this.editName && this.editName !== this.node.name)
-            this.$emit('patch', this.node.id, { name: this.editName })
-          this.editing = false
-        },
-      },
-      template: `
-        <li class="sk-node" @mouseenter="hovering=true" @mouseleave="hovering=false">
-          <div :class="['sk-node-row', { active: selectedNodeId === node.id }]"
-            @click="$emit('select', node)">
-            <span v-if="!editing" class="sk-node-name">{{ node.name }}</span>
-            <input v-else class="sk-node-edit-input" v-model="editName"
-              @blur="saveEdit" @keydown.enter="saveEdit" @keydown.esc="editing=false" ref="ei"
-              @vue:mounted="$refs.ei?.focus()" />
-            <span class="sk-node-actions" v-show="hovering">
-              <button class="btn-icon-xs" @click.stop="startEdit" title="Edit">✎</button>
-              <button v-if="!node.is_builtin" class="btn-icon-xs btn-danger-xs"
-                @click.stop="$emit('delete', node.id)" title="Delete">✕</button>
-            </span>
-          </div>
-          <ul v-if="node.children?.length" class="sk-tree sk-subtree">
-            <sk-node v-for="c in node.children" :key="c.id" :node="c"
-              :selected-node-id="selectedNodeId"
-              @select="$emit('select', $event)"
-              @patch="(id, p) => $emit('patch', id, p)"
-              @delete="$emit('delete', $event)" />
-          </ul>
-        </li>
-      `,
-    },
-  },
-}
-</script>
-
 <style scoped>
-.sk-app { min-height: 100vh; background: var(--bg, #fff); color: var(--fg, #1a1a1a); font-family: 'JetBrains Mono', monospace; }
-.sk-header { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--border, #e0e0e0); }
-.sk-logo { font-weight: 700; font-size: 14px; }
-.sk-nav { margin-left: auto; }
-.sk-nav-link { font-size: 12px; color: var(--accent, #2563eb); text-decoration: none; }
-.sk-nav-link:hover { text-decoration: underline; }
-.sk-header-right { display: flex; gap: 8px; }
-.sk-body { display: grid; grid-template-columns: 220px 1fr; height: calc(100vh - 41px); }
-.sk-sidebar { border-right: 1px solid var(--border, #e0e0e0); padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-.sk-sidebar-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-muted, #6e7681); margin-bottom: 6px; }
-.sk-project-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
-.sk-project-item { padding: 6px 8px; border-radius: 5px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; align-items: center; }
-.sk-project-item:hover { background: var(--hover, #f5f5f5); }
-.sk-project-item.active { background: var(--active-bg, #dbeafe); color: var(--accent, #2563eb); }
-.sk-mem-count { font-size: 11px; color: var(--fg-muted, #6e7681); }
-.sk-new-project-form { display: flex; gap: 4px; margin-top: 6px; }
-.btn-new-project { margin-top: 8px; font-size: 12px; color: var(--accent, #2563eb); background: none; border: 1px dashed var(--border, #ccc); border-radius: 5px; padding: 5px 8px; cursor: pointer; width: 100%; }
-.sk-main { padding: 16px 20px; overflow-y: auto; }
-.sk-main-empty { display: flex; align-items: center; justify-content: center; color: var(--fg-muted, #999); font-size: 13px; }
-.sk-main-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-.sk-project-title { font-size: 16px; font-weight: 700; flex: 1; }
-.sk-tree-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-muted, #6e7681); margin-bottom: 8px; }
-.sk-tree { list-style: none; padding: 0; margin: 0; }
-.sk-subtree { padding-left: 16px; }
-.sk-node-row { display: flex; align-items: center; padding: 5px 6px; border-radius: 4px; cursor: pointer; font-size: 13px; gap: 6px; }
-.sk-node-row:hover { background: var(--hover, #f5f5f5); }
-.sk-node-row.active { background: var(--active-bg, #dbeafe); }
-.sk-node-name { flex: 1; }
-.sk-node-actions { display: flex; gap: 4px; }
-.sk-node-edit-input { flex: 1; border: 1px solid var(--border, #ccc); border-radius: 3px; padding: 1px 4px; font-size: 12px; }
-.sk-node-detail { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border, #e0e0e0); }
-.sk-node-detail-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
-.sk-prompt-hint-wrap { margin-bottom: 12px; }
-.sk-field-label { display: block; font-size: 11px; font-weight: 600; color: var(--fg-muted, #6e7681); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; }
-.sk-input { width: 100%; border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 6px 8px; font-size: 13px; font-family: inherit; background: var(--input-bg, #fff); color: var(--fg, #1a1a1a); }
-.sk-node-memories-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.sk-memory-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.sk-memory-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border, #eee); border-radius: 5px; font-size: 12px; }
-.sk-mem-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.btn-icon { background: none; border: none; cursor: pointer; padding: 3px 5px; font-size: 13px; color: var(--fg-muted, #666); }
-.btn-icon:hover { color: var(--fg, #1a1a1a); }
-.btn-sm { padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border, #ccc); font-size: 12px; cursor: pointer; background: var(--btn-bg, #f5f5f5); color: var(--fg, #1a1a1a); }
-.btn-primary { background: var(--accent, #2563eb); color: #fff; border-color: transparent; }
-.btn-secondary { background: transparent; border-color: var(--accent, #2563eb); color: var(--accent, #2563eb); }
-.btn-danger { background: transparent; border-color: #dc2626; color: #dc2626; }
-.btn-icon-xs { background: none; border: none; cursor: pointer; padding: 1px 3px; font-size: 11px; color: var(--fg-muted, #888); }
-.btn-icon-xs:hover { color: var(--fg, #1a1a1a); }
-.btn-danger-xs { color: #dc2626; }
-.btn-danger-sm { padding: 1px 4px; font-size: 11px; background: none; border: none; color: #dc2626; cursor: pointer; }
-.sk-prompt-hint-text { font-size: 12px; color: var(--fg-muted, #888); background: var(--hint-bg, #f8f9fa); padding: 8px 10px; border-radius: 4px; margin-bottom: 10px; font-style: italic; }
-.token-reveal { display: flex; flex-direction: column; gap: 6px; }
-.token-code { display: block; padding: 8px; background: var(--code-bg, #f5f5f5); border-radius: 4px; font-size: 11px; word-break: break-all; cursor: pointer; border: 1px solid var(--border, #ddd); }
-.dark { --bg: #0d1117; --fg: #e6edf3; --fg-muted: #8b949e; --border: #30363d; --hover: #161b22; --active-bg: #1d2d3e; --input-bg: #161b22; --btn-bg: #21262d; --hint-bg: #161b22; --code-bg: #161b22; --accent: #58a6ff; --warn: #f0883e; }
-/* Login styles */
+.sk-app { width: 100%; min-height: 100vh; background: var(--bg, #fff); color: var(--fg, #1a1a1a); font-family: 'JetBrains Mono', monospace; box-sizing: border-box; text-align: left; }
+.sk-body { display: flex; height: calc(100vh - 41px); overflow: hidden; }
+.tree-empty { width: 220px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--fg-muted, #6e7681); font-size: 12px; border-right: 1px solid var(--border, #30363d); }
+/* Login */
 .login-overlay { display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
 .login-modal { background: var(--bg, #fff); border-radius: 8px; padding: 24px; min-width: 300px; display: flex; flex-direction: column; gap: 12px; }
 .login-title { font-size: 16px; font-weight: 700; }
@@ -502,4 +402,37 @@ export default {
 .login-error { color: #dc2626; font-size: 12px; margin: 0; }
 .btn-login { background: var(--accent, #2563eb); color: #fff; border: none; border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
 .btn-skip { background: none; border: none; color: var(--fg-muted, #888); cursor: pointer; font-size: 12px; text-decoration: underline; }
+/* Modals */
+.modal-overlay { display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; }
+.modal { background: var(--bg, #fff); border-radius: 8px; border: 1px solid var(--border, #ddd); }
+.modal-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border, #ddd); }
+.modal-title { font-size: 13px; font-weight: 700; flex: 1; }
+.modal-close { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--fg-muted, #888); padding: 2px 4px; }
+.sk-input { width: 100%; border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 6px 8px; font-size: 13px; font-family: inherit; background: var(--input-bg, #fff); color: var(--fg, #1a1a1a); }
+.btn-save { background: var(--accent, #2563eb); color: #fff; border: none; border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-cancel { background: none; border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
+/* Write modal */
+.write-modal { background: var(--bg, #fff); border-radius: 8px; border: 1px solid var(--border, #ddd); width: 500px; max-height: 80vh; display: flex; flex-direction: column; }
+.write-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border, #ddd); }
+.write-title { font-size: 13px; font-weight: 700; flex: 1; }
+.write-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.write-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border, #ddd); }
+.write-section { display: flex; flex-direction: column; gap: 4px; }
+.write-section-grow { flex: 1; }
+.write-field-label { font-size: 10px; font-weight: 700; color: var(--fg-muted, #6e7681); text-transform: uppercase; }
+.write-input { border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 6px 8px; font-size: 12px; font-family: inherit; background: var(--input-bg, #fff); color: var(--fg, #1a1a1a); }
+.write-textarea { resize: vertical; min-height: 80px; }
+.write-type-tabs { display: flex; gap: 4px; }
+.type-tab { padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border, #ddd); font-size: 11px; cursor: pointer; background: none; color: var(--fg-muted, #888); }
+.type-tab.active { background: var(--accent, #2563eb); color: #fff; border-color: transparent; }
+.sk-prompt-hint-text { font-size: 11px; color: var(--fg-muted, #888); background: var(--hint-bg, #f8f9fa); padding: 6px 10px; border-radius: 4px; font-style: italic; }
+.save-hint.err { color: #dc2626; font-size: 11px; }
+/* Dark theme vars */
+.dark {
+  --bg: #0d1117; --fg: #e6edf3; --fg-muted: #8b949e; --border: #30363d;
+  --hover: #161b22; --active-bg: #1d2d3e; --input-bg: #161b22; --btn-bg: #21262d;
+  --hint-bg: #161b22; --accent: #58a6ff; --tag-bg: #1a3a52; --accent-dim: #1f6feb44;
+  --tooltip-bg: #1c2128;
+}
 </style>
