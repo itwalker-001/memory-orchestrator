@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "0011"
+revision = "0011_project_skeleton"
 down_revision = "0010_age_extension"
 branch_labels = None
 depends_on = None
@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False,
                   server_default=sa.func.now()),
     )
+    op.create_index("ix_psn_parent_id", "project_skeleton_nodes", ["parent_id"])
     op.create_table(
         "skeleton_node_memories",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
@@ -45,16 +46,21 @@ def upgrade() -> None:
                   server_default=sa.func.now()),
         sa.UniqueConstraint("skeleton_node_id", "memory_id", name="uq_snm_node_memory"),
     )
+    op.create_index("ix_snm_memory_id", "skeleton_node_memories", ["memory_id"])
     op.add_column(
         "api_tokens",
         sa.Column("project_id", UUID(as_uuid=True),
                   sa.ForeignKey("projects.id", ondelete="SET NULL"),
                   nullable=True),
     )
+    # Intentional: mcp_client tokens are replaced by project_token kind.
+    # Existing mcp_client rows are invalid after this migration.
     op.execute("DELETE FROM api_tokens WHERE kind = 'mcp_client'")
 
 
 def downgrade() -> None:
+    op.drop_index("ix_snm_memory_id", table_name="skeleton_node_memories")
+    op.drop_index("ix_psn_parent_id", table_name="project_skeleton_nodes")
     op.drop_column("api_tokens", "project_id")
     op.drop_table("skeleton_node_memories")
     op.drop_table("project_skeleton_nodes")

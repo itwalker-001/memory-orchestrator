@@ -25,7 +25,6 @@ SETTINGS_KEYS = [
     "score_cosine_weight", "score_importance_weight", "score_recency_weight",
     "score_recency_half_life", "score_rerank_blend",
     "score_type_feedback", "score_type_project", "score_type_user", "score_type_reference",
-    "graph_enabled", "graph_hop_depth",
 ]
 
 
@@ -74,8 +73,6 @@ class SettingsPatch(BaseModel):
     score_type_project: str | None = None
     score_type_user: str | None = None
     score_type_reference: str | None = None
-    graph_enabled: str | None = None
-    graph_hop_depth: str | None = None
 
 
 class BatchDeleteBody(BaseModel):
