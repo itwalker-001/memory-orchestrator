@@ -251,7 +251,6 @@ def _setup_codex(base_url: str, mcp_dir: str, project_token: str) -> None:
         f"\n[mcp_servers.memory-orchestrator.env]\n"
         f'MO_CLIENT = "codex"\n'
         f'MO_HTTP_BASE_URL = "{base_url}"\n'
-        f'MO_MCP_TOKEN = "{project_token}"\n'
     )
     config_path.write_text(text, encoding="utf-8")
     click.echo(f"[1/3] config.toml: [features] hooks=true, MCP server updated")
@@ -266,7 +265,9 @@ def _setup_codex(base_url: str, mcp_dir: str, project_token: str) -> None:
     hooks_path.write_text(json.dumps(hooks_data, indent=2, ensure_ascii=False), encoding="utf-8")
     click.echo(f"[2/3] hooks.json written")
 
-    click.echo(f"[3/3] MO_MCP_TOKEN written to config.toml env")
+    # --- 3. Write token to project-local settings (same as Claude) ---
+    _write_project_local_env(os.getcwd(), MO_MCP_TOKEN=project_token, MO_HTTP_BASE_URL=base_url)
+    click.echo(f"[3/3] token written to .claude/settings.local.json")
 
     # --- 4. Install AGENTS.md ---
     _install_agents_md(Path(mcp_dir), codex_home)
