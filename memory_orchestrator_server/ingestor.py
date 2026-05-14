@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator_server.config import get_settings
 from memory_orchestrator_server.embedder import embed_one
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Session as SessionRow
+from memory_orchestrator_server.models import Session as SessionRow
 from memory_orchestrator_server.repository import MemoryRepository
 from memory_orchestrator_server.time_utils import utc_now
 
@@ -187,10 +187,8 @@ async def ingest_session(
 
     chunk = _render_chunk(lines)
 
-    # Fetch skeleton if project has one
     skeleton: list[dict] = []
-    if project_id != GLOBAL_PROJECT_ID:
-        skeleton = await repo.get_skeleton_tree(project_id)
+    skeleton = await repo.get_skeleton_tree(project_id)
 
     try:
         from openai import AsyncOpenAI
@@ -234,8 +232,7 @@ async def ingest_session(
     try:
         for cand in candidates:
             embedding = await embed_one(cand.content)
-            cand_pid = GLOBAL_PROJECT_ID if cand.type == "user" else project_id
-            dups = await repo.find_duplicates(type=cand.type, project_id=cand_pid, embedding=embedding)
+            dups = await repo.find_duplicates(type=cand.type, project_id=project_id, embedding=embedding)
             if dups:
                 skipped += 1
                 continue
@@ -247,19 +244,18 @@ async def ingest_session(
                 why=cand.why,
                 how_to_apply=cand.how_to_apply,
                 importance=cand.importance,
-                project_id=cand_pid,
+                project_id=project_id,
                 source="auto_extracted",
                 source_client=source_client,
                 embedding=embedding,
             )
             saved += 1
-            # Link to skeleton node if LLM provided one
-            if cand.skeleton_node and project_id != GLOBAL_PROJECT_ID:
+            if cand.skeleton_node:
                 sn = cand.skeleton_node
                 try:
                     if sn.get("create_if_missing"):
                         node_id = await repo.get_or_create_skeleton_node(
-                            project_id=cand_pid,
+                            project_id=project_id,
                             name=sn["name"],
                             parent_name=sn.get("parent_name"),
                         )

@@ -7,7 +7,7 @@ from sqlalchemy import delete as sa_delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator_server import reranker
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory, Project, SystemSetting
+from memory_orchestrator_server.models import Memory, Project, SystemSetting
 from memory_orchestrator_server.models import ProjectSkeletonNode, SkeletonNodeMemory
 from memory_orchestrator_server.scoring import hybrid_score, truncate_by_budget
 from memory_orchestrator_server.time_utils import utc_now
@@ -108,25 +108,6 @@ class MemoryRepository:
     async def ensure_project(self, slug: str, cwd: str | None = None) -> uuid.UUID:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         now = utc_now()
-        if slug == "*":
-            stmt = (
-                pg_insert(Project)
-                .values(
-                    id=GLOBAL_PROJECT_ID,
-                    slug="*",
-                    display_name="Global",
-                    root_paths=[],
-                    first_seen_at=now,
-                    last_active_at=now,
-                )
-                .on_conflict_do_update(
-                    index_elements=["slug"],
-                    set_={"last_active_at": now},
-                )
-                .returning(Project.id)
-            )
-            result = await self.session.execute(stmt)
-            return result.scalar_one()
         display_name = slug.split("/")[-1] if "/" in slug else slug
         stmt = (
             pg_insert(Project)
@@ -147,8 +128,6 @@ class MemoryRepository:
         return result.scalar_one()
 
     async def slug_to_id(self, slug: str) -> uuid.UUID | None:
-        if slug == "*":
-            return GLOBAL_PROJECT_ID
         result = await self.session.execute(
             select(Project.id).where(Project.slug == slug)
         )
@@ -360,13 +339,12 @@ class MemoryRepository:
         resolved_project_id = await self._ensure_project_ref(project_id)
         stmt = select(Memory).where(
             Memory.superseded_by.is_(None),
+            Memory.project_id == resolved_project_id,
             or_(
-                Memory.project_id == GLOBAL_PROJECT_ID,
-                (Memory.project_id == resolved_project_id) & (Memory.type == "feedback") & (Memory.importance >= 3),
-                (Memory.project_id == resolved_project_id) & (Memory.type == "project") & (
-                    Memory.updated_at >= utc_now() - timedelta(days=30)
-                ),
-                (Memory.project_id == resolved_project_id) & (Memory.type == "reference"),
+                Memory.type == "user",
+                (Memory.type == "feedback") & (Memory.importance >= 3),
+                (Memory.type == "project") & (Memory.updated_at >= utc_now() - timedelta(days=30)),
+                Memory.type == "reference",
             ),
         )
         result = await self.session.execute(stmt)

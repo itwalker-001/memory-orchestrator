@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator_server.embedder import embed_one
 from memory_orchestrator_server.ingestor import ingest_session
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory
+from memory_orchestrator_server.models import Memory
 from memory_orchestrator_server.repository import MemoryRepository
 from memory_orchestrator_server.time_utils import isoformat_utc
 from memory_orchestrator_server.mcp_contract import (
@@ -46,12 +46,12 @@ async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID
         from memory_orchestrator_server.models import Project
 
         result = await session.execute(select(Project.id))
-        project_ids = list({r[0] for r in result.all()} | {GLOBAL_PROJECT_ID})
+        project_ids = [r[0] for r in result.all()]
     elif scope_slug:
         pid = await repo.slug_to_id(scope_slug)
-        project_ids = [pid] if pid else [GLOBAL_PROJECT_ID]
+        project_ids = [pid] if pid else []
     else:
-        project_ids = list({project_uuid, GLOBAL_PROJECT_ID})
+        project_ids = [project_uuid]
     qvec = await embed_one(query)
     hits = await repo.search(
         query_embedding=qvec, project_ids=project_ids, types=types,
@@ -96,7 +96,12 @@ async def handle_save_memory(
             source="explicit", source_client=current_client(client), embedding=embedding,
         )
         await _attach_to_skeleton(repo, scope_uuid, m.id, node_name, parent_node)
-        return {"id": str(m.id), "action": "merged"}
+        result: dict = {"id": str(m.id), "action": "merged"}
+        if node_name:
+            result["node_name"] = node_name
+            if parent_node:
+                result["parent_node"] = parent_node
+        return result
     dups = await repo.find_duplicates(type=mtype, project_id=scope_uuid, embedding=embedding,
                                        threshold=float((await repo.get_settings()).get("dup_threshold") or 0.92))
     if dups:
@@ -109,7 +114,12 @@ async def handle_save_memory(
         source_client=current_client(client),
     )
     await _attach_to_skeleton(repo, scope_uuid, m.id, node_name, parent_node)
-    return {"id": str(m.id), "action": "created"}
+    result = {"id": str(m.id), "action": "created"}
+    if node_name:
+        result["node_name"] = node_name
+        if parent_node:
+            result["parent_node"] = parent_node
+    return result
 
 
 async def handle_list_memories(*, session: AsyncSession, project_uuid: uuid.UUID, args: dict, **_) -> list[dict]:
@@ -123,7 +133,7 @@ async def handle_list_memories(*, session: AsyncSession, project_uuid: uuid.UUID
         pid = await repo.slug_to_id(scope_slug)
         mems = await repo.list(project_id=pid, type=mtype, limit=int(args.get("limit", 50)))
     else:
-        mems = await repo.list(project_ids=[project_uuid, GLOBAL_PROJECT_ID], type=mtype, limit=int(args.get("limit", 50)))
+        mems = await repo.list(project_ids=[project_uuid], type=mtype, limit=int(args.get("limit", 50)))
     result = []
     for m in mems:
         d = {"id": str(m.id), "name": m.name, "description": m.description,
@@ -150,18 +160,8 @@ async def handle_promote_memory(*, session: AsyncSession, args: dict, **_) -> di
     values: dict = {}
     if "importance" in args:
         values["importance"] = int(args["importance"])
-    old_project_id = None
-    if args.get("make_global"):
-        from sqlalchemy import select as sa_select
-
-        row = await session.execute(sa_select(Memory.project_id).where(Memory.id == memory_id))
-        old_project_id = row.scalar_one_or_none()
-        values["project_id"] = GLOBAL_PROJECT_ID
     if values:
         await session.execute(update(Memory).where(Memory.id == memory_id).values(**values))
-    if old_project_id and old_project_id != GLOBAL_PROJECT_ID:
-        await session.execute(_sync_project_count(old_project_id))
-        await session.execute(_sync_project_count(GLOBAL_PROJECT_ID))
     return {"updated": True, "changes": list(values.keys())}
 
 
@@ -210,7 +210,7 @@ async def handle_read_memory_resource(
     if uri_text == RESOURCE_GUIDE:
         return memory_resource_guide()
     if uri_text == RESOURCE_RECENT:
-        mems = await repo.list(project_ids=[project_uuid, GLOBAL_PROJECT_ID], limit=12)
+        mems = await repo.list(project_ids=[project_uuid], limit=12)
         return format_memory_resource(
             title="Recent Memories",
             mems=mems,

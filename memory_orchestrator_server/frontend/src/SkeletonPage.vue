@@ -20,7 +20,6 @@
         :isDark="isDark" :lang="lang" :loginOpen="loginOpen"
         @toggle-theme="isDark = !isDark" @toggle-lang="toggleLang"
         @open-settings="router.push('/settings')"
-        @open-admin="router.push('/tokens')"
         @logout="logout"
       >
         <template #nav>
@@ -61,6 +60,7 @@
           @update-tags="onUpdateTags"
           @add-memory="addMemoryOpen = true"
           @unlink-memory="unlinkMemory"
+          @open-detail="m => detailMemory = m"
         />
       </div>
     </template>
@@ -76,6 +76,9 @@
       @manage-tags="focusTags"
       @delete="onDeleteNode"
     />
+
+    <!-- Memory detail modal -->
+    <MemoryDetailModal :memory="detailMemory" @close="detailMemory = null" @edit="detailMemory = null" />
 
     <!-- New project modal -->
     <div v-if="newProjectOpen" class="modal-overlay" @click.self="newProjectOpen = false">
@@ -189,6 +192,7 @@ import ProjectIconStrip from './ProjectIconStrip.vue'
 import SkeletonTreePanel from './SkeletonTreePanel.vue'
 import NodeDetailPanel from './NodeDetailPanel.vue'
 import ContextMenu from './ContextMenu.vue'
+import MemoryDetailModal from './MemoryDetailModal.vue'
 
 const router = useRouter()
 
@@ -240,6 +244,8 @@ async function logout() {
   await fetch(`${BASE}/logout`, { method: 'POST' })
   loginOpen.value = true
 }
+
+const detailMemory = ref(null)
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 const projects = ref([])
@@ -484,6 +490,7 @@ onMounted(async () => {
   const r = await apiFetch(`${BASE}/projects`)
   if (r.status === 401) { loginOpen.value = true; return }
   projects.value = await r.json()
+  if (projects.value.length > 0) await selectProject(projects.value[0])
 })
 </script>
 

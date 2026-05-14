@@ -41,10 +41,10 @@
       <section class="detail-section">
         <div class="detail-label">{{ t('Memories ({n})', { n: memories.length }) }}</div>
         <ul class="mem-list">
-          <li v-for="m in memories" :key="m.id" class="mem-item">
+          <li v-for="m in memories" :key="m.id" class="mem-item" @click="$emit('open-detail', m)">
             <span :class="['badge', m.type]">{{ m.type }}</span>
             <span class="mem-name" :title="m.description">{{ m.name }}</span>
-            <button class="btn-unlink" @click="$emit('unlink-memory', m.id)" title="取消关联">×</button>
+            <button class="btn-unlink" @click.stop="$emit('unlink-memory', m.id)" title="取消关联">×</button>
           </li>
         </ul>
       </section>
@@ -66,11 +66,11 @@ const props = defineProps({
   memories: { type: Array, default: () => [] },
   allTags: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['save-hint', 'update-tags', 'add-memory', 'unlink-memory'])
+const emit = defineEmits(['save-hint', 'update-tags', 'add-memory', 'unlink-memory', 'open-detail'])
 
 const EMOJI_MAP = {
   '项目概况': '📌', '需求': '📋', '设计': '🎨', '技术栈': '🔧',
-  '前端': '🖥', '后端': '⚙️', '数据库': '🗄️', '测试': '🧪',
+  '前端': '💻', '后端': '🔩', '数据库': '💾', '测试': '🧪',
   '部署': '🚀', '决策记录': '📝', '经验库': '💡',
 }
 const nodeEmoji = computed(() => EMOJI_MAP[props.node?.name] || '📄')
@@ -101,7 +101,8 @@ function saveHint() {
 .sk-input:focus { border-color: var(--accent, #58a6ff); }
 .detail-desc { font-size: 12px; color: var(--fg-muted, #8b949e); line-height: 1.5; margin: 0; }
 .mem-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.mem-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border, #21262d); border-radius: 5px; font-size: 12px; }
+.mem-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border, #21262d); border-radius: 5px; font-size: 12px; cursor: pointer; }
+.mem-item:hover { background: var(--row-hover, rgba(0,0,0,0.04)); }
 .mem-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg, #c9d1d9); }
 .btn-unlink { background: none; border: none; color: var(--fg-muted, #6e7681); cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1; }
 .btn-unlink:hover { color: #ff7b72; }

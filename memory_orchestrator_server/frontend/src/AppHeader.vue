@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import enLocale from './locales/en.json'
 import zhLocale from './locales/zh.json'
 
@@ -9,8 +9,9 @@ const props = defineProps({
   loginOpen: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['toggle-theme', 'toggle-lang', 'open-settings', 'open-admin', 'logout'])
+const emit = defineEmits(['toggle-theme', 'toggle-lang', 'open-settings', 'logout'])
 
+const router = useRouter()
 const _locales = { en: enLocale, zh: zhLocale }
 function t(key) { return (_locales[props.lang] || _locales.en)[key] ?? key }
 </script>
@@ -75,7 +76,7 @@ function t(key) { return (_locales[props.lang] || _locales.en)[key] ?? key }
         </svg>
       </button>
 
-      <button v-if="!loginOpen" @click="emit('open-admin')" class="btn-theme btn-admin" :title="t('Admin')">
+      <button v-if="!loginOpen" @click="router.push('/tokens')" class="btn-theme btn-admin" :title="t('Admin')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
         </svg>

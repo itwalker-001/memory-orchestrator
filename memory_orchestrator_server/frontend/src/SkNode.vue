@@ -90,7 +90,7 @@ function toggleExpand() { expanded.value = !expanded.value }
 // ── Emoji map ────────────────────────────────────────────────────────────────
 const EMOJI_MAP = {
   '项目概况': '📌', '需求': '📋', '设计': '🎨', '技术栈': '🔧',
-  '前端': '🖥', '后端': '⚙️', '数据库': '🗄️', '测试': '🧪',
+  '前端': '💻', '后端': '🔩', '数据库': '💾', '测试': '🧪',
   '部署': '🚀', '决策记录': '📝', '经验库': '💡',
 }
 const nodeEmoji = computed(() => EMOJI_MAP[props.node.name] || '📄')
@@ -199,7 +199,7 @@ function onDragEnd() {
 .sk-node-row.drop-below { border-bottom-color: var(--accent, #58a6ff); }
 .sk-drag-handle { color: var(--fg-muted, #6e7681); font-size: 10px; cursor: grab; flex-shrink: 0; }
 .sk-chevron { font-size: 8px; color: var(--fg-muted, #6e7681); width: 12px; text-align: center; flex-shrink: 0; }
-.sk-emoji { font-size: 12px; flex-shrink: 0; }
+.sk-emoji { font-size: 13px; flex-shrink: 0; width: 16px; text-align: center; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .sk-node-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .sk-node-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .sk-node-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg, #c9d1d9); }

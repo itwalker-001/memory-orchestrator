@@ -65,7 +65,7 @@ HTTP request
 
 ## Data model
 
-- `projects` — slug → UUID. Global sentinel: `00000000-0000-0000-0000-000000000000` (slug `*`).
+- `projects` — slug → UUID.
 - `memories` — `type` ∈ {user, feedback, project, reference}; `embedding vector(1024)`; `superseded_by` for soft-delete chain.
 - `system_settings` — key-value; cached 60 s; editable at runtime without restart.
 - `sessions` — ingestion progress per session (`last_offset`, `status` ∈ pending/done/failed).

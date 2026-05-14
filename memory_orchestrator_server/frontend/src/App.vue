@@ -3,7 +3,7 @@
     <AppHeader
       :isDark="isDark" :lang="lang" :loginOpen="loginOpen"
       @toggle-theme="toggleTheme" @toggle-lang="toggleLang"
-      @open-settings="openSettings" @open-admin="openAdminModal"
+      @open-settings="openSettings"
       @logout="logout"
     >
       <template #nav>
@@ -69,9 +69,6 @@
           </svg>
           {{ t('Refresh') }}
         </button>
-        <button @click="openAdminModal" class="btn-toolbar-action btn-admin-modal" :title="t('Admin')" style="display:none">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </button>
         <span class="toolbar-sep"></span>
         <button @click="openWrite" class="btn-new" :title="t('New memory') + ' (N)'">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -88,10 +85,10 @@
         <colgroup>
           <col style="width:36px">
           <col style="width:36px">
-          <col style="width:180px">
-          <col style="width:90px">
-          <col style="width:220px">
-          <col style="min-width:200px">
+          <col style="width:160px">
+          <col style="width:80px">
+          <col style="width:280px">
+          <col style="min-width:280px">
           <col style="width:64px">
           <col style="width:96px">
           <col style="width:80px">
@@ -198,96 +195,7 @@
   <Teleport to="body">
     <div v-if="tip.visible" class="tooltip-popup" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
 
-    <div v-if="adminOpen" class="modal-overlay admin-overlay" @click.self="closeAdminModal">
-      <AdminModal v-model:open="adminOpen" :lang="lang" @require-login="loginOpen = true" @close="closeAdminModal" />
-    </div>
-    <!-- ── API Tokens modal (dead — replaced by AdminModal) ── -->
-    <div v-if="false" class="modal-overlay" @click.self="adminOpen = false">
-      <div class="modal admin-modal">
-        <div class="modal-header">
-          <span class="modal-title">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            {{ t('API Tokens') }}
-          </span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button class="btn-new admin-create-toggle" @click="adminCreateOpen = !adminCreateOpen">
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-              {{ t('New') }}
-            </button>
-            <button class="modal-close" @click="adminOpen = false">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-        </div>
 
-        <div class="admin-modal-body">
-          <div v-if="adminCreateOpen" class="admin-create-form">
-            <select v-model="adminNewKind" class="admin-select">
-              <option value="ui_admin">ui_admin</option>
-              <option value="mcp_client">mcp_client</option>
-            </select>
-            <input v-model="adminNewName" class="admin-input" :placeholder="t('Name…')" @keydown.enter="adminCreate" />
-            <button class="btn-save admin-create-btn" :disabled="!adminNewName || adminCreating" @click="adminCreate">
-              {{ adminCreating ? t('Saving…') : t('Create') }}
-            </button>
-            <button class="btn-cancel" @click="adminCreateOpen = false">{{ t('Cancel') }}</button>
-          </div>
-
-          <div v-if="adminCreatedToken" class="admin-new-token-banner">
-            <span class="admin-new-token-label">{{ t('Token value (save this — shown only once):') }}</span>
-            <code class="admin-new-token-value copyable" @click="copy(adminCreatedToken)" :title="t('Click to copy')">{{ adminCreatedToken }}</code>
-            <span class="copy-hint" v-if="copied === adminCreatedToken">{{ t('Copied') }}</span>
-            <button class="btn-cancel admin-dismiss" @click="adminCreatedToken = ''">{{ t('Close') }}</button>
-          </div>
-
-          <div v-if="adminLoading" class="admin-empty">{{ t('Loading…') }}</div>
-          <div v-else-if="!adminTokens.length" class="admin-empty">{{ t('No tokens yet.') }}</div>
-          <table v-else class="admin-table">
-            <thead>
-              <tr>
-                <th>{{ t('Kind') }}</th>
-                <th>{{ t('Name') }}</th>
-                <th>{{ t('Status') }}</th>
-                <th>{{ t('Created') }}</th>
-                <th>{{ t('Last used') }}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="tok in adminTokens" :key="tok.id" :class="{ 'admin-row-disabled': !tok.enabled }">
-                <td><span :class="['admin-kind-badge', tok.kind === 'ui_admin' ? 'admin-kind-ui' : 'admin-kind-mcp']">{{ tok.kind }}</span></td>
-                <td class="admin-name-cell">{{ tok.name }}</td>
-                <td>
-                  <button
-                    :class="['admin-toggle', tok.enabled ? 'admin-toggle-on' : 'admin-toggle-off']"
-                    @click="adminToggle(tok)"
-                    :title="tok.enabled ? t('Disable') : t('Enable')"
-                  >
-                    <span class="admin-toggle-knob"></span>
-                  </button>
-                  <span class="admin-status-text">{{ tok.enabled ? t('Enabled') : t('Disabled') }}</span>
-                </td>
-                <td class="admin-date">{{ relTime(tok.created_at) }}</td>
-                <td class="admin-date">{{ tok.last_used_at ? relTime(tok.last_used_at) : '—' }}</td>
-                <td class="admin-actions-cell">
-                  <button class="btn-cancel admin-reset" @click="openTokenAction(tok, 'reset')" :title="t('Reset')">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/></svg>
-                    {{ t('Reset') }}
-                  </button>
-                  <button class="btn-token-revoke admin-revoke" @click="openTokenAction(tok, 'revoke')" :title="t('Revoke')">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                    {{ t('Revoke') }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
 
     <div v-if="loginOpen" class="modal-overlay login-overlay">
       <div class="login-modal">
@@ -341,70 +249,7 @@
         </form>
       </div>
     </div>
-    <div v-if="detailTarget" class="modal-overlay" @click.self="detailTarget = null">
-      <div class="detail-modal">
-        <div :class="['write-header', 'type-header-' + detailTarget.type]">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span :class="['tag', detailTarget.type]" style="font-size:10px;padding:1px 6px">{{ t(detailTarget.type) }}</span>
-            <span class="write-title">{{ t('Memory Details') }}</span>
-          </div>
-          <div class="write-header-right">
-            <button class="btn-header-edit" @click="openEdit(detailTarget); detailTarget = null" :title="t('Edit')">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
-            </button>
-            <button class="modal-close" @click="detailTarget = null">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <div class="detail-modal-body">
-          <div class="detail-hero">
-            <div class="detail-hero-name">{{ detailTarget.name }}</div>
-            <div v-if="detailTarget.description" class="detail-hero-desc">{{ detailTarget.description }}</div>
-          </div>
-          <div class="content-block">
-            <div class="block-label">{{ t('Content') }}</div>
-            <div class="md-body" v-html="md(detailTarget.content)"></div>
-          </div>
-          <div v-if="detailTarget.why" class="content-block">
-            <div class="block-label">{{ t('Why') }}</div>
-            <div class="md-body" v-html="md(detailTarget.why)"></div>
-          </div>
-          <div v-if="detailTarget.how_to_apply" class="content-block">
-            <div class="block-label">{{ t('How to Apply') }}</div>
-            <div class="md-body" v-html="md(detailTarget.how_to_apply)"></div>
-          </div>
-          <div class="meta-strip">
-            <span class="meta-item"><strong>{{ sourceLabel(detailTarget.source_client) }}</strong></span>
-            <span class="meta-sep">·</span>
-            <span class="meta-item">{{ t('Hits') }} <strong>{{ detailTarget.hit_count }}</strong></span>
-            <template v-if="detailTarget.last_hit_at">
-              <span class="meta-sep">·</span>
-              <span class="meta-item">{{ fmtDateTime(detailTarget.last_hit_at) }}</span>
-            </template>
-          </div>
-          <details class="meta-ids">
-            <summary class="meta-ids-toggle">IDs</summary>
-            <div class="meta-ids-body">
-              <span class="meta-item">
-                ID: <code class="copyable" @click.stop="copy(detailTarget.id)" :title="t('Click to copy')">{{ detailTarget.id }}</code>
-                <span class="copy-hint" v-if="copied === detailTarget.id">{{ t('Copied') }}</span>
-              </span>
-              <span class="meta-sep">·</span>
-              <span class="meta-item">
-                Project: <code class="copyable" @click.stop="copy(detailTarget.project_id)" :title="t('Click to copy')">{{ detailTarget.project_id }}</code>
-                <span class="copy-hint" v-if="copied === detailTarget.project_id">{{ t('Copied') }}</span>
-              </span>
-            </div>
-          </details>
-        </div>
-      </div>
-    </div>
+    <MemoryDetailModal :memory="detailTarget" @close="detailTarget = null" @edit="m => { openEdit(m); detailTarget = null }" />
     <SettingsModal v-model:open="settingsOpen" :lang="lang" ref="settingsModalRef" @open-import="openImport" />
     <div v-if="false && settingsOpen" class="modal-overlay">
       <div class="modal">
@@ -660,35 +505,6 @@
         <div class="modal-footer">
           <button class="btn-cancel" @click="deleteTarget = null">{{ t('Cancel') }}</button>
           <button class="btn-danger" @click="confirmDelete" :disabled="isDeleting">{{ isDeleting ? t('Deleting…') : t('Delete') }}</button>
-        </div>
-      </div>
-    </div>
-    <div v-if="false && tokenActionTarget" class="modal-overlay" @click.self="tokenActionTarget = null">
-      <div class="modal modal-sm">
-        <div class="modal-header">
-          <span class="modal-title">{{ tokenActionTarget.action === 'reset' ? t('Reset token') : t('Revoke token') }}</span>
-          <button class="modal-close" @click="tokenActionTarget = null">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-          </button>
-        </div>
-        <div class="modal-body delete-modal-body">
-          <svg v-if="tokenActionTarget.action === 'reset'" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon" style="color:var(--accent)">
-            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/>
-          </svg>
-          <svg v-else width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-          </svg>
-          <p class="delete-confirm-text"><strong>{{ tokenActionTarget.tok.name }}</strong></p>
-          <p class="delete-confirm-sub">{{ tokenActionTarget.action === 'reset' ? t('Reset token desc') : t('Revoke token desc') }}</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-cancel" @click="tokenActionTarget = null">{{ t('Cancel') }}</button>
-          <button :class="tokenActionTarget.action === 'reset' ? 'btn-save' : 'btn-danger'" @click="confirmTokenAction" :disabled="isTokenActioning">
-            {{ isTokenActioning ? t('Processing…') : (tokenActionTarget.action === 'reset' ? t('Reset') : t('Revoke')) }}
-          </button>
         </div>
       </div>
     </div>
@@ -1056,8 +872,7 @@ import { marked } from 'marked'
 import { useLocale } from './useLocale.js'
 import AppHeader from './AppHeader.vue'
 import SettingsModal from './SettingsModal.vue'
-import AdminModal from './AdminModal.vue'
-
+import MemoryDetailModal from './MemoryDetailModal.vue'
 marked.setOptions({ breaks: true, gfm: true })
 function md(text) {
   if (!text) return ''
@@ -1182,8 +997,6 @@ async function load() {
 
 const deleteTarget = ref(null)
 const isDeleting = ref(false)
-const tokenActionTarget = ref(null)
-const isTokenActioning = ref(false)
 function del(m) { deleteTarget.value = m }
 async function confirmDelete() {
   if (!deleteTarget.value) return
@@ -1785,91 +1598,6 @@ function toggleTheme() {
   isDark.value = !isDark.value
   localStorage.setItem('mo-theme', isDark.value ? 'dark' : 'light')
   applyTheme()
-}
-
-// ── Admin modal ──
-const adminOpen = ref(window.location.pathname.replace(/\/$/, '').endsWith('/admin'))
-const adminTokens = ref([])
-const adminLoading = ref(false)
-const adminCreateOpen = ref(false)
-const adminNewKind = ref('mcp_client')
-const adminNewName = ref('')
-const adminCreating = ref(false)
-const adminCreatedToken = ref('')
-
-function openAdminModal() {
-  adminOpen.value = true
-}
-function openAdmin() { openAdminModal() }
-function closeAdminModal() {
-  adminOpen.value = false
-  window.history.replaceState(null, '', '/ui/')
-}
-
-async function adminLoad() {
-  adminLoading.value = true
-  try {
-    const r = await apiFetch(`${BASE}/tokens`)
-    if (r.status === 401) { loginOpen.value = true; return }
-    adminTokens.value = await r.json()
-  } finally {
-    adminLoading.value = false
-  }
-}
-
-async function adminCreate() {
-  if (!adminNewName.value) return
-  adminCreating.value = true
-  try {
-    const r = await apiFetch(`${BASE}/tokens`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: adminNewKind.value, name: adminNewName.value }),
-    })
-    if (!r.ok) return
-    const data = await r.json()
-    adminCreatedToken.value = data.token
-    adminNewName.value = ''
-    adminCreateOpen.value = false
-    await adminLoad()
-  } finally {
-    adminCreating.value = false
-  }
-}
-
-async function adminToggle(tok) {
-  await apiFetch(`${BASE}/tokens/${tok.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: !tok.enabled }),
-  })
-  await adminLoad()
-}
-
-function openTokenAction(tok, action) {
-  tokenActionTarget.value = { tok, action }
-}
-
-async function confirmTokenAction() {
-  if (!tokenActionTarget.value) return
-  const { tok, action } = tokenActionTarget.value
-  isTokenActioning.value = true
-  try {
-    if (action === 'reset') {
-      const r = await apiFetch(`${BASE}/tokens/${tok.id}/reset`, { method: 'POST' })
-      if (r.ok) {
-        const data = await r.json()
-        adminCreatedToken.value = data.token
-        await adminLoad()
-      }
-    } else {
-      await apiFetch(`${BASE}/tokens/${tok.id}`, { method: 'DELETE' })
-      await adminLoad()
-    }
-  } finally {
-    isTokenActioning.value = false
-    tokenActionTarget.value = null
-  }
 }
 
 onMounted(async () => {
@@ -3172,30 +2900,6 @@ body { margin: 0; }
 .write-header.type-header-project  { background: linear-gradient(90deg, var(--blue-dim),  transparent 72%); }
 .write-header.type-header-user     { background: linear-gradient(90deg, var(--purple-dim), transparent 72%); }
 .write-header.type-header-reference { background: linear-gradient(90deg, var(--orange-dim), transparent 72%); }
-/* detail modal — centered, wider */
-.detail-modal {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  width: 60vw; max-width: 60vw;
-  max-height: 88vh;
-  display: flex; flex-direction: column;
-  box-shadow: 0 24px 70px var(--shadow), 0 0 0 1px rgba(0,212,138,0.06), 0 0 40px -28px var(--glow);
-  animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  overflow: hidden;
-}
-.detail-modal-body {
-  flex: 1; overflow-y: auto;
-  padding: 0 20px 20px;
-}
-/* inline edit button in panel header */
-.btn-header-edit {
-  background: transparent; color: var(--text-muted);
-  border: none; border-radius: var(--radius-sm);
-  padding: 4px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  transition: color var(--transition), background var(--transition);
-}
-.btn-header-edit:hover { color: var(--accent); background: var(--accent-dim); }
 .kbd-hint {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 4px;

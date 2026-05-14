@@ -3,12 +3,12 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from './AppHeader.vue'
 import { BASE, apiFetch } from './api.js'
-import enLocale from './locales/en.json'
-import zhLocale from './locales/zh.json'
+import { useLocale } from './useLocale.js'
 
 const router = useRouter()
+const { lang, t, toggleLang } = useLocale()
 
-// ── Theme / lang ──
+// ── Theme ──
 const storedTheme = localStorage.getItem('mo-theme')
 const isDark = ref(storedTheme ? storedTheme === 'dark' : true)
 function toggleTheme() {
@@ -16,9 +16,6 @@ function toggleTheme() {
   localStorage.setItem('mo-theme', isDark.value ? 'dark' : 'light')
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
 }
-const lang = ref(localStorage.getItem('mo-lang') || 'en')
-function toggleLang() { lang.value = lang.value === 'en' ? 'zh' : 'en'; localStorage.setItem('mo-lang', lang.value) }
-function t(key) { return ({ en: enLocale, zh: zhLocale }[lang.value] || enLocale)[key] ?? key }
 
 function relTime(iso) {
   if (!iso) return '—'
@@ -42,20 +39,32 @@ async function copy(text) {
 const adminTokens = ref([])
 const adminLoading = ref(false)
 const adminCreateOpen = ref(false)
-const adminNewKind = ref('mcp_client')
+const adminNewKind = ref('ui_admin')
 const adminNewName = ref('')
+const adminNewProjectId = ref('')
 const adminCreating = ref(false)
 const adminCreatedToken = ref('')
 const tokenActionTarget = ref(null)
 const isTokenActioning = ref(false)
+const projects = ref([])
+
+function projectName(projectId) {
+  if (!projectId) return '—'
+  const p = projects.value.find(p => p.id === projectId)
+  return p ? (p.display_name || p.slug) : projectId.slice(0, 8) + '…'
+}
 
 // ── API ──
 async function load() {
   adminLoading.value = true
   try {
-    const r = await apiFetch(`${BASE}/tokens`)
-    if (r.status === 401) { router.push('/memories'); return }
-    adminTokens.value = await r.json()
+    const [tokR, projR] = await Promise.all([
+      apiFetch(`${BASE}/tokens`),
+      apiFetch(`${BASE}/projects`),
+    ])
+    if (tokR.status === 401) { router.push('/memories'); return }
+    adminTokens.value = await tokR.json()
+    if (projR.ok) projects.value = await projR.json()
   } finally {
     adminLoading.value = false
   }
@@ -63,17 +72,21 @@ async function load() {
 
 async function adminCreate() {
   if (!adminNewName.value) return
+  if (adminNewKind.value === 'project_token' && !adminNewProjectId.value) return
   adminCreating.value = true
   try {
+    const body = { kind: adminNewKind.value, name: adminNewName.value }
+    if (adminNewKind.value === 'project_token') body.project_id = adminNewProjectId.value
     const r = await apiFetch(`${BASE}/tokens`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: adminNewKind.value, name: adminNewName.value }),
+      body: JSON.stringify(body),
     })
     if (!r.ok) return
     const data = await r.json()
     adminCreatedToken.value = data.token
     adminNewName.value = ''
+    adminNewProjectId.value = ''
     adminCreateOpen.value = false
     await load()
   } finally {
@@ -122,86 +135,93 @@ onMounted(() => { load() })
   <div class="tp-app">
     <AppHeader :isDark="isDark" :lang="lang" :loginOpen="false"
       @toggle-theme="toggleTheme" @toggle-lang="toggleLang"
-      @open-settings="router.push('/settings')" @open-admin="() => {}" @logout="logout">
+      @open-settings="router.push('/settings')" @logout="logout">
       <template #nav>
         <router-link to="/memories">← {{ t('Memories') }}</router-link>
       </template>
     </AppHeader>
 
-    <div class="tp-body">
-      <div class="tp-card">
-        <div class="tp-card-header">
-          <span class="tp-card-title">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            {{ t('API Tokens') }}
-          </span>
-          <button class="btn-new" @click="adminCreateOpen = !adminCreateOpen">
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-            {{ t('New') }}
-          </button>
-        </div>
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span class="tp-title">{{ t('API Tokens') }}</span>
+      <div class="toolbar-spacer" />
+      <button class="btn-new" @click="adminCreateOpen = !adminCreateOpen">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        {{ t('New') }}
+      </button>
+    </div>
 
-        <div class="admin-modal-body">
-          <div v-if="adminCreateOpen" class="admin-create-form">
-            <select v-model="adminNewKind" class="admin-select">
-              <option value="ui_admin">ui_admin</option>
-              <option value="mcp_client">mcp_client</option>
-            </select>
-            <input v-model="adminNewName" class="admin-input" :placeholder="t('Name…')" @keydown.enter="adminCreate" />
-            <button class="btn-save admin-create-btn" :disabled="!adminNewName || adminCreating" @click="adminCreate">
-              {{ adminCreating ? t('Saving…') : t('Create') }}
-            </button>
-            <button class="btn-cancel" @click="adminCreateOpen = false">{{ t('Cancel') }}</button>
-          </div>
+    <!-- Create form -->
+    <div v-if="adminCreateOpen" class="admin-create-form">
+      <select v-model="adminNewKind" class="admin-select">
+        <option value="ui_admin">ui_admin</option>
+        <option value="project_token">project_token</option>
+      </select>
+      <select v-if="adminNewKind === 'project_token'" v-model="adminNewProjectId" class="admin-select">
+        <option value="" disabled>{{ t('Select project…') }}</option>
+        <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.display_name || p.slug }}</option>
+      </select>
+      <input v-model="adminNewName" class="admin-input" :placeholder="t('Name…')" @keydown.enter="adminCreate" />
+      <button class="btn-save admin-create-btn"
+        :disabled="!adminNewName || adminCreating || (adminNewKind === 'project_token' && !adminNewProjectId)"
+        @click="adminCreate">
+        {{ adminCreating ? t('Saving…') : t('Create') }}
+      </button>
+      <button class="btn-cancel" @click="adminCreateOpen = false">{{ t('Cancel') }}</button>
+    </div>
 
-          <div v-if="adminCreatedToken" class="admin-new-token-banner">
-            <span class="admin-new-token-label">{{ t('Token value (save this — shown only once):') }}</span>
-            <code class="admin-new-token-value copyable" @click="copy(adminCreatedToken)" :title="t('Click to copy')">{{ adminCreatedToken }}</code>
-            <span class="copy-hint" v-if="copied === adminCreatedToken">{{ t('Copied') }}</span>
-            <button class="btn-cancel admin-dismiss" @click="adminCreatedToken = ''">{{ t('Close') }}</button>
-          </div>
+    <!-- New token banner -->
+    <div v-if="adminCreatedToken" class="admin-new-token-banner">
+      <span class="admin-new-token-label">{{ t('Token value (save this — shown only once):') }}</span>
+      <code class="admin-new-token-value copyable" @click="copy(adminCreatedToken)" :title="t('Click to copy')">{{ adminCreatedToken }}</code>
+      <span class="copy-hint" v-if="copied === adminCreatedToken">{{ t('Copied') }}</span>
+      <button class="btn-cancel admin-dismiss" @click="adminCreatedToken = ''">{{ t('Close') }}</button>
+    </div>
 
-          <div v-if="adminLoading" class="admin-empty">{{ t('Loading…') }}</div>
-          <div v-else-if="!adminTokens.length" class="admin-empty">{{ t('No tokens yet.') }}</div>
-          <table v-else class="admin-table">
-            <thead>
-              <tr>
-                <th>{{ t('Kind') }}</th>
-                <th>{{ t('Name') }}</th>
-                <th>{{ t('Status') }}</th>
-                <th>{{ t('Created') }}</th>
-                <th>{{ t('Last used') }}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="tok in adminTokens" :key="tok.id" :class="{ 'admin-row-disabled': !tok.enabled }">
-                <td><span :class="['admin-kind-badge', tok.kind === 'ui_admin' ? 'admin-kind-ui' : 'admin-kind-mcp']">{{ tok.kind }}</span></td>
-                <td class="admin-name-cell">{{ tok.name }}</td>
-                <td>
-                  <button :class="['admin-toggle', tok.enabled ? 'admin-toggle-on' : 'admin-toggle-off']"
-                    @click="adminToggle(tok)" :title="tok.enabled ? t('Disable') : t('Enable')">
-                    <span class="admin-toggle-knob"></span>
-                  </button>
-                  <span class="admin-status-text">{{ tok.enabled ? t('Enabled') : t('Disabled') }}</span>
-                </td>
-                <td class="admin-date">{{ relTime(tok.created_at) }}</td>
-                <td class="admin-date">{{ tok.last_used_at ? relTime(tok.last_used_at) : '—' }}</td>
-                <td class="admin-actions-cell">
-                  <button class="btn-cancel admin-reset" @click="openTokenAction(tok, 'reset')" :title="t('Reset')">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/></svg>
-                    {{ t('Reset') }}
-                  </button>
-                  <button class="btn-token-revoke admin-revoke" @click="openTokenAction(tok, 'revoke')" :title="t('Revoke')">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                    {{ t('Revoke') }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <!-- Token list -->
+    <div class="tp-content">
+      <div v-if="adminLoading" class="admin-empty">{{ t('Loading…') }}</div>
+      <div v-else-if="!adminTokens.length" class="admin-empty">{{ t('No tokens yet.') }}</div>
+      <table v-else class="admin-table">
+        <thead>
+          <tr>
+            <th>{{ t('Kind') }}</th>
+            <th>{{ t('Name') }}</th>
+            <th>{{ t('Project') }}</th>
+            <th>{{ t('Status') }}</th>
+            <th>{{ t('Created') }}</th>
+            <th>{{ t('Last used') }}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="tok in adminTokens" :key="tok.id" :class="{ 'admin-row-disabled': !tok.enabled }">
+            <td><span :class="['admin-kind-badge', tok.kind === 'ui_admin' ? 'admin-kind-ui' : 'admin-kind-mcp']">{{ tok.kind }}</span></td>
+            <td class="admin-name-cell">{{ tok.name }}</td>
+            <td class="admin-project-cell">{{ tok.kind === 'project_token' ? projectName(tok.project_id) : '—' }}</td>
+            <td>
+              <button :class="['admin-toggle', tok.enabled ? 'admin-toggle-on' : 'admin-toggle-off']"
+                @click="adminToggle(tok)" :title="tok.enabled ? t('Disable') : t('Enable')">
+                <span class="admin-toggle-knob"></span>
+              </button>
+              <span class="admin-status-text">{{ tok.enabled ? t('Enabled') : t('Disabled') }}</span>
+            </td>
+            <td class="admin-date">{{ relTime(tok.created_at) }}</td>
+            <td class="admin-date">{{ tok.last_used_at ? relTime(tok.last_used_at) : '—' }}</td>
+            <td class="admin-actions-cell">
+              <button class="btn-cancel admin-reset" @click="openTokenAction(tok, 'reset')" :title="t('Reset')">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/></svg>
+                {{ t('Reset') }}
+              </button>
+              <button class="btn-token-revoke admin-revoke" @click="openTokenAction(tok, 'revoke')" :title="t('Revoke')">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                {{ t('Revoke') }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Token action confirm -->
@@ -241,35 +261,45 @@ onMounted(() => { load() })
 
 <style scoped>
 .tp-app {
-  width: 100%; min-height: 100svh;
+  width: 100%; max-width: 1600px; margin: 0 auto;
+  padding: 6px 16px 12px;
   display: flex; flex-direction: column;
-  box-sizing: border-box;
-  padding: 12px;
-  gap: 12px;
+  gap: 6px; height: 100vh; box-sizing: border-box;
 }
-.tp-body {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 8px;
-}
-.tp-card {
-  width: min(900px, 100%);
-  background: var(--surface);
-  border: 1px solid var(--border);
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: 0 4px 24px var(--shadow);
-  overflow: hidden;
+  background: var(--surface-panel);
+  backdrop-filter: blur(12px);
 }
-.tp-card-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+[data-theme="dark"] .toolbar {
+  border-color: rgba(0,212,138,0.12);
+  box-shadow: inset 0 1px 0 rgba(0,212,138,0.04);
+}
+.tp-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.toolbar-spacer { flex: 1; }
+.admin-create-form {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   background: var(--surface-panel);
 }
-.tp-card-title {
-  display: flex; align-items: center;
-  font-size: 13px; font-weight: 600; color: var(--text-primary);
+.tp-content {
+  flex: 1; overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
 }
+.admin-project-cell { font-size: 11px; color: var(--text-secondary); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Column widths for 7-col layout (Kind / Name / Project / Status / Created / Last used / Actions) */
+:deep(.admin-table th:nth-child(1)), :deep(.admin-table td:nth-child(1)) { width: 140px; }
+:deep(.admin-table th:nth-child(2)), :deep(.admin-table td:nth-child(2)) { width: 200px; }
+:deep(.admin-table th:nth-child(3)), :deep(.admin-table td:nth-child(3)) { width: auto; }
+:deep(.admin-table th:nth-child(4)), :deep(.admin-table td:nth-child(4)) { width: 140px; white-space: nowrap; }
+:deep(.admin-table th:nth-child(5)), :deep(.admin-table td:nth-child(5)) { width: 80px; }
+:deep(.admin-table th:nth-child(6)), :deep(.admin-table td:nth-child(6)) { width: 90px; }
+:deep(.admin-table th:nth-child(7)), :deep(.admin-table td:nth-child(7)) { width: 180px; white-space: nowrap; }
 </style>

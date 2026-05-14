@@ -35,7 +35,7 @@ async function copy(text) {
 const adminTokens = ref([])
 const adminLoading = ref(false)
 const adminCreateOpen = ref(false)
-const adminNewKind = ref('mcp_client')
+const adminNewKind = ref('ui_admin')
 const adminNewName = ref('')
 const adminCreating = ref(false)
 const adminCreatedToken = ref('')
@@ -58,10 +58,11 @@ async function adminCreate() {
   if (!adminNewName.value) return
   adminCreating.value = true
   try {
+    const body = { kind: adminNewKind.value, name: adminNewName.value }
     const r = await apiFetch(`${BASE}/tokens`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: adminNewKind.value, name: adminNewName.value }),
+      body: JSON.stringify(body),
     })
     if (!r.ok) return
     const data = await r.json()

@@ -3,12 +3,12 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import AppHeader from './AppHeader.vue'
 import { BASE, apiFetch } from './api.js'
-import enLocale from './locales/en.json'
-import zhLocale from './locales/zh.json'
+import { useLocale } from './useLocale.js'
 
 const router = useRouter()
+const { lang, t, toggleLang } = useLocale()
 
-// ── Theme / lang ──
+// ── Theme ──
 const storedTheme = localStorage.getItem('mo-theme')
 const isDark = ref(storedTheme ? storedTheme === 'dark' : true)
 function toggleTheme() {
@@ -16,9 +16,6 @@ function toggleTheme() {
   localStorage.setItem('mo-theme', isDark.value ? 'dark' : 'light')
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
 }
-const lang = ref(localStorage.getItem('mo-lang') || 'en')
-function toggleLang() { lang.value = lang.value === 'en' ? 'zh' : 'en'; localStorage.setItem('mo-lang', lang.value) }
-function t(key) { return ({ en: enLocale, zh: zhLocale }[lang.value] || enLocale)[key] ?? key }
 
 // ── Settings form ──
 const KEY_SENTINEL = '__keep__'
@@ -166,7 +163,7 @@ onMounted(() => { load() })
   <div class="sp-app">
     <AppHeader :isDark="isDark" :lang="lang" :loginOpen="false"
       @toggle-theme="toggleTheme" @toggle-lang="toggleLang"
-      @open-settings="() => {}" @open-admin="router.push('/tokens')" @logout="logout">
+      @open-settings="() => {}" @logout="logout">
       <template #nav>
         <router-link to="/memories">← {{ t('Memories') }}</router-link>
       </template>

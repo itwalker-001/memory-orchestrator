@@ -10,7 +10,7 @@ from sqlalchemy import select, func, update as sa_update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from memory_orchestrator_server.config import get_settings
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory, Project
+from memory_orchestrator_server.models import Memory, Project
 from memory_orchestrator_server.repository import MemoryRepository, _sync_project_count
 from memory_orchestrator_server.time_utils import isoformat_utc, utc_now
 
@@ -187,6 +187,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 "name": t.name,
                 "kind": t.kind,
                 "enabled": t.enabled,
+                "project_id": str(t.project_id) if t.project_id else None,
                 "created_at": isoformat_utc(t.created_at),
                 "last_used_at": isoformat_utc(t.last_used_at) if t.last_used_at else None,
             }
@@ -302,10 +303,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     @router.get("/projects")
     async def projects(hide_empty: bool = False) -> list[dict]:
         async with maker() as s:
-            stmt = select(Project).order_by(
-                (Project.id == GLOBAL_PROJECT_ID).desc(),
-                Project.memory_count.desc(),
-            )
+            stmt = select(Project).order_by(Project.memory_count.desc())
             if hide_empty:
                 stmt = stmt.where(Project.memory_count > 0)
             result = await s.execute(stmt)
@@ -326,9 +324,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             stmt = select(Memory.type, func.count()).where(Memory.superseded_by.is_(None))
             if project_slug:
                 pid = await repo.slug_to_id(project_slug)
-                if pid and pid != GLOBAL_PROJECT_ID:
-                    stmt = stmt.where(Memory.project_id.in_([pid, GLOBAL_PROJECT_ID]))
-                elif pid:
+                if pid:
                     stmt = stmt.where(Memory.project_id == pid)
             stmt = stmt.group_by(Memory.type)
             result = await s.execute(stmt)
@@ -368,12 +364,11 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             raise HTTPException(status_code=422, detail=f"invalid type: {body.type}")
         async with maker() as s:
             repo = MemoryRepository(s)
-            if body.project_id:
-                pid = await repo._resolve_project_ref(body.project_id)
-                if not pid:
-                    raise HTTPException(status_code=404, detail=f"project not found: {body.project_id}")
-            else:
-                pid = GLOBAL_PROJECT_ID
+            if not body.project_id:
+                raise HTTPException(status_code=422, detail="project_id required")
+            pid = await repo._resolve_project_ref(body.project_id)
+            if not pid:
+                raise HTTPException(status_code=404, detail=f"project not found: {body.project_id}")
             embedding = await embed_one(body.content)
             m = await repo.save(
                 type=body.type, name=body.name, description=body.description,

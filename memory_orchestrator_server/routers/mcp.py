@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from memory_orchestrator_server.auth_tokens import TOKEN_KIND_PROJECT, resolve_project_token
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID
 from memory_orchestrator_server.mcp_core import DISPATCH, handle_read_memory_resource
 from memory_orchestrator_server.repository import MemoryRepository
 
@@ -41,8 +40,9 @@ def make_mcp_http_router(*, maker: async_sessionmaker) -> APIRouter:
         async with maker() as s:
             _, project_uuid = await resolve_project_token(session=s, authorization=authorization)
             repo = MemoryRepository(s)
-            # env-based token returns GLOBAL_PROJECT_ID; fall back to project_slug for dev compat
-            if project_uuid == GLOBAL_PROJECT_ID and body.project_slug:
+            if project_uuid is None:
+                if not body.project_slug:
+                    raise HTTPException(status_code=400, detail="project_slug required")
                 project_uuid = await repo.ensure_project(body.project_slug, body.cwd)
             result = await handler(
                 session=s,
@@ -62,7 +62,9 @@ def make_mcp_http_router(*, maker: async_sessionmaker) -> APIRouter:
         async with maker() as s:
             _, project_uuid = await resolve_project_token(session=s, authorization=authorization)
             repo = MemoryRepository(s)
-            if project_uuid == GLOBAL_PROJECT_ID and body.project_slug:
+            if project_uuid is None:
+                if not body.project_slug:
+                    raise HTTPException(status_code=400, detail="project_slug required")
                 project_uuid = await repo.ensure_project(body.project_slug, body.cwd)
             try:
                 result = await handle_read_memory_resource(

@@ -6,7 +6,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from memory_orchestrator_server.ingestor import ingest_session
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory
+from memory_orchestrator_server.models import Memory
 from memory_orchestrator_server.repository import MemoryRepository
 
 log = logging.getLogger(__name__)
@@ -60,9 +60,7 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             stmt = select(Memory.type, func.count()).where(Memory.superseded_by.is_(None))
             if slug:
                 pid = await repo.slug_to_id(slug)
-                if pid and pid != GLOBAL_PROJECT_ID:
-                    stmt = stmt.where(Memory.project_id.in_([pid, GLOBAL_PROJECT_ID]))
-                elif pid:
+                if pid:
                     stmt = stmt.where(Memory.project_id == pid)
                 else:
                     stmt = stmt.where(Memory.project_id.in_([]))

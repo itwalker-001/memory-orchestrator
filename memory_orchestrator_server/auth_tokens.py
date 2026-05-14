@@ -115,13 +115,12 @@ async def resolve_project_token(
     *,
     session: AsyncSession,
     authorization: str | None,
-) -> tuple[ApiToken | None, uuid.UUID]:
+) -> tuple[ApiToken | None, uuid.UUID | None]:
     """Validate a project_token Bearer token. Returns (token_row_or_None, project_uuid) or raises 401.
 
-    If MO_MCP_TOKEN env var matches, returns (None, GLOBAL_PROJECT_ID) as dev/test fallback.
+    If MO_MCP_TOKEN env var matches, returns (None, None); caller must resolve project from request body.
     """
     import hmac as _hmac
-    from memory_orchestrator_server.models import GLOBAL_PROJECT_ID
 
     raw = bearer_token(authorization)
     if not raw:
@@ -129,7 +128,7 @@ async def resolve_project_token(
 
     env_tok = env_token_for_kind(TOKEN_KIND_PROJECT)
     if env_tok and _hmac.compare_digest(raw, env_tok):
-        return None, GLOBAL_PROJECT_ID
+        return None, None
 
     token_hash = hash_token(raw)
     result = await session.execute(

@@ -8,8 +8,6 @@ from pgvector.sqlalchemy import Vector
 from memory_orchestrator_server.config import get_settings
 from memory_orchestrator_server.time_utils import utc_now
 
-GLOBAL_PROJECT_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
-
 
 class Base(DeclarativeBase):
     pass
