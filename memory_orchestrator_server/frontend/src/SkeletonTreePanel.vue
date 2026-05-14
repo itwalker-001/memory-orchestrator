@@ -5,8 +5,8 @@
       <div class="tree-proj-name">{{ projName }}</div>
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input v-model="searchQuery" class="search-input" placeholder="搜索节点…" />
-        <span v-if="searchQuery" class="search-count">{{ matchCount }} 结果</span>
+        <input v-model="searchQuery" class="search-input" :placeholder="t('Search nodes…')" />
+        <span v-if="searchQuery" class="search-count">{{ t('{n} results', { n: matchCount }) }}</span>
         <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
       </div>
     </div>
@@ -30,8 +30,10 @@
 </template>
 
 <script setup>
-import { ref, computed, provide } from 'vue'
+import { ref, computed, provide, inject } from 'vue'
 import SkNode from './SkNode.vue'
+
+const t = inject('t', k => k)
 
 const props = defineProps({
   nodes: { type: Array, default: () => [] },

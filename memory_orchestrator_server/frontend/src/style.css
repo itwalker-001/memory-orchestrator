@@ -290,3 +290,34 @@ code {
     border-right-color: var(--border);
   }
 }
+
+/* Knowledge Tree UI — dark theme CSS vars (used by SkeletonPage and sub-components) */
+[data-theme=dark] {
+  --hover: #161b22;
+  --active-bg: #1d2d3e;
+  --input-bg: #161b22;
+  --btn-bg: #21262d;
+  --hint-bg: #161b22;
+  --accent: #58a6ff;
+  --tag-bg: #1a3a52;
+  --accent-dim: #1f6feb44;
+  --tooltip-bg: #1c2128;
+  --fg: #e6edf3;
+  --fg-muted: #8b949e;
+  --border: #30363d;
+}
+
+[data-theme=light] {
+  --hover: #f0f0f0;
+  --active-bg: #e8f0fe;
+  --input-bg: #f8f9fa;
+  --btn-bg: #e9ecef;
+  --hint-bg: #f8f9fa;
+  --accent: #2563eb;
+  --tag-bg: #dbeafe;
+  --accent-dim: #93c5fd44;
+  --tooltip-bg: #ffffff;
+  --fg: #1a1a1a;
+  --fg-muted: #6b7280;
+  --border: #e5e7eb;
+}

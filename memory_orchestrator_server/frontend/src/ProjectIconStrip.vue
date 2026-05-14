@@ -11,11 +11,15 @@
       {{ initials(p.display_name || p.slug) }}
     </button>
     <div class="strip-divider"></div>
-    <button class="proj-icon add-btn" title="新建项目" @click="$emit('create')">+</button>
+    <button class="proj-icon add-btn" :title="t('New project')" @click="$emit('create')">+</button>
   </div>
 </template>
 
 <script setup>
+import { inject } from 'vue'
+
+const t = inject('t', k => k)
+
 defineProps({
   projects: { type: Array, default: () => [] },
   activeId: { type: String, default: null },

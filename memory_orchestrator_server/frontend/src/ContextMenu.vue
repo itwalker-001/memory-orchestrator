@@ -12,29 +12,31 @@
         @click="depth < 2 && emit('add-child')"
       >
         <span class="ctx-icon">➕</span>
-        添加子节点
-        <span v-if="depth >= 2" class="ctx-dim">已达上限</span>
+        {{ t('Add child node') }}
+        <span v-if="depth >= 2" class="ctx-dim">{{ t('Max depth reached') }}</span>
       </div>
       <div class="ctx-item" @click="emit('rename')">
         <span class="ctx-icon">✏️</span>
-        重命名
+        {{ t('Rename') }}
         <span class="ctx-shortcut">F2</span>
       </div>
       <div class="ctx-item" @click="emit('manage-tags')">
         <span class="ctx-icon">🏷️</span>
-        管理标签
+        {{ t('Manage tags') }}
       </div>
       <div class="ctx-sep"></div>
       <div class="ctx-item danger" @click="emit('delete')">
         <span class="ctx-icon">🗑</span>
-        删除节点
+        {{ t('Delete node') }}
       </div>
     </div>
   </Teleport>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
+
+const t = inject('t', k => k)
 
 const props = defineProps({
   visible: { type: Boolean, default: false },

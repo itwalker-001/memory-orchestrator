@@ -12,7 +12,7 @@
         ref="inputEl"
         v-model="query"
         class="tag-input"
-        placeholder="搜索或新建标签…"
+        :placeholder="t('Search or create tag…')"
         @input="onInput"
         @keydown.enter.prevent="selectFirst"
         @keydown.escape="query = ''"
@@ -33,14 +33,16 @@
         class="tag-create"
         @mousedown.prevent="addTag(query)"
       >
-        + 创建 "{{ query }}"
+        {{ t('+ Create "{tag}"', { tag: query }) }}
       </li>
     </ul>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, inject } from 'vue'
+
+const t = inject('t', k => k)
 
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },

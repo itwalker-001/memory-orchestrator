@@ -42,8 +42,8 @@
         <div class="sk-tooltip-name">{{ nodeEmoji }} {{ node.name }}</div>
         <div v-if="node.prompt_hint" class="sk-tooltip-hint">{{ node.prompt_hint.slice(0, 80) }}</div>
         <div class="sk-tooltip-stats">
-          <span>记忆 {{ memCount }}</span>
-          <span>子节点 {{ node.children?.length || 0 }}</span>
+          <span>{{ t('Memories') }}: {{ memCount }}</span>
+          <span>{{ t('Child nodes') }}: {{ node.children?.length || 0 }}</span>
         </div>
         <div v-if="node.tags?.length" class="sk-tooltip-tags">
           <span v-for="t in node.tags" :key="t" class="sk-tooltip-tag">{{ t }}</span>
@@ -91,6 +91,9 @@ const EMOJI_MAP = {
   '部署': '🚀', '决策记录': '📝', '经验库': '💡',
 }
 const nodeEmoji = computed(() => EMOJI_MAP[props.node.name] || '📄')
+
+// ── i18n ─────────────────────────────────────────────────────────────────────
+const t = inject('t', k => k)
 
 // ── Memory count ─────────────────────────────────────────────────────────────
 const memoryCountMap = inject('memoryCountMap', {})

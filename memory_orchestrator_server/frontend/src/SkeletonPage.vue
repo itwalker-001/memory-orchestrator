@@ -50,7 +50,7 @@
           @context-menu="openContextMenu"
           @reorder="onReorder"
         />
-        <div v-else class="tree-empty">选择或创建项目</div>
+        <div v-else class="tree-empty">{{ t('Select or create project') }}</div>
 
         <!-- Column 3: Detail panel -->
         <NodeDetailPanel
@@ -81,14 +81,14 @@
     <div v-if="newProjectOpen" class="modal-overlay" @click.self="newProjectOpen = false">
       <div class="modal" style="max-width:380px">
         <div class="modal-header">
-          <span class="modal-title">新建项目</span>
+          <span class="modal-title">{{ t('New Project') }}</span>
           <button class="modal-close" @click="newProjectOpen = false">✕</button>
         </div>
         <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
-          <input class="sk-input" v-model="newProjectName" placeholder="项目名称…"
+          <input class="sk-input" v-model="newProjectName" :placeholder="t('Project name…')"
             @keydown.enter="createProject" ref="newProjectInput" />
           <button class="btn-save" :disabled="!newProjectName || isCreatingProject" @click="createProject">
-            {{ isCreatingProject ? '创建中…' : '创建' }}
+            {{ isCreatingProject ? t('Creating…') : t('Create') }}
           </button>
         </div>
       </div>
@@ -98,7 +98,7 @@
     <div v-if="addMemoryOpen" class="modal-overlay" @click.self="addMemoryOpen = false">
       <div class="write-modal">
         <div class="write-header">
-          <span class="write-title">新记忆 → {{ selectedNode?.name }}</span>
+          <span class="write-title">{{ t('New memory → {name}', { name: selectedNode?.name }) }}</span>
           <button class="modal-close" @click="addMemoryOpen = false">✕</button>
         </div>
         <div class="write-body">
@@ -134,9 +134,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import { BASE, apiFetch, apiJSON } from './api.js'
+import { useLocale } from './useLocale.js'
 import AppHeader from './AppHeader.vue'
 import ProjectIconStrip from './ProjectIconStrip.vue'
 import SkeletonTreePanel from './SkeletonTreePanel.vue'
@@ -151,8 +152,10 @@ const isDark = ref(
   (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
 )
 watch(isDark, v => document.documentElement.setAttribute('data-theme', v ? 'dark' : 'light'))
-const lang = ref(localStorage.getItem('mo-lang') || 'en')
-function toggleLang() { lang.value = lang.value === 'en' ? 'zh' : 'en'; localStorage.setItem('mo-lang', lang.value) }
+// Sync initial dark state to data-theme attribute (needed for teleported elements)
+document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
+const { lang, t, toggleLang } = useLocale()
+provide('t', t)
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const loginOpen = ref(false)
@@ -276,9 +279,9 @@ async function onPatch({ id, patch }) {
 }
 
 async function onDelete(nodeId) {
-  if (!confirm('删除此节点并取消关联其记忆？')) return
+  if (!confirm(t('Delete this node and unlink its memories?'))) return
   const r = await apiFetch(`${BASE}/skeleton-nodes/${nodeId}`, { method: 'DELETE' })
-  if (r.status === 409) { alert('内置节点无法删除。'); return }
+  if (r.status === 409) { alert(t('Built-in nodes cannot be deleted.')); return }
   if (selectedNode.value?.id === nodeId) { selectedNode.value = null; nodeMemories.value = [] }
   await loadSkeleton(selectedProject.value.id)
 }
@@ -327,7 +330,7 @@ onMounted(() => {
 async function onAddChild() {
   closeContextMenu()
   if (!ctxNode.value) return
-  const name = prompt('子节点名称：')
+  const name = prompt(t('Child node name:'))
   if (!name?.trim()) return
   await apiJSON(`${BASE}/skeleton-nodes`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -339,7 +342,7 @@ async function onAddChild() {
 function onRenameNode() {
   closeContextMenu()
   if (!ctxNode.value) return
-  const name = prompt('新名称：', ctxNode.value.name)
+  const name = prompt(t('New name:'), ctxNode.value.name)
   if (name?.trim() && name !== ctxNode.value.name) {
     onPatch({ id: ctxNode.value.id, patch: { name: name.trim() } })
   }

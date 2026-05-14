@@ -4,13 +4,13 @@
     <div class="detail-header">
       <span class="detail-emoji">{{ nodeEmoji }}</span>
       <span class="detail-title">{{ node.name }}</span>
-      <button class="btn-sm btn-primary" @click="$emit('add-memory')">+ 添加记忆</button>
+      <button class="btn-sm btn-primary" @click="$emit('add-memory')">{{ t('+ Add memory') }}</button>
     </div>
 
     <div class="detail-body">
       <!-- Tags -->
       <section class="detail-section">
-        <div class="detail-label">标签</div>
+        <div class="detail-label">{{ t('Tags') }}</div>
         <TagPicker
           :model-value="node.tags || []"
           :all-tags="allTags"
@@ -27,13 +27,13 @@
           @input="hintDraft = $event.target.value"
           @blur="saveHint"
           @keydown.enter="saveHint"
-          placeholder="引导提示…"
+          :placeholder="t('Prompt hint…')"
         />
       </section>
 
       <!-- Memories -->
       <section class="detail-section">
-        <div class="detail-label">记忆（{{ memories.length }}）</div>
+        <div class="detail-label">{{ t('Memories ({n})', { n: memories.length }) }}</div>
         <ul class="mem-list">
           <li v-for="m in memories" :key="m.id" class="mem-item">
             <span :class="['badge', m.type]">{{ m.type }}</span>
@@ -45,13 +45,15 @@
     </div>
   </div>
   <div class="detail-empty" v-else>
-    <span>选择左侧节点查看详情</span>
+    <span>{{ t('Select a node to view details') }}</span>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, inject } from 'vue'
 import TagPicker from './TagPicker.vue'
+
+const t = inject('t', k => k)
 
 const props = defineProps({
   node: { type: Object, default: null },

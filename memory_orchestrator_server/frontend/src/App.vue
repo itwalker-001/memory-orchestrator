@@ -1053,8 +1053,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
-import enLocale from './locales/en.json'
-import zhLocale from './locales/zh.json'
+import { useLocale } from './useLocale.js'
 import AppHeader from './AppHeader.vue'
 import SettingsModal from './SettingsModal.vue'
 import AdminModal from './AdminModal.vue'
@@ -1143,18 +1142,7 @@ async function logout() {
 }
 
 // ── i18n ──
-const lang = ref(localStorage.getItem('mo-lang') || 'en')
-const _locales = { en: enLocale, zh: zhLocale }
-function toggleLang() {
-  lang.value = lang.value === 'en' ? 'zh' : 'en'
-  localStorage.setItem('mo-lang', lang.value)
-}
-function t(key, vars) {
-  const locale = _locales[lang.value] || _locales.en
-  const str = locale[key] ?? key
-  if (!vars) return str
-  return str.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''))
-}
+const { lang, t, toggleLang } = useLocale()
 
 const projects = ref([])
 const projectMap = computed(() => Object.fromEntries(projects.value.map(p => [p.id, p.display_name || p.slug])))
