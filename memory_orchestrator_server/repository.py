@@ -501,11 +501,16 @@ class MemoryRepository:
         def _build(parent_id):
             return [
                 {
-                    "id": str(n.id), "name": n.name, "description": n.description,
-                    "prompt_hint": n.prompt_hint, "is_builtin": n.is_builtin,
-                    "sort_order": n.sort_order,
+                    "id": str(n.id),
+                    "project_id": str(n.project_id),
                     "parent_id": str(n.parent_id) if n.parent_id else None,
+                    "name": n.name,
+                    "description": n.description,
+                    "prompt_hint": n.prompt_hint,
+                    "is_builtin": n.is_builtin,
+                    "sort_order": n.sort_order,
                     "tags": list(n.tags) if n.tags else [],
+                    "created_at": n.created_at.isoformat() if n.created_at else None,
                     "children": _build(n.id),
                 }
                 for n in children.get(parent_id, [])
