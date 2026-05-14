@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import uuid
 
 from fastapi import Cookie, Header, HTTPException, Response
 from sqlalchemy import select, update
@@ -13,6 +14,7 @@ from memory_orchestrator_server.time_utils import utc_now
 
 TOKEN_KIND_MCP = "mcp_client"
 TOKEN_KIND_UI = "ui_admin"
+TOKEN_KIND_PROJECT = "project_token"
 UI_SESSION_TTL = 1800  # 30 minutes; refreshed on every authenticated request
 
 
@@ -108,6 +110,37 @@ async def _db_has_tokens(session: AsyncSession, kind: str) -> bool:
         ).limit(1)
     )
     return result.scalar_one_or_none() is not None
+
+
+async def resolve_project_token(
+    *,
+    session: AsyncSession,
+    authorization: str | None,
+) -> tuple[ApiToken, uuid.UUID]:
+    """Validate a project_token Bearer token. Returns (token_row, project_id) or raises 401."""
+    token = bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    token_hash = hash_token(token)
+    result = await session.execute(
+        select(ApiToken).where(
+            ApiToken.kind == TOKEN_KIND_PROJECT,
+            ApiToken.token_hash == token_hash,
+            ApiToken.revoked_at.is_(None),
+            ApiToken.enabled.is_(True),
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=401, detail="invalid project token")
+    if not row.project_id:
+        raise HTTPException(status_code=401, detail="token has no project binding")
+    await session.execute(
+        update(ApiToken).where(ApiToken.id == row.id)
+        .values(last_used_at=utc_now())
+        .execution_options(synchronize_session=False)
+    )
+    return row, row.project_id
 
 
 def auth_dependency(*, maker: async_sessionmaker, kind: str):
