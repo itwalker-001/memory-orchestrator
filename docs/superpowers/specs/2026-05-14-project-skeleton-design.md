@@ -141,54 +141,84 @@ When ingesting a transcript for a project that has a skeleton:
 
 ---
 
-## Frontend Changes (`frontend/src/App.vue`)
+## Frontend Changes
 
-### Project creation
+### Routing strategy
 
-- `+` button beside the project dropdown in the toolbar
-- Small modal: `display_name` input (slug auto-derived), POST `/api/projects`
-- On success: refresh project list, auto-select new project
+Introduce **Vue Router** (history mode). Existing `App.vue` is **not modified**.
 
-### Admin Modal — Token tab
+Changes to existing files (minimal):
+- `main.js`: wrap app with `createRouter` + `createWebHistory`; route `/ui/` → `App.vue`, `/ui/projects/` → `SkeletonPage.vue`
+- `vite.config.js`: base stays `/ui/`, no other change needed
 
-- `kind` dropdown adds `project_token` option
-- When selected: show "Project" dropdown (required)
-- After creation: display token value in a copy-to-clipboard box with warning "Shown once"
+FastAPI `http_app.py`: SPA fallback already catches all `/ui/*` paths — no change needed.
 
-### New Memory Modal — skeleton-aware layout
+### New file: `src/SkeletonPage.vue`
 
-When the selected project has a skeleton, the modal expands to a two-panel layout:
+Completely new page at `/ui/projects/`. Shares `apiFetch` auth helper (extracted to `src/api.js`).
+
+#### Layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [← Memory Orchestrator]   Projects & Skeletons         ⚙  │
+├──────────────┬──────────────────────────────────────────────┤
+│  Projects    │  项目A                          [+ Token]    │
+│  ──────────  │  ─────────────────────────────────────────── │
+│  項目A  ●   │  Skeleton                                    │
+│  项目B      │                                               │
+│             │  ▶ 需求   ✎ (hover)                         │
+│  [+ New]    │  ▶ 设计   ✎                                  │
+│             │  ● 前端   ✎  ← selected                      │
+│             │    ├ 组件  ✕                                  │
+│             │    └ 页面  ✕                                  │
+│             │  ▶ 后端   ✎                                  │
+│             │  ▶ 测试   ✎                                  │
+│             │  ▶ 部署   ✎                                  │
+│             │  ▶ 经验库  ✎                                  │
+│             │  ▶ 决策记录 ✎                                 │
+│             │                                               │
+│             │  [Selected node panel]                        │
+│             │  prompt_hint: <editable inline>               │
+│             │  Memories in this node: 3  [+ Add Memory]     │
+└─────────────┴──────────────────────────────────────────────┘
+```
+
+#### Behaviour
+
+- **Left panel**: project list, `[+ New]` button opens inline form (display_name input → POST `/api/projects`)
+- **Right panel**: skeleton tree for selected project
+  - First-level builtin nodes: name read-only, ✎ edits `prompt_hint` inline
+  - Sub-nodes (LLM-created): ✎ edits name+prompt_hint, ✕ deletes (DELETE `/api/skeleton-nodes/{id}`)
+  - Node hover → edit/delete icons appear
+- **Selected node detail** (bottom of right panel): shows `prompt_hint` editable field + list of linked memories + `[+ Add Memory]` button
+- **`[+ Add Memory]`**: opens a memory picker modal (search existing memories → POST link) OR a create+link flow (new memory form pre-filled with node's prompt_hint as placeholder)
+
+#### New Memory create+link flow (on SkeletonPage)
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  New Memory                                    [N] ✕ │
-├──────────────────┬───────────────────────────────────┤
-│  Skeleton (left) │  Form (right)                     │
-│                  │                                    │
-│  ▶ 需求          │  [user|feedback|project|reference] │
-│  ▶ 设计          │                                    │
-│  ● 前端  ←active │  📌 <prompt_hint text>             │
-│    ├ 组件        │  ─────────────────────             │
-│    └ 页面        │  Name ___________________________  │
-│  ▶ 后端          │  Description _____________________ │
-│  ▶ 测试          │  Content                           │
-│  ▶ 部署          │  ┌────────────────────────────┐   │
-│  ▶ 经验库        │  │                            │   │
-│  ▶ 决策记录      │  └────────────────────────────┘   │
-│                  │  [Optional fields ▾]               │
-│                  │           [Cancel]  [Write]        │
-└──────────────────┴───────────────────────────────────┘
+│  New Memory → 前端 / 组件                       ✕    │
+│  📌 <prompt_hint guidance text>                      │
+│  ──────────────────────────────────────────────      │
+│  [user|feedback|project|reference]                   │
+│  Name ___________________________________________    │
+│  Description ____________________________________    │
+│  Content                                             │
+│  ┌──────────────────────────────────────────────┐   │
+│  │                                              │   │
+│  └──────────────────────────────────────────────┘   │
+│  [Optional fields ▾]          [Cancel]  [Write]     │
+└──────────────────────────────────────────────────────┘
 ```
 
-Behaviour:
-- **No project selected** (global): single-panel layout, existing behaviour unchanged
-- **Project with skeleton**: two-panel; Write button disabled until a node is selected
-- **Node hover**: edit icon appears → inline `prompt_hint` edit → PATCH `/api/skeleton-nodes/{id}`
-- `prompt_hint` non-empty: shown as dimmed guidance text above the Name field
+Node context shown in header; prompt_hint as dimmed placeholder. On submit: POST `/api/memories` then POST `/api/skeleton-nodes/{id}/memories`.
 
-### Skeleton group view (low priority, 期 1 optional)
+#### Token management (on SkeletonPage)
 
-Toggle in filter bar: "Group by skeleton". When on, memory list groups under first-level node headings. Default off.
+`[+ Token]` button in project header → modal:
+- `name` input + `kind = project_token` (fixed) → POST `/api/tokens`
+- Response: show raw token in copy-to-clipboard box, "Shown once" warning
 
 ---
 
