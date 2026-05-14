@@ -63,20 +63,22 @@ mo-mcp teardown --client codex
 
 | Location | Content |
 |---|---|
-| `<project>/.claude/settings.json` | `UserPromptSubmit` + `Stop` hooks; MCP server entry |
-| `<project>/.claude/settings.local.json` | `MO_MCP_TOKEN`, `MO_HTTP_BASE_URL` (add to `.gitignore`) |
+| `<project>/.mcp.json` | MCP server entry + `MO_MCP_TOKEN`, `MO_HTTP_BASE_URL` (add to `.gitignore`) |
+| `<project>/.claude/settings.json` | `UserPromptSubmit` + `Stop` hooks |
 | `<project>/.claude/skills/memory-orchestrator/SKILL.md` | Memory tool usage guide |
 
-`claude mcp add --scope project` registers the stdio MCP bridge.
+`claude mcp add --scope project -e MO_MCP_TOKEN=... -e MO_HTTP_BASE_URL=...` writes `.mcp.json`.
 
 ### Codex (`--client codex`)
 
 | Location | Content |
 |---|---|
-| `~/.codex/config.toml` | MCP server entry + `MO_HTTP_BASE_URL` (global) |
+| `~/.codex/config.toml` | MCP server entry + `MO_HTTP_BASE_URL` (global, no token) |
 | `~/.codex/hooks.json` | `UserPromptSubmit` + `Stop` hooks (global) |
-| `<project>/.claude/settings.local.json` | `MO_MCP_TOKEN`, `MO_HTTP_BASE_URL` (per-project) |
+| `<project>/.mcp.json` | `MO_MCP_TOKEN`, `MO_HTTP_BASE_URL` (per-project, same file as Claude) |
 | `~/.codex/AGENTS.md` | Memory tool usage guide (section-marker merge) |
+
+Codex has no project-level config, so the token is stored per-project in `.mcp.json`.
 
 ## How it works
 
@@ -112,14 +114,18 @@ Claude Code and Codex can call MCP tools directly:
 ## Token
 
 The `project_token` is a server-issued bearer token bound to a specific project UUID.
-It is stored in `<project>/.claude/settings.local.json` and read by `serve-mcp` at startup.
 
+| Client | Token location |
+|---|---|
+| Claude Code | `<project>/.mcp.json` → `mcpServers.memory-orchestrator.env.MO_MCP_TOKEN` |
+| Codex | `<project>/.mcp.json` → same path |
+
+`serve-mcp` token lookup order at startup:
 ```
-Token lookup order:
-  <cwd>/.claude/settings.local.json → MO_MCP_TOKEN env → error
+<cwd>/.mcp.json  →  MO_MCP_TOKEN env  →  error
 ```
 
-Add `.claude/settings.local.json` to `.gitignore` to keep the token out of version control.
+Add `.mcp.json` to `.gitignore` to keep the token private.
 
 ## Project scoping
 
@@ -133,8 +139,6 @@ git root path  →  local:<name>-<hash>
 cwd  →  local:<name>-<hash>
 ```
 
-Memories with project ID `00000000-0000-0000-0000-000000000000` are global (shared across all projects).
-
 ## Configuration
 
 The hook scripts read these env vars (set by `setup`, or override manually):
@@ -143,7 +147,7 @@ The hook scripts read these env vars (set by `setup`, or override manually):
 |---|---|---|
 | `MO_HTTP_BASE_URL` | `http://localhost:8765` | Server base URL |
 | `MO_CLIENT` | `claude` | Client identifier (`claude` or `codex`) |
-| `MO_MCP_TOKEN` | _(from settings.local.json)_ | Bearer token for MCP tool calls |
+| `MO_MCP_TOKEN` | _(from .mcp.json)_ | Bearer token for MCP tool calls |
 
 ## Tests
 

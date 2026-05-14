@@ -65,30 +65,37 @@ Client (Claude Code / Codex)
 
 ### `--client claude`
 
-1. Calls `claude mcp add memory-orchestrator --scope project` to register the MCP bridge.
+1. Calls `claude mcp add memory-orchestrator --scope project -e MO_MCP_TOKEN=<TOKEN> -e MO_HTTP_BASE_URL=<URL>` — writes `.mcp.json` with command, args, and env (including token).
 2. Writes `UserPromptSubmit` and `Stop` hooks into `<cwd>/.claude/settings.json`.
-3. Writes `MO_HTTP_BASE_URL` + `MO_MCP_TOKEN` into `<cwd>/.claude/settings.local.json` (not committed).
-4. Copies `SKILL.md` to `<cwd>/.claude/skills/memory-orchestrator/SKILL.md`.
+3. Copies `SKILL.md` to `<cwd>/.claude/skills/memory-orchestrator/SKILL.md`.
 
-No HTTP call to the server during setup — token is provided directly by the user.
+Add `.mcp.json` to `.gitignore` — it contains the project token.
 
 ### `--client codex`
 
 1. Patches `~/.codex/config.toml`:
    - Sets `[features] hooks = true`.
    - Writes `[mcp_servers.memory-orchestrator]` with `mo-mcp serve-mcp --client codex`.
-   - Writes `MO_CLIENT`, `MO_HTTP_BASE_URL` into the MCP server env section (no token here).
+   - Writes `MO_CLIENT`, `MO_HTTP_BASE_URL` into the MCP server env section (no token — global file).
 2. Writes `~/.codex/hooks.json` in Codex array format (string commands).
-3. Writes `MO_HTTP_BASE_URL` + `MO_MCP_TOKEN` into `<cwd>/.claude/settings.local.json`.
+3. Writes `MO_MCP_TOKEN` + `MO_HTTP_BASE_URL` into `<cwd>/.mcp.json` (per-project, same file as Claude).
 4. Installs `AGENTS.md` into `~/.codex/AGENTS.md` using section markers (safe merge).
+
+Codex has no project-level config, so the token is stored per-project in `.mcp.json`.
+Add `.mcp.json` to `.gitignore`.
 
 ## Token storage
 
-Token is stored per-project in `.claude/settings.local.json` (add to `.gitignore`).
+Both clients store the token in `<project>/.mcp.json`:
 
-`serve-mcp` resolves the token at startup:
+| Client | File | Key |
+|---|---|---|
+| Claude Code | `<project>/.mcp.json` | `mcpServers.memory-orchestrator.env.MO_MCP_TOKEN` |
+| Codex | `<project>/.mcp.json` | same path |
+
+`serve-mcp` token lookup order:
 ```
-<cwd>/.claude/settings.local.json → MO_MCP_TOKEN env → RuntimeError
+<cwd>/.mcp.json → MO_MCP_TOKEN env → RuntimeError
 ```
 
 The token is a `project_token` bound to a specific project UUID on the server.

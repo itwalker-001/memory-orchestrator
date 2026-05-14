@@ -11,3 +11,6 @@ tmp_pytest/
 
 # Git worktrees
 .worktrees/
+
+# Per-project MCP secrets (contains project token — do not commit)
+.mcp.json                        # written by setup for both Claude and Codex

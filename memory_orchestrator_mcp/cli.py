@@ -35,66 +35,47 @@ def _claude_json_path() -> Path:
 
 
 def _project_settings_path(cwd: str | None = None) -> Path:
-    """Project-level .claude/settings.json (hooks, MCP server entry)."""
+    """Project-level .claude/settings.json — hooks only (committed)."""
     return Path(cwd or os.getcwd()) / ".claude" / "settings.json"
 
 
 def _project_local_settings_path(cwd: str | None = None) -> Path:
-    """Project-level .claude/settings.local.json (secrets — not committed)."""
-    return Path(cwd or os.getcwd()) / ".claude" / "settings.local.json"
-
-
-def _write_project_local_env(cwd: str | None = None, **kwargs: str) -> None:
-    """Merge env vars into .claude/settings.local.json."""
-    import json
-    p = _project_local_settings_path(cwd)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-    data.setdefault("mcpServers", {}).setdefault("memory-orchestrator", {}).setdefault("env", {}).update(kwargs)
-    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    """Project-level .mcp.json — primary MCP config (command + env + token, not committed)."""
+    return Path(cwd or os.getcwd()) / ".mcp.json"
 
 
 def _read_token_from_settings() -> str:
-    """Read MO_MCP_TOKEN — project .claude/settings.local.json first, then ~/.claude.json fallback."""
+    """Read MO_MCP_TOKEN from config files (env var is the primary source when injected by the client).
+
+    Check order:
+      1. .mcp.json      — written by setup for both Claude and Codex
+      2. ~/.claude.json — legacy user-level fallback
+    """
     import json
-    # Try project-local first (project-scope setup)
-    try:
-        cwd = _cwd()
-        local = _project_local_settings_path(cwd)
-        if local.exists():
-            data = json.loads(local.read_text(encoding="utf-8"))
-            token = (data.get("mcpServers", {})
-                        .get("memory-orchestrator", {})
-                        .get("env", {})
-                        .get("MO_MCP_TOKEN", ""))
-            if token:
-                return token
-    except Exception:
-        pass
-    # Fallback: user-level ~/.claude.json (legacy)
-    try:
-        data = json.loads(_claude_json_path().read_text(encoding="utf-8"))
+
+    def _token_from(data: dict) -> str:
         return (data.get("mcpServers", {})
                     .get("memory-orchestrator", {})
                     .get("env", {})
                     .get("MO_MCP_TOKEN", ""))
+
+    cwd = _cwd()
+
+    # 1. .mcp.json — written by setup (both Claude and Codex)
+    try:
+        p = _project_local_settings_path(cwd)
+        if p.exists():
+            token = _token_from(json.loads(p.read_text(encoding="utf-8")))
+            if token:
+                return token
+    except Exception:
+        pass
+
+    # 2. ~/.claude.json (legacy)
+    try:
+        return _token_from(json.loads(_claude_json_path().read_text(encoding="utf-8")))
     except Exception:
         return ""
-
-
-def _update_claude_json_env(**kwargs: str) -> None:
-    """Write env vars into ~/.claude.json's memory-orchestrator entry (legacy user-level)."""
-    import json
-    p = _claude_json_path()
-    try:
-        data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
-        servers = data.get("mcpServers", {})
-        if "memory-orchestrator" in servers:
-            servers["memory-orchestrator"].setdefault("env", {}).update(kwargs)
-            p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    except Exception as e:
-        _flog(f"update_claude_json_env failed: {e!r}")
-
 
 
 def _http_headers() -> dict[str, str]:
@@ -229,9 +210,15 @@ def _setup_codex(base_url: str, mcp_dir: str, project_token: str) -> None:
     hooks_path.write_text(json.dumps(hooks_data, indent=2, ensure_ascii=False), encoding="utf-8")
     click.echo(f"[2/3] hooks.json written")
 
-    # --- 3. Write token to project-local settings (same as Claude) ---
-    _write_project_local_env(os.getcwd(), MO_MCP_TOKEN=project_token, MO_HTTP_BASE_URL=base_url)
-    click.echo(f"[3/3] token written to .claude/settings.local.json")
+    # --- 3. Write token to .mcp.json (per-project isolation) ---
+    import json as _json
+    mcp_json = Path(os.getcwd()) / ".mcp.json"
+    mcp_data = _json.loads(mcp_json.read_text(encoding="utf-8")) if mcp_json.exists() else {}
+    mcp_data.setdefault("mcpServers", {}).setdefault("memory-orchestrator", {}).setdefault("env", {}).update(
+        MO_MCP_TOKEN=project_token, MO_HTTP_BASE_URL=base_url,
+    )
+    mcp_json.write_text(_json.dumps(mcp_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    click.echo(f"[3/3] token written to .mcp.json (per-project)")
 
     # --- 4. Install AGENTS.md ---
     _install_agents_md(Path(mcp_dir), codex_home)
@@ -252,8 +239,6 @@ def setup(base_url: str, project_token: str, client: str) -> None:
       mo-server token create --kind project_token --project-slug <slug> --name <label>
     """
     import json
-    import subprocess
-    import platform
     import shutil
 
     base_url = base_url.rstrip("/")
@@ -270,9 +255,11 @@ def setup(base_url: str, project_token: str, client: str) -> None:
         return
 
     # --- Claude project-level setup ---
+    import platform
+    import subprocess
     _shell = platform.system() == "Windows"
 
-    # 1. Register MCP server at project scope
+    # 1. Register MCP server via claude mcp add --scope project (-e injects env into .mcp.json)
     subprocess.run(
         ["claude", "mcp", "remove", "memory-orchestrator", "--scope", "project"],
         capture_output=True, shell=_shell,
@@ -281,6 +268,8 @@ def setup(base_url: str, project_token: str, client: str) -> None:
         [
             "claude", "mcp", "add", "memory-orchestrator",
             "--scope", "project",
+            "-e", f"MO_MCP_TOKEN={project_token}",
+            "-e", f"MO_HTTP_BASE_URL={base_url}",
             "--",
             "uv", "run", "--no-sync", "--project", mcp_dir,
             "mo-mcp", "serve-mcp", "--client", client,
@@ -290,33 +279,30 @@ def setup(base_url: str, project_token: str, client: str) -> None:
     if result.returncode != 0:
         click.echo(f"claude mcp add failed: {result.stderr.strip()}", err=True)
         sys.exit(1)
-    click.echo("[1/4] claude mcp add --scope project: ok")
+    click.echo("[1/3] claude mcp add --scope project: ok (.mcp.json updated)")
 
     # 2. Write hooks to project .claude/settings.json
     proj_settings = _project_settings_path(cwd)
-    data = json.loads(proj_settings.read_text(encoding="utf-8")) if proj_settings.exists() else {}
-    data.setdefault("hooks", {})
-    data["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", client, base_url)}]}]
-    data["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", client, base_url)}]}]
+    proj_data = json.loads(proj_settings.read_text(encoding="utf-8")) if proj_settings.exists() else {}
+    proj_data.pop("mcpServers", None)
+    proj_data.setdefault("hooks", {})
+    proj_data["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", client, base_url)}]}]
+    proj_data["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", client, base_url)}]}]
     proj_settings.parent.mkdir(parents=True, exist_ok=True)
-    proj_settings.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    click.echo(f"[2/4] hooks written to {proj_settings}")
+    proj_settings.write_text(json.dumps(proj_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    click.echo(f"[2/3] hooks written to {proj_settings}")
 
-    # 3. Write MO_HTTP_BASE_URL + MO_MCP_TOKEN to .claude/settings.local.json (not committed)
-    _write_project_local_env(cwd, MO_HTTP_BASE_URL=base_url, MO_MCP_TOKEN=project_token)
-    click.echo(f"[3/4] token + base_url written to .claude/settings.local.json")
-
-    # 4. Install SKILL.md to project .claude/skills/
+    # 3. Install SKILL.md to project .claude/skills/
     skill_src = Path(mcp_dir) / "skills" / "memory-orchestrator" / "SKILL.md"
     skill_dst = Path(cwd) / ".claude" / "skills" / "memory-orchestrator" / "SKILL.md"
     if skill_src.exists():
         skill_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(skill_src, skill_dst)
-        click.echo(f"[4/4] SKILL.md installed → {skill_dst}")
+        click.echo(f"[3/3] SKILL.md installed → {skill_dst}")
 
     click.echo("")
-    click.echo("Done. Open a NEW terminal / restart Claude Code for env vars to take effect.")
-    click.echo("Add .claude/settings.local.json to .gitignore to keep the token private.")
+    click.echo("Done. Open a NEW terminal / restart Claude Code for changes to take effect.")
+    click.echo("Add .mcp.json to .gitignore to keep the token private.")
 
 
 
@@ -326,7 +312,6 @@ def teardown(client: str) -> None:
     """Remove Memory Orchestrator MCP wiring from this project."""
     import json
     import shutil
-    import subprocess
 
     if client == "codex":
         import re
@@ -364,11 +349,37 @@ def teardown(client: str) -> None:
                 click.echo(f"hooks.json cleanup failed: {e}", err=True)
 
         _remove_agents_md(codex_home)
+
+        # Clean .mcp.json token entry (Codex writes token here per-project)
+        mcp_json = Path(os.getcwd()) / ".mcp.json"
+        if mcp_json.exists():
+            try:
+                mcp_data = json.loads(mcp_json.read_text(encoding="utf-8"))
+                servers = mcp_data.get("mcpServers", {})
+                if "memory-orchestrator" in servers:
+                    del servers["memory-orchestrator"]
+                    if not servers:
+                        mcp_data.pop("mcpServers", None)
+                    mcp_json.write_text(json.dumps(mcp_data, indent=2, ensure_ascii=False), encoding="utf-8")
+                    click.echo(f"cleaned .mcp.json")
+            except Exception as e:
+                click.echo(f".mcp.json cleanup failed: {e}", err=True)
+
         click.echo("Done.")
         return
 
     # --- Claude teardown (project scope) ---
+    import platform
+    import subprocess
     cwd = os.getcwd()
+    _shell = platform.system() == "Windows"
+
+    subprocess.run(
+        ["claude", "mcp", "remove", "memory-orchestrator", "--scope", "project"],
+        capture_output=True, shell=_shell,
+    )
+    click.echo("mcp remove: ok")
+
     proj_settings = _project_settings_path(cwd)
     if proj_settings.exists():
         data = json.loads(proj_settings.read_text(encoding="utf-8"))
@@ -383,35 +394,6 @@ def teardown(client: str) -> None:
         if changed:
             proj_settings.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
             click.echo(f"cleaned {proj_settings}")
-
-    # Remove MO_MCP_TOKEN from .claude/settings.local.json
-    local = _project_local_settings_path(cwd)
-    if local.exists():
-        try:
-            data = json.loads(local.read_text(encoding="utf-8"))
-            env = data.get("mcpServers", {}).get("memory-orchestrator", {}).get("env", {})
-            removed = False
-            for key in ["MO_MCP_TOKEN", "MO_HTTP_BASE_URL"]:
-                if key in env:
-                    del env[key]
-                    removed = True
-            if removed:
-                local.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-                click.echo(f"cleaned token from {local}")
-        except Exception as e:
-            click.echo(f"settings.local.json cleanup failed: {e}", err=True)
-
-    import platform
-    _shell = platform.system() == "Windows"
-    try:
-        result = subprocess.run(
-            ["claude", "mcp", "remove", "memory-orchestrator", "--scope", "project"],
-            capture_output=True, text=True, shell=_shell,
-        )
-        if result.returncode == 0:
-            click.echo("mcp remove: ok")
-    except FileNotFoundError:
-        pass
 
     # Remove SKILL.md
     skill_dst = Path(cwd) / ".claude" / "skills" / "memory-orchestrator"
@@ -439,28 +421,31 @@ def doctor(base_url: str | None) -> None:
         click.echo(f"healthz: FAIL ({e})")
         ok = False
 
+    # Check .mcp.json for MCP server entry + token
+    mcp_json = Path(cwd) / ".mcp.json"
+    if mcp_json.exists():
+        try:
+            cfg = json.loads(mcp_json.read_text(encoding="utf-8"))
+            entry = cfg.get("mcpServers", {}).get("memory-orchestrator")
+            has_token = bool((entry or {}).get("env", {}).get("MO_MCP_TOKEN"))
+            click.echo(f".mcp.json: {'ok' if entry else 'MISSING'}, token: {'ok' if has_token else 'MISSING'}")
+            if not entry or not has_token:
+                ok = False
+        except Exception as e:
+            click.echo(f".mcp.json parse: FAIL ({e})")
+            ok = False
+    else:
+        click.echo(f".mcp.json: NOT FOUND (run mo-mcp setup)")
+        ok = False
+
     proj_settings = _project_settings_path(cwd)
     if proj_settings.exists():
         try:
             cfg = json.loads(proj_settings.read_text(encoding="utf-8"))
-            mcp = cfg.get("mcpServers", {}).get("memory-orchestrator")
             hooks = cfg.get("hooks", {})
-            click.echo(f"project mcp entry: {'ok' if mcp else 'MISSING'}")
             click.echo(f"project hooks: {sorted(hooks.keys())}")
-            if not mcp:
-                ok = False
         except Exception as e:
             click.echo(f"project settings parse: FAIL ({e})")
-            ok = False
-    else:
-        click.echo(f"project settings not found ({proj_settings})")
-        ok = False
-
-    local = _project_local_settings_path(cwd)
-    token = _read_token_from_settings()
-    click.echo(f"token: {'ok' if token else 'MISSING'} (from {'settings.local.json' if local.exists() else '~/.claude.json'})")
-    if not token:
-        ok = False
 
     sys.exit(0 if ok else 1)
 
