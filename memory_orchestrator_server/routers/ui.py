@@ -288,6 +288,17 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         return {"name": tz, "iana": iana, "offset_minutes": total_seconds // 60,
                 "label": f"UTC{sign}{hours:02d}:{minutes:02d}"}
 
+    def _project_dict(p: Project) -> dict:
+        return {
+            "id": str(p.id),
+            "slug": p.slug,
+            "display_name": p.display_name,
+            "memory_count": p.memory_count,
+            "root_paths": list(p.root_paths) if p.root_paths else [],
+            "first_seen_at": isoformat_utc(p.first_seen_at) if p.first_seen_at else None,
+            "last_active_at": isoformat_utc(p.last_active_at) if p.last_active_at else None,
+        }
+
     @router.get("/projects")
     async def projects(hide_empty: bool = False) -> list[dict]:
         async with maker() as s:
@@ -298,10 +309,15 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             if hide_empty:
                 stmt = stmt.where(Project.memory_count > 0)
             result = await s.execute(stmt)
-            return [
-                {"id": str(p.id), "slug": p.slug, "display_name": p.display_name, "memory_count": p.memory_count}
-                for p in result.scalars().all()
-            ]
+            return [_project_dict(p) for p in result.scalars().all()]
+
+    @router.get("/projects/{project_id}")
+    async def get_project(project_id: uuid.UUID) -> dict:
+        async with maker() as s:
+            p = await s.get(Project, project_id)
+            if not p:
+                raise HTTPException(status_code=404, detail="project not found")
+            return _project_dict(p)
 
     @router.get("/stats")
     async def stats(project_slug: str | None = None) -> dict:
