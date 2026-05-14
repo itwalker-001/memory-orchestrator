@@ -96,42 +96,6 @@ def _update_claude_json_env(**kwargs: str) -> None:
         _flog(f"update_claude_json_env failed: {e!r}")
 
 
-def _auto_register(base_url: str, project_slug: str = "", force: bool = False) -> str:
-    """Request a project_token from the server via POST /api/register."""
-    import json
-    import socket
-    import urllib.request
-    import urllib.error
-    try:
-        hostname = socket.gethostname()
-        ip = socket.gethostbyname(hostname)
-    except Exception:
-        hostname, ip = "unknown", "unknown"
-    name = f"{hostname}({ip})"
-    body = json.dumps({
-        "name": name, "hostname": hostname, "ip": ip,
-        "project_slug": project_slug, "force": force,
-    }).encode()
-    req = urllib.request.Request(
-        f"{base_url}/api/register",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            result = json.loads(resp.read())
-            token = result.get("token", "")
-            if result.get("already_registered") and not force:
-                _flog(f"auto_register: server has valid token for {name}/{project_slug}, retrying force=true")
-                return _auto_register(base_url, project_slug=project_slug, force=True)
-            if token:
-                _flog(f"auto_register: obtained token for {result.get('name')} / {result.get('project_slug')}")
-            return token
-    except (urllib.error.URLError, Exception) as e:
-        _flog(f"auto_register failed: {e!r}")
-        return ""
-
 
 def _http_headers() -> dict[str, str]:
     token = _read_token_from_settings()
@@ -354,24 +318,6 @@ def setup(base_url: str, project_token: str, client: str) -> None:
     click.echo("Done. Open a NEW terminal / restart Claude Code for env vars to take effect.")
     click.echo("Add .claude/settings.local.json to .gitignore to keep the token private.")
 
-
-@main.command(name="register")
-@click.option("--base-url", default=None, help="HTTP server URL (default: MO_HTTP_BASE_URL or http://localhost:8765)")
-@click.option("--project-slug", default=None, help="Project slug on the server (default: auto-detected from git remote)")
-@click.option("--force", is_flag=True, default=False, help="Rotate token even if a valid one already exists.")
-def register(base_url: str | None, project_slug: str | None, force: bool) -> None:
-    """Fetch a fresh project_token from the server and save it to .claude/settings.local.json."""
-    cwd = os.getcwd()
-    url = (base_url or os.environ.get("MO_HTTP_BASE_URL") or "http://localhost:8765").rstrip("/")
-    if not project_slug:
-        from memory_orchestrator_mcp.project_id import detect_project_id
-        project_slug = detect_project_id(cwd)
-    token = _auto_register(url, project_slug=project_slug, force=force)
-    if token:
-        _write_project_local_env(cwd, MO_MCP_TOKEN=token, MO_HTTP_BASE_URL=url)
-        click.echo(f"Registered. Token written to .claude/settings.local.json (project: {project_slug})")
-    else:
-        click.echo("Registration failed. Is the server running?", err=True)
 
 
 @main.command(name="teardown")
