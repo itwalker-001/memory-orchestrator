@@ -94,6 +94,20 @@ class TokenPatch(BaseModel):
     name: str | None = None
 
 
+class ProjectCreate(BaseModel):
+    slug: str
+    display_name: str
+
+
+class SkeletonNodePatch(BaseModel):
+    name: str | None = None
+    prompt_hint: str | None = None
+
+
+class NodeMemoryAdd(BaseModel):
+    memory_id: uuid.UUID
+
+
 def _new_token_pair() -> tuple[str, str]:
     import secrets
     from memory_orchestrator_server.auth_tokens import hash_token
@@ -328,7 +342,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         async with maker() as s:
             repo = MemoryRepository(s)
             if body.project_id:
-                pid = await repo.slug_to_id(body.project_id)
+                pid = await repo._resolve_project_ref(body.project_id)
                 if not pid:
                     raise HTTPException(status_code=404, detail=f"project not found: {body.project_id}")
             else:
@@ -694,6 +708,87 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
 
         return {"token": raw, "name": name, "already_registered": False}
+
+    # ── Projects ─────────────────────────────────────────────────────────────
+
+    @router.post("/projects", status_code=201)
+    async def create_project(body: ProjectCreate = Body(...)) -> dict:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            project_id = await repo.create_project_with_skeleton(body.slug, body.display_name)
+            await s.commit()
+            proj = await s.get(Project, project_id)
+        return {
+            "id": str(proj.id), "slug": proj.slug,
+            "display_name": proj.display_name,
+            "memory_count": proj.memory_count,
+        }
+
+    @router.delete("/projects/{project_id}", status_code=204)
+    async def delete_project(project_id: uuid.UUID) -> None:
+        async with maker() as s:
+            proj = await s.get(Project, project_id)
+            if not proj:
+                raise HTTPException(status_code=404, detail="project not found")
+            await s.delete(proj)
+            await s.commit()
+
+    # ── Skeleton nodes ────────────────────────────────────────────────────────
+
+    @router.get("/projects/{project_id}/skeleton")
+    async def get_skeleton(project_id: uuid.UUID) -> list:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            return await repo.get_skeleton_tree(project_id)
+
+    @router.patch("/skeleton-nodes/{node_id}", status_code=200)
+    async def patch_skeleton_node(node_id: uuid.UUID, body: SkeletonNodePatch = Body(...)) -> dict:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            ok = await repo.patch_skeleton_node(node_id, name=body.name, prompt_hint=body.prompt_hint)
+            if not ok:
+                raise HTTPException(status_code=404, detail="node not found")
+            await s.commit()
+        return {"ok": True}
+
+    @router.delete("/skeleton-nodes/{node_id}", status_code=204)
+    async def delete_skeleton_node(node_id: uuid.UUID) -> None:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            ok = await repo.delete_skeleton_node(node_id)
+            await s.commit()
+        if not ok:
+            raise HTTPException(status_code=409, detail="cannot delete builtin node or node not found")
+
+    @router.post("/skeleton-nodes/{node_id}/memories", status_code=201)
+    async def add_memory_to_node(node_id: uuid.UUID, body: NodeMemoryAdd = Body(...)) -> dict:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            await repo.add_memory_to_node(node_id, body.memory_id)
+            await s.commit()
+        return {"ok": True}
+
+    @router.get("/skeleton-nodes/{node_id}/memories")
+    async def get_node_memories(node_id: uuid.UUID) -> list:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            mems = await repo.get_node_memories(node_id)
+        return [
+            {
+                "id": str(m.id), "type": m.type, "name": m.name,
+                "description": m.description, "content": m.content,
+                "importance": m.importance,
+                "created_at": isoformat_utc(m.created_at),
+            }
+            for m in mems
+        ]
+
+    @router.delete("/skeleton-nodes/{node_id}/memories/{memory_id}", status_code=204)
+    async def remove_memory_from_node(node_id: uuid.UUID, memory_id: uuid.UUID) -> None:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            await repo.remove_memory_from_node(node_id, memory_id)
+            await s.commit()
 
     outer.include_router(public)
     outer.include_router(router)

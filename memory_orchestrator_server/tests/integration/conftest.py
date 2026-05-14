@@ -18,7 +18,13 @@ async def engine():
     async with eng.connect() as conn:
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
         await conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pgcrypto")
-        await conn.run_sync(Base.metadata.drop_all)
+        # Drop all tables (including legacy tables not in current models) with CASCADE
+        await conn.exec_driver_sql(
+            "DO $$ DECLARE r RECORD; BEGIN "
+            "FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP "
+            "EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE'; "
+            "END LOOP; END $$;"
+        )
         await conn.run_sync(Base.metadata.create_all)
     yield eng
     await eng.dispose()

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Integer, SmallInteger, DateTime, ForeignKey, ARRAY, Text
+from sqlalchemy import Integer, SmallInteger, DateTime, ForeignKey, ARRAY, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
@@ -107,6 +107,9 @@ class ProjectSkeletonNode(Base):
 
 class SkeletonNodeMemory(Base):
     __tablename__ = "skeleton_node_memories"
+    __table_args__ = (
+        UniqueConstraint("skeleton_node_id", "memory_id", name="uq_snm_node_memory"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     skeleton_node_id: Mapped[uuid.UUID] = mapped_column(
