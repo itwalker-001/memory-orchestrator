@@ -305,6 +305,7 @@ code {
   --fg: #e6edf3;
   --fg-muted: #8b949e;
   --border: #30363d;
+  --strip-bg: #010409;
 }
 
 [data-theme=light] {
@@ -320,4 +321,5 @@ code {
   --fg: #1a1a1a;
   --fg-muted: #6b7280;
   --border: #e5e7eb;
+  --strip-bg: #f3f4f6;
 }

@@ -34,7 +34,7 @@ function initials(name) {
 <style scoped>
 .icon-strip {
   width: 52px; flex-shrink: 0;
-  background: #010409; border-right: 1px solid var(--border, #30363d);
+  background: var(--strip-bg, #f0f0f0); border-right: 1px solid var(--border, #30363d);
   display: flex; flex-direction: column; align-items: center;
   padding: 10px 0; gap: 5px; overflow-y: auto;
 }
