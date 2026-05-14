@@ -96,6 +96,60 @@ def parse_extraction_response(raw: str) -> list[dict]:
     return validated
 
 
+def build_extraction_prompt_with_skeleton(
+    transcript_chunk: str, project_id: str, skeleton: list[dict]
+) -> str:
+    def _flatten(nodes, depth=0):
+        lines = []
+        for n in nodes:
+            indent = "  " * depth
+            hint = f" — {n['prompt_hint']}" if n.get("prompt_hint") else ""
+            lines.append(f"{indent}- {n['name']}{hint}")
+            lines.extend(_flatten(n.get("children", []), depth + 1))
+        return lines
+
+    skeleton_text = "\n".join(_flatten(skeleton))
+    return (
+        f"Project: {project_id}\n\n"
+        f"Project skeleton (assign each memory to the best node):\n{skeleton_text}\n\n"
+        f"For each memory add a 'skeleton_node' field: "
+        f"{{\"name\": \"<node name>\", \"parent_name\": \"<parent or null>\", "
+        f"\"create_if_missing\": false}}. "
+        f"Use an existing node when possible; set create_if_missing=true only for sub-nodes.\n\n"
+        f"Transcript chunk:\n<transcript>\n{transcript_chunk}\n</transcript>\n\n"
+        f"Extract memories now."
+    )
+
+
+def parse_extraction_response_with_skeleton(raw: str) -> list[MemoryCandidateWithNode]:
+    candidates = []
+    for item in parse_extraction_response(raw):
+        sn = item.get("skeleton_node")
+        candidates.append(MemoryCandidateWithNode(
+            type=item["type"],
+            name=item["name"],
+            description=item["description"],
+            content=item["content"],
+            why=item.get("why"),
+            how_to_apply=item.get("how_to_apply"),
+            importance=int(item.get("importance", 3)),
+            skeleton_node=sn if isinstance(sn, dict) and "name" in sn else None,
+        ))
+    return candidates
+
+
+@dataclass
+class MemoryCandidateWithNode:
+    type: str
+    name: str
+    description: str
+    content: str
+    why: str | None = None
+    how_to_apply: str | None = None
+    importance: int = 3
+    skeleton_node: dict | None = None
+
+
 @dataclass
 class IngestResult:
     extracted: int
@@ -133,18 +187,27 @@ async def ingest_session(
 
     chunk = _render_chunk(lines)
 
+    # Fetch skeleton if project has one
+    skeleton: list[dict] = []
+    if project_id != GLOBAL_PROJECT_ID:
+        skeleton = await repo.get_skeleton_tree(project_id)
+
     try:
         from openai import AsyncOpenAI
         oc = AsyncOpenAI(
             base_url=extraction_base_url,
             api_key=extraction_api_key,
         )
+        if skeleton:
+            prompt = build_extraction_prompt_with_skeleton(chunk, str(project_id), skeleton)
+        else:
+            prompt = build_extraction_prompt(chunk, str(project_id))
         resp = await oc.chat.completions.create(
             model=extraction_model,
             max_tokens=2048,
             messages=[
                 {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                {"role": "user", "content": build_extraction_prompt(chunk, str(project_id))},
+                {"role": "user", "content": prompt},
             ],
         )
         raw = resp.choices[0].message.content or ""
@@ -154,32 +217,60 @@ async def ingest_session(
         await db.commit()
         raise
 
-    candidates = parse_extraction_response(raw)
+    if skeleton:
+        candidates = parse_extraction_response_with_skeleton(raw)
+    else:
+        candidates = [
+            MemoryCandidateWithNode(
+                type=c["type"], name=c["name"], description=c["description"],
+                content=c["content"], why=c.get("why"), how_to_apply=c.get("how_to_apply"),
+                importance=int(c.get("importance", 3)),
+            )
+            for c in parse_extraction_response(raw)
+        ]
 
     saved = 0
     skipped = 0
     try:
         for cand in candidates:
-            embedding = await embed_one(cand["content"])
-            cand_pid = GLOBAL_PROJECT_ID if cand["type"] == "user" else project_id
-            dups = await repo.find_duplicates(type=cand["type"], project_id=cand_pid, embedding=embedding)
+            embedding = await embed_one(cand.content)
+            cand_pid = GLOBAL_PROJECT_ID if cand.type == "user" else project_id
+            dups = await repo.find_duplicates(type=cand.type, project_id=cand_pid, embedding=embedding)
             if dups:
                 skipped += 1
                 continue
-            await repo.save(
-                type=cand["type"],
-                name=cand["name"],
-                description=cand["description"],
-                content=cand["content"],
-                why=cand.get("why"),
-                how_to_apply=cand.get("how_to_apply"),
-                importance=int(cand.get("importance", 3)),
+            m = await repo.save(
+                type=cand.type,
+                name=cand.name,
+                description=cand.description,
+                content=cand.content,
+                why=cand.why,
+                how_to_apply=cand.how_to_apply,
+                importance=cand.importance,
                 project_id=cand_pid,
                 source="auto_extracted",
                 source_client=source_client,
                 embedding=embedding,
             )
             saved += 1
+            # Link to skeleton node if LLM provided one
+            if cand.skeleton_node and project_id != GLOBAL_PROJECT_ID:
+                sn = cand.skeleton_node
+                try:
+                    if sn.get("create_if_missing"):
+                        node_id = await repo.get_or_create_skeleton_node(
+                            project_id=cand_pid,
+                            name=sn["name"],
+                            parent_name=sn.get("parent_name"),
+                        )
+                    else:
+                        nodes = await repo.get_skeleton_flat(cand_pid)
+                        match = next((n for n in nodes if n.name == sn["name"]), None)
+                        node_id = match.id if match else None
+                    if node_id:
+                        await repo.add_memory_to_node(node_id, m.id)
+                except Exception:
+                    pass  # skeleton linking is best-effort; don't fail ingestion
     except Exception as e:
         row.status = "failed"
         row.last_error = str(e)[:500]
