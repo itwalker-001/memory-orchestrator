@@ -9,16 +9,15 @@ uv sync                  # Install dependencies
 uv run pytest            # Run all tests
 
 # CLI (requires uv run or installed entry point)
-uv run mo-mcp setup --client claude --base-url http://<server>:8765   # Wire Claude Code hooks + MCP server
-uv run mo-mcp setup --client codex  --base-url http://<server>:8765   # Wire Codex hooks + MCP server
-uv run mo-mcp teardown --client claude              # Remove hooks + MCP server entry
-uv run mo-mcp doctor    --client claude             # Check client-side wiring
-uv run mo-mcp serve-mcp --client claude             # Start stdio MCP server (called by client)
-uv run mo-mcp register  --base-url http://<server>:8765  # Register / refresh MCP token only
+uv run mo-mcp setup --client claude --base-url http://<server>:8765 --project-token <TOKEN>
+uv run mo-mcp setup --client codex  --base-url http://<server>:8765 --project-token <TOKEN>
+uv run mo-mcp teardown --client claude   # Remove hooks + MCP server entry (project scope)
+uv run mo-mcp doctor    --client claude  # Check client-side wiring + server reachability
+uv run mo-mcp serve-mcp --client claude  # Start stdio MCP server (called by client, not by user)
 ```
 
-`--base-url` is **required** for `setup` and `register`. No default — must point to the running
-`memory_orchestrator_server` instance (e.g. `http://172.16.10.124:8765`).
+`--base-url` and `--project-token` are required for `setup`.
+Create a token first via the server UI or: `mo-server token create --kind project_token --project-slug <slug> --name <label>`
 
 ## Package constraints
 
@@ -48,39 +47,52 @@ Client (Claude Code / Codex)
         └── MCP tool call ──────────→ mo-mcp serve-mcp (stdio MCP)
                                             │
                                        POST <base_url>/mcp/tools/call
+                                       Authorization: Bearer <project_token>
 ```
 
 ## Key modules
 
 | File | Role |
 |---|---|
-| `cli.py` | `mo-mcp` entry point; `setup`, `teardown`, `doctor`, `register`, `serve-mcp` |
+| `cli.py` | `mo-mcp` entry point: `setup`, `teardown`, `doctor`, `serve-mcp` |
 | `project_id.py` | Detect project slug from git remote or path hash |
 | `hooks/user_prompt_submit.py` | Read event JSON → GET /context → emit context markdown |
 | `hooks/stop.py` | Read event JSON → rate-limit → POST /ingest |
-| `client_rules/claude.json` | Reference config for Claude Code (`~/.claude/settings.json`) |
-| `client_rules/codex.json` | Reference config for Codex (`~/.codex/config.toml` + `hooks.json`) |
-| `skills/memory-orchestrator/SKILL.md` | Installed to `~/.claude/skills/` by `setup` |
-| `agents/memory-orchestrator.AGENTS.md` | Installed to `~/.codex/AGENTS.md` by `setup` |
+| `skills/memory-orchestrator/SKILL.md` | Installed to `<project>/.claude/skills/` by `setup` |
+| `agents/memory-orchestrator.AGENTS.md` | Installed to `~/.codex/AGENTS.md` by `setup --client codex` |
 
 ## setup behavior
 
 ### `--client claude`
 
-1. Calls `claude mcp add memory-orchestrator --scope user` to register the MCP bridge.
-2. Writes `UserPromptSubmit` and `Stop` hooks into `~/.claude/settings.json`.
-3. Writes `MO_HTTP_BASE_URL` into `~/.claude.json` MCP server env.
-4. Calls `POST <base_url>/api/register` to obtain an `mcp_client` token and writes it to
-   `~/.claude.json` env as `MO_MCP_TOKEN`.
+1. Calls `claude mcp add memory-orchestrator --scope project` to register the MCP bridge.
+2. Writes `UserPromptSubmit` and `Stop` hooks into `<cwd>/.claude/settings.json`.
+3. Writes `MO_HTTP_BASE_URL` + `MO_MCP_TOKEN` into `<cwd>/.claude/settings.local.json` (not committed).
+4. Copies `SKILL.md` to `<cwd>/.claude/skills/memory-orchestrator/SKILL.md`.
+
+No HTTP call to the server during setup — token is provided directly by the user.
 
 ### `--client codex`
 
 1. Patches `~/.codex/config.toml`:
-   - Sets `[features] hooks = true` (replaces deprecated `codex_hooks`).
+   - Sets `[features] hooks = true`.
    - Writes `[mcp_servers.memory-orchestrator]` with `mo-mcp serve-mcp --client codex`.
-   - Writes `MO_CLIENT`, `MO_HTTP_BASE_URL` into the MCP server env section.
-2. Writes `~/.codex/hooks.json` in the new Codex array format (string commands).
-3. Calls `POST <base_url>/api/register` and writes `MO_MCP_TOKEN` into `config.toml` env.
+   - Writes `MO_CLIENT`, `MO_HTTP_BASE_URL` into the MCP server env section (no token here).
+2. Writes `~/.codex/hooks.json` in Codex array format (string commands).
+3. Writes `MO_HTTP_BASE_URL` + `MO_MCP_TOKEN` into `<cwd>/.claude/settings.local.json`.
+4. Installs `AGENTS.md` into `~/.codex/AGENTS.md` using section markers (safe merge).
+
+## Token storage
+
+Token is stored per-project in `.claude/settings.local.json` (add to `.gitignore`).
+
+`serve-mcp` resolves the token at startup:
+```
+<cwd>/.claude/settings.local.json → MO_MCP_TOKEN env → RuntimeError
+```
+
+The token is a `project_token` bound to a specific project UUID on the server.
+Authentication is enforced by `routers/mcp.py` via `resolve_project_token()`.
 
 ## Hook behavior
 
@@ -93,7 +105,7 @@ Client (Claude Code / Codex)
 5. Emit result:
    - **Claude**: plain text to stdout.
    - **Codex**: JSON `{ hookSpecificOutput: { hookEventName, additionalContext } }`.
-6. Log to `~/.claude/memory-orchestrator/hook.log` (or `$CODEX_HOME/memory-orchestrator/hook.log`).
+6. Log to `~/.claude/memory-orchestrator/hook.log`.
 
 ### `stop.py`
 
@@ -114,12 +126,6 @@ git root path  →  SHA256 hash  →  local:<name>-<hash[:8]>
         ↓ no git
 cwd  →  SHA256 hash
 ```
-
-## Client rules format
-
-`client_rules/*.json` are reference specs describing what `setup` writes to each client's config.
-They are **not** applied automatically — `cli.py setup` implements the write logic directly.
-Keep these files in sync with the `setup` command when changing config layout.
 
 ## Tests
 

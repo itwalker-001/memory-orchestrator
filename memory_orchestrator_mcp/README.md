@@ -1,7 +1,7 @@
 # memory-orchestrator-mcp
 
-Lightweight MCP client package for Memory Orchestrator. Provides hooks, client rules, and
-agent/skill instructions that connect Claude Code and Codex to a running
+Lightweight MCP client package for Memory Orchestrator. Provides hooks, skill/agent instructions,
+and a stdio MCP bridge that connect Claude Code and Codex to a running
 `memory-orchestrator-server` instance.
 
 Zero heavy dependencies: only `click`, `httpx`, and `mcp`.
@@ -9,7 +9,7 @@ Zero heavy dependencies: only `click`, `httpx`, and `mcp`.
 ## Requirements
 
 - Python ≥ 3.11
-- A running `memory-orchestrator-server` on `http://localhost:8765`
+- A running `memory-orchestrator-server` (default: `http://localhost:8765`)
 - Claude Code or Codex installed
 
 ## Installation
@@ -19,45 +19,64 @@ cd memory_orchestrator_mcp
 uv sync
 ```
 
-The server package's `mo-server setup` command installs this package automatically.
-Manual installation is only needed for development or advanced setups.
-
 ## Setup
 
-Use the server-side CLI, which reads the client rules from this package:
+### 1. Create a project token on the server
+
+Via the server UI, or from `memory_orchestrator_server/`:
 
 ```bash
-# From memory_orchestrator_server/:
-uv run mo-server setup --client claude --scope user
-uv run mo-server setup --client codex --scope user
-
-# Verify:
-uv run mo-server doctor --client claude
+uv run mo-server token create --kind project_token --project-slug <slug> --name "my-laptop"
 ```
 
-Or use the MCP package CLI directly (requires `mo-mcp` on PATH):
+### 2. Configure the current project
+
+Run from the project root directory:
 
 ```bash
-mo-mcp setup --client claude --scope user
-mo-mcp teardown --client claude
-mo-mcp doctor --client claude
+# Claude Code
+mo-mcp setup --base-url http://<server>:8765 --project-token <TOKEN>
+
+# Codex
+mo-mcp setup --client codex --base-url http://<server>:8765 --project-token <TOKEN>
+
+# Without flags — interactive prompts
+mo-mcp setup
+```
+
+### 3. Verify
+
+```bash
+mo-mcp doctor
+```
+
+### Teardown
+
+```bash
+mo-mcp teardown               # Claude (default)
+mo-mcp teardown --client codex
 ```
 
 ## What setup installs
 
-### Claude Code
+### Claude Code (`--client claude`)
 
-- `UserPromptSubmit` hook → calls `hooks/user_prompt_submit.py`
-- `Stop` hook → calls `hooks/stop.py`
-- MCP server entry: `mo-mcp serve-mcp --client claude`
-- Skill file: `~/.claude/skills/memory-orchestrator/SKILL.md`
-- Env vars: `MO_CLIENT=claude`, `MO_HTTP_BASE_URL=http://localhost:8765`
+| Location | Content |
+|---|---|
+| `<project>/.claude/settings.json` | `UserPromptSubmit` + `Stop` hooks; MCP server entry |
+| `<project>/.claude/settings.local.json` | `MO_MCP_TOKEN`, `MO_HTTP_BASE_URL` (add to `.gitignore`) |
+| `<project>/.claude/skills/memory-orchestrator/SKILL.md` | Memory tool usage guide |
 
-### Codex
+`claude mcp add --scope project` registers the stdio MCP bridge.
 
-- `UserPromptSubmit` and `Stop` hooks in `~/.codex/hooks.json`
-- MCP server entry in `~/.codex/config.toml`
-- Agent instructions: `~/.codex/AGENTS.md`
+### Codex (`--client codex`)
+
+| Location | Content |
+|---|---|
+| `~/.codex/config.toml` | MCP server entry + `MO_HTTP_BASE_URL` (global) |
+| `~/.codex/hooks.json` | `UserPromptSubmit` + `Stop` hooks (global) |
+| `<project>/.claude/settings.local.json` | `MO_MCP_TOKEN`, `MO_HTTP_BASE_URL` (per-project) |
+| `~/.codex/AGENTS.md` | Memory tool usage guide (section-marker merge) |
 
 ## How it works
 
@@ -84,11 +103,23 @@ Claude Code and Codex can call MCP tools directly:
 | Tool | Description |
 |---|---|
 | `search_memory` | Semantic search across all memories |
-| `save_memory` | Persist a new memory entry |
+| `save_memory` | Persist a new memory entry (supports `node_name`/`parent_node` for skeleton) |
 | `list_memories` | Browse memories for a project |
 | `delete_memory` | Remove a memory |
-| `promote_memory` | Increase a memory's importance |
+| `promote_memory` | Increase a memory's importance or make it global |
 | `ingest_session` | Trigger extraction from a specific transcript |
+
+## Token
+
+The `project_token` is a server-issued bearer token bound to a specific project UUID.
+It is stored in `<project>/.claude/settings.local.json` and read by `serve-mcp` at startup.
+
+```
+Token lookup order:
+  <cwd>/.claude/settings.local.json → MO_MCP_TOKEN env → error
+```
+
+Add `.claude/settings.local.json` to `.gitignore` to keep the token out of version control.
 
 ## Project scoping
 
@@ -112,7 +143,7 @@ The hook scripts read these env vars (set by `setup`, or override manually):
 |---|---|---|
 | `MO_HTTP_BASE_URL` | `http://localhost:8765` | Server base URL |
 | `MO_CLIENT` | `claude` | Client identifier (`claude` or `codex`) |
-| `MO_MCP_TOKEN` | _(from setup)_ | Bearer token for MCP tool calls |
+| `MO_MCP_TOKEN` | _(from settings.local.json)_ | Bearer token for MCP tool calls |
 
 ## Tests
 
