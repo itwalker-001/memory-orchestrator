@@ -230,5 +230,13 @@
   "Search or create tag…": "搜索或新建标签…",
   "+ Create \"{tag}\"": "+ 创建 \"{tag}\"",
   "New project": "新建项目",
-  "Child nodes": "子节点"
+  "Child nodes": "子节点",
+  "Write new": "写新记忆",
+  "Select existing": "从已有记忆中选",
+  "Search memories…": "搜索记忆…",
+  "Link": "关联",
+  "Linking…": "关联中…",
+  "No memories found": "未找到记忆",
+  "Search to find existing memories": "搜索已有记忆以关联",
+  "Add memory → {name}": "添加记忆 → {name}"
 }

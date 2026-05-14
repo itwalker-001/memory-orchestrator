@@ -98,36 +98,82 @@
     <div v-if="addMemoryOpen" class="modal-overlay" @click.self="addMemoryOpen = false">
       <div class="write-modal">
         <div class="write-header">
-          <span class="write-title">{{ t('New memory → {name}', { name: selectedNode?.name }) }}</span>
+          <span class="write-title">{{ t('Add memory → {name}', { name: selectedNode?.name }) }}</span>
           <button class="modal-close" @click="addMemoryOpen = false">✕</button>
         </div>
-        <div class="write-body">
-          <p v-if="selectedNode?.prompt_hint" class="sk-prompt-hint-text">{{ selectedNode.prompt_hint }}</p>
-          <div class="write-type-tabs">
-            <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
-              :class="['type-tab', 'type-tab-'+tp, memForm.type === tp ? 'active' : '']"
-              @click="memForm.type = tp">{{ tp }}</button>
-          </div>
-          <div class="write-section">
-            <label class="write-field-label">Name</label>
-            <input class="write-input" v-model="memForm.name" placeholder="Short identifier…" />
-          </div>
-          <div class="write-section">
-            <label class="write-field-label">Description</label>
-            <input class="write-input" v-model="memForm.description" placeholder="One-line summary…" />
-          </div>
-          <div class="write-section write-section-grow">
-            <label class="write-field-label">Content</label>
-            <textarea class="write-input write-textarea" v-model="memForm.content" rows="5" />
-          </div>
-          <p v-if="memError" class="save-hint err">{{ memError }}</p>
-        </div>
-        <div class="write-footer">
-          <button class="btn-cancel" @click="addMemoryOpen = false">Cancel</button>
-          <button class="btn-save" :disabled="isMemSaving || !memForm.name || !memForm.content" @click="submitAddMemory">
-            {{ isMemSaving ? 'Saving…' : 'Write' }}
+
+        <!-- Tab strip -->
+        <div class="modal-tabs">
+          <button :class="['modal-tab', addMemoryTab === 'write' ? 'active' : '']" @click="addMemoryTab = 'write'">
+            {{ t('Write new') }}
+          </button>
+          <button :class="['modal-tab', addMemoryTab === 'select' ? 'active' : '']" @click="addMemoryTab = 'select'">
+            {{ t('Select existing') }}
           </button>
         </div>
+
+        <!-- Write new tab -->
+        <template v-if="addMemoryTab === 'write'">
+          <div class="write-body">
+            <p v-if="selectedNode?.prompt_hint" class="sk-prompt-hint-text">{{ selectedNode.prompt_hint }}</p>
+            <div class="write-type-tabs">
+              <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
+                :class="['type-tab', 'type-tab-'+tp, memForm.type === tp ? 'active' : '']"
+                @click="memForm.type = tp">{{ tp }}</button>
+            </div>
+            <div class="write-section">
+              <label class="write-field-label">{{ t('Name') }}</label>
+              <input class="write-input" v-model="memForm.name" :placeholder="t('Short identifier…')" />
+            </div>
+            <div class="write-section">
+              <label class="write-field-label">{{ t('Description') }}</label>
+              <input class="write-input" v-model="memForm.description" :placeholder="t('One-line summary…')" />
+            </div>
+            <div class="write-section write-section-grow">
+              <label class="write-field-label">{{ t('Content') }}</label>
+              <textarea class="write-input write-textarea" v-model="memForm.content" rows="5" />
+            </div>
+            <p v-if="memError" class="save-hint err">{{ memError }}</p>
+          </div>
+          <div class="write-footer">
+            <button class="btn-cancel" @click="addMemoryOpen = false">{{ t('Cancel') }}</button>
+            <button class="btn-save" :disabled="isMemSaving || !memForm.name || !memForm.content" @click="submitAddMemory">
+              {{ isMemSaving ? t('Saving…') : t('Write') }}
+            </button>
+          </div>
+        </template>
+
+        <!-- Select existing tab -->
+        <template v-else>
+          <div class="write-body">
+            <input class="write-input" v-model="selectMemQuery"
+              :placeholder="t('Search memories…')"
+              @input="onSelectMemSearch" />
+            <div v-if="selectMemLoading" class="select-mem-hint">{{ t('Loading…') }}</div>
+            <div v-else-if="selectMemResults.length === 0 && selectMemQuery" class="select-mem-hint">
+              {{ t('No memories found') }}
+            </div>
+            <div v-else-if="selectMemResults.length === 0" class="select-mem-hint">
+              {{ t('Search to find existing memories') }}
+            </div>
+            <ul v-else class="select-mem-list">
+              <li v-for="m in selectMemResults" :key="m.id"
+                :class="['select-mem-item', selectMemChosen?.id === m.id ? 'chosen' : '']"
+                @click="selectMemChosen = m">
+                <span :class="['badge', m.type]">{{ m.type }}</span>
+                <span class="select-mem-name">{{ m.name }}</span>
+                <span v-if="m.description" class="select-mem-desc">{{ m.description }}</span>
+              </li>
+            </ul>
+            <p v-if="memError" class="save-hint err">{{ memError }}</p>
+          </div>
+          <div class="write-footer">
+            <button class="btn-cancel" @click="addMemoryOpen = false">{{ t('Cancel') }}</button>
+            <button class="btn-save" :disabled="isMemSaving || !selectMemChosen" @click="submitLinkMemory">
+              {{ isMemSaving ? t('Linking…') : t('Link') }}
+            </button>
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -361,9 +407,43 @@ async function onDeleteNode() {
 
 // ── Add memory ────────────────────────────────────────────────────────────────
 const addMemoryOpen = ref(false)
+const addMemoryTab = ref('write')
 const isMemSaving = ref(false)
 const memError = ref('')
 const memForm = ref({ type: 'project', name: '', description: '', content: '' })
+
+// Select-existing state
+const selectMemQuery = ref('')
+const selectMemResults = ref([])
+const selectMemChosen = ref(null)
+const selectMemLoading = ref(false)
+let _selectSearchTimer = null
+
+function onSelectMemSearch() {
+  selectMemChosen.value = null
+  clearTimeout(_selectSearchTimer)
+  if (!selectMemQuery.value.trim()) { selectMemResults.value = []; return }
+  _selectSearchTimer = setTimeout(async () => {
+    selectMemLoading.value = true
+    try {
+      const slug = selectedProject.value?.slug
+      const q = encodeURIComponent(selectMemQuery.value)
+      selectMemResults.value = await apiJSON(`${BASE}/memories?project_slug=${slug}&q=${q}&limit=30`)
+    } catch { selectMemResults.value = [] }
+    finally { selectMemLoading.value = false }
+  }, 300)
+}
+
+watch(addMemoryOpen, open => {
+  if (!open) {
+    addMemoryTab.value = 'write'
+    selectMemQuery.value = ''
+    selectMemResults.value = []
+    selectMemChosen.value = null
+    memError.value = ''
+    memForm.value = { type: 'project', name: '', description: '', content: '' }
+  }
+})
 
 async function submitAddMemory() {
   if (!memForm.value.name || !memForm.value.content) return
@@ -378,7 +458,21 @@ async function submitAddMemory() {
       body: JSON.stringify({ memory_id: mem.id }),
     })
     addMemoryOpen.value = false
-    memForm.value = { type: 'project', name: '', description: '', content: '' }
+    nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`)
+    memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
+  } catch (e) { memError.value = e.message }
+  finally { isMemSaving.value = false }
+}
+
+async function submitLinkMemory() {
+  if (!selectMemChosen.value) return
+  isMemSaving.value = true; memError.value = ''
+  try {
+    await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memory_id: selectMemChosen.value.id }),
+    })
+    addMemoryOpen.value = false
     nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`)
     memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
   } catch (e) { memError.value = e.message }
@@ -431,6 +525,18 @@ onMounted(async () => {
 .type-tab.active { background: var(--accent, #2563eb); color: #fff; border-color: transparent; }
 .sk-prompt-hint-text { font-size: 11px; color: var(--fg-muted, #888); background: var(--hint-bg, #f8f9fa); padding: 6px 10px; border-radius: 4px; font-style: italic; }
 .save-hint.err { color: #dc2626; font-size: 11px; }
+/* Modal tabs */
+.modal-tabs { display: flex; border-bottom: 1px solid var(--border, #ddd); padding: 0 12px; flex-shrink: 0; }
+.modal-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 14px; font-size: 12px; cursor: pointer; color: var(--fg-muted, #888); margin-bottom: -1px; }
+.modal-tab.active { color: var(--accent, #2563eb); border-bottom-color: var(--accent, #2563eb); font-weight: 700; }
+/* Select existing */
+.select-mem-hint { font-size: 12px; color: var(--fg-muted, #888); padding: 16px 0; text-align: center; }
+.select-mem-list { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
+.select-mem-item { display: flex; align-items: baseline; gap: 8px; padding: 7px 10px; border-radius: 5px; border: 1px solid transparent; cursor: pointer; }
+.select-mem-item:hover { background: var(--hover, #f5f5f5); }
+.select-mem-item.chosen { background: var(--active-bg, #e8f0fe); border-color: var(--accent, #2563eb); }
+.select-mem-name { font-size: 12px; font-weight: 600; color: var(--fg, #1a1a1a); flex-shrink: 0; }
+.select-mem-desc { font-size: 11px; color: var(--fg-muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Dark theme vars */
 .dark {
   --bg: #0d1117; --fg: #e6edf3; --fg-muted: #8b949e; --border: #30363d;

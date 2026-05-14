@@ -230,5 +230,13 @@
   "Search or create tag…": "Search or create tag…",
   "+ Create \"{tag}\"": "+ Create \"{tag}\"",
   "New project": "New project",
-  "Child nodes": "Child nodes"
+  "Child nodes": "Child nodes",
+  "Write new": "Write new",
+  "Select existing": "Select existing",
+  "Search memories…": "Search memories…",
+  "Link": "Link",
+  "Linking…": "Linking…",
+  "No memories found": "No memories found",
+  "Search to find existing memories": "Search to find existing memories",
+  "Add memory → {name}": "Add memory → {name}"
 }
