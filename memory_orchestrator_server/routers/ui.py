@@ -100,9 +100,21 @@ class ProjectCreate(BaseModel):
     display_name: str
 
 
+class SkeletonNodeCreate(BaseModel):
+    project_id: uuid.UUID
+    name: str
+    parent_id: uuid.UUID | None = None
+
+
 class SkeletonNodePatch(BaseModel):
     name: str | None = None
     prompt_hint: str | None = None
+    tags: list[str] | None = None
+
+
+class SkeletonNodeReorder(BaseModel):
+    project_id: uuid.UUID
+    ordered_ids: list[uuid.UUID]
 
 
 class NodeMemoryAdd(BaseModel):
@@ -744,9 +756,29 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     async def patch_skeleton_node(node_id: uuid.UUID, body: SkeletonNodePatch = Body(...)) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
-            ok = await repo.patch_skeleton_node(node_id, name=body.name, prompt_hint=body.prompt_hint)
+            ok = await repo.patch_skeleton_node(node_id, name=body.name, prompt_hint=body.prompt_hint, tags=body.tags)
             if not ok:
                 raise HTTPException(status_code=404, detail="node not found")
+            await s.commit()
+        return {"ok": True}
+
+    @router.post("/skeleton-nodes", status_code=201)
+    async def create_skeleton_node(body: SkeletonNodeCreate = Body(...)) -> dict:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            node = await repo.create_skeleton_node(
+                project_id=body.project_id,
+                name=body.name,
+                parent_id=body.parent_id,
+            )
+            await s.commit()
+        return node
+
+    @router.post("/skeleton-nodes/reorder", status_code=200)
+    async def reorder_skeleton_nodes(body: SkeletonNodeReorder = Body(...)) -> dict:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            await repo.reorder_skeleton_nodes(body.project_id, body.ordered_ids)
             await s.commit()
         return {"ok": True}
 
