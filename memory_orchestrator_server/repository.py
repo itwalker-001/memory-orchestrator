@@ -13,17 +13,72 @@ from memory_orchestrator_server.scoring import hybrid_score, truncate_by_budget
 from memory_orchestrator_server.time_utils import utc_now
 
 BUILTIN_SKELETON_NODES: list[dict] = [
-    {"name": "项目概况", "description": "项目基本信息、技术栈、架构概览、外部依赖", "prompt_hint": "记录项目说明、技术栈选型、架构概览或外部依赖", "sort_order": 0},
-    {"name": "需求",     "description": "产品需求、用户故事、需求拆解、待确认问题", "prompt_hint": "记录功能需求、用户故事、需求拆解或待确认问题", "sort_order": 1},
-    {"name": "设计",     "description": "架构设计、接口设计、数据模型、原型设计", "prompt_hint": "记录架构决策、接口约定、数据模型设计或原型说明", "sort_order": 2},
-    {"name": "技术栈",   "description": "前后端技术选型、数据存储、基础设施", "prompt_hint": "记录技术栈选择：框架、ORM、数据库、消息队列等", "sort_order": 3},
-    {"name": "前端",     "description": "前端功能实现、问题记录、优化记录、开发经验", "prompt_hint": "记录前端组件实现、页面结构、样式约定或开发经验", "sort_order": 4},
-    {"name": "后端",     "description": "后端功能实现、问题记录、优化记录、开发经验", "prompt_hint": "记录后端接口实现、业务逻辑、服务设计或开发经验", "sort_order": 5},
-    {"name": "数据库",   "description": "表结构、SQL优化、数据迁移、故障记录", "prompt_hint": "记录数据库表结构、查询优化方案、迁移经验或故障处理", "sort_order": 6},
-    {"name": "测试",     "description": "单元测试、集成测试、测试技巧、缺陷记录", "prompt_hint": "记录测试方法、测试工具使用、覆盖约定或已知缺陷", "sort_order": 7},
-    {"name": "部署",     "description": "环境配置、Docker部署、发布流程、故障恢复", "prompt_hint": "记录部署流程、环境变量、Docker配置或发布操作经验", "sort_order": 8},
-    {"name": "决策记录", "description": "技术选型决策、架构决策、历史原因、方案对比", "prompt_hint": "记录重要决策：背景、候选方案、最终选择及原因", "sort_order": 9},
-    {"name": "经验库",   "description": "开发技巧、调试技巧、测试技巧、常见坑", "prompt_hint": "记录踩过的坑、解决方案、最佳实践或开发调试技巧", "sort_order": 10},
+    {
+        "name": "项目概况", "sort_order": 0,
+        "tags": ["overview", "architecture", "stack", "system"],
+        "description": "项目基本信息、目标、技术栈总览、架构概览、外部依赖、系统边界说明",
+        "prompt_hint": "记录项目是什么、解决什么问题、整体架构、技术栈总览、外部系统依赖",
+    },
+    {
+        "name": "需求", "sort_order": 1,
+        "tags": ["requirement", "user_story", "spec"],
+        "description": "产品需求、用户故事、需求拆解、需求变更、待确认问题",
+        "prompt_hint": "记录功能需求、用户故事、需求拆解、需求变更或待确认问题",
+    },
+    {
+        "name": "设计", "sort_order": 2,
+        "tags": ["design", "architecture", "api", "schema"],
+        "description": "系统架构设计、接口设计、数据模型、流程设计、协议设计",
+        "prompt_hint": "记录架构设计、接口定义、数据结构设计、流程设计或协议说明",
+    },
+    {
+        "name": "技术栈", "sort_order": 3,
+        "tags": ["stack", "tech", "dependency"],
+        "description": "前后端技术选型、数据库、中间件、基础设施、外部服务",
+        "prompt_hint": "记录技术选型：框架、数据库、ORM、中间件、消息队列、基础设施",
+    },
+    {
+        "name": "前端", "sort_order": 4,
+        "tags": ["frontend", "ui", "component", "reactive"],
+        "description": "前端功能实现、组件设计、状态管理、性能优化、问题记录",
+        "prompt_hint": "记录前端页面实现、组件设计、状态管理、联调问题或优化经验",
+    },
+    {
+        "name": "后端", "sort_order": 5,
+        "tags": ["backend", "api", "service", "logic"],
+        "description": "后端接口实现、业务逻辑、服务拆分、异常处理、性能优化",
+        "prompt_hint": "记录后端接口设计、业务逻辑、服务架构、异常处理或优化经验",
+    },
+    {
+        "name": "数据库", "sort_order": 6,
+        "tags": ["database", "sql", "index", "transaction"],
+        "description": "表结构设计、索引策略、SQL优化、数据迁移、事务与一致性",
+        "prompt_hint": "记录数据库设计、索引优化、SQL调优、迁移方案或一致性问题",
+    },
+    {
+        "name": "测试", "sort_order": 7,
+        "tags": ["testing", "qa", "mock", "e2e"],
+        "description": "单元测试、集成测试、E2E测试、Mock方案、缺陷记录",
+        "prompt_hint": "记录测试策略、测试工具、Mock方案、覆盖率或缺陷问题",
+    },
+    {
+        "name": "部署", "sort_order": 8,
+        "tags": ["deploy", "ci_cd", "devops", "infra"],
+        "description": "环境配置、CI/CD、容器化、发布流程、运维与故障恢复",
+        "prompt_hint": "记录部署流程、Docker配置、CI/CD、环境问题或发布经验",
+    },
+    {
+        "name": "决策记录", "sort_order": 9,
+        "tags": ["decision", "tradeoff", "architecture_choice"],
+        "description": "关键技术决策、架构选择、方案对比、历史原因、权衡分析",
+        "prompt_hint": "记录为什么这样做：背景、备选方案、选择原因与权衡",
+    },
+    {
+        "name": "经验库", "sort_order": 10,
+        "tags": ["experience", "best_practice", "pitfall", "debug"],
+        "description": "开发技巧、调试技巧、性能优化、踩坑记录、最佳实践",
+        "prompt_hint": "记录可复用经验：踩坑、调试方法、优化技巧、最佳实践",
+    },
 ]
 
 ProjectRef = uuid.UUID | str
@@ -428,6 +483,7 @@ class MemoryRepository:
                     name=n["name"], description=n["description"],
                     prompt_hint=n["prompt_hint"], sort_order=n["sort_order"],
                     is_builtin=True,
+                    tags=n.get("tags", []),
                 ))
         return project_id
 
@@ -448,6 +504,8 @@ class MemoryRepository:
                     "id": str(n.id), "name": n.name, "description": n.description,
                     "prompt_hint": n.prompt_hint, "is_builtin": n.is_builtin,
                     "sort_order": n.sort_order,
+                    "parent_id": str(n.parent_id) if n.parent_id else None,
+                    "tags": list(n.tags) if n.tags else [],
                     "children": _build(n.id),
                 }
                 for n in children.get(parent_id, [])
@@ -455,7 +513,8 @@ class MemoryRepository:
         return _build(None)
 
     async def patch_skeleton_node(
-        self, node_id: uuid.UUID, *, name: str | None = None, prompt_hint: str | None = None
+        self, node_id: uuid.UUID, *, name: str | None = None, prompt_hint: str | None = None,
+        tags: list[str] | None = None
     ) -> bool:
         node = await self.session.get(ProjectSkeletonNode, node_id)
         if node is None:
@@ -464,7 +523,56 @@ class MemoryRepository:
             node.name = name
         if prompt_hint is not None:
             node.prompt_hint = prompt_hint
+        if tags is not None:
+            node.tags = tags
         return True
+
+    async def create_skeleton_node(
+        self,
+        project_id: uuid.UUID,
+        name: str,
+        parent_id: uuid.UUID | None = None,
+    ) -> dict:
+        result = await self.session.execute(
+            select(func.max(ProjectSkeletonNode.sort_order))
+            .where(
+                ProjectSkeletonNode.project_id == project_id,
+                ProjectSkeletonNode.parent_id == parent_id,
+            )
+        )
+        max_order = result.scalar_one_or_none() or 0
+        node = ProjectSkeletonNode(
+            project_id=project_id,
+            parent_id=parent_id,
+            name=name,
+            is_builtin=False,
+            sort_order=max_order + 10,
+            tags=[],
+        )
+        self.session.add(node)
+        await self.session.flush()
+        return {
+            "id": str(node.id),
+            "name": node.name,
+            "parent_id": str(node.parent_id) if node.parent_id else None,
+            "is_builtin": False,
+            "sort_order": node.sort_order,
+            "tags": [],
+            "children": [],
+        }
+
+    async def reorder_skeleton_nodes(
+        self, project_id: uuid.UUID, ordered_ids: list[uuid.UUID]
+    ) -> None:
+        for i, node_id in enumerate(ordered_ids):
+            await self.session.execute(
+                update(ProjectSkeletonNode)
+                .where(
+                    ProjectSkeletonNode.id == node_id,
+                    ProjectSkeletonNode.project_id == project_id,
+                )
+                .values(sort_order=i * 10)
+            )
 
     async def delete_skeleton_node(self, node_id: uuid.UUID) -> bool:
         node = await self.session.get(ProjectSkeletonNode, node_id)
