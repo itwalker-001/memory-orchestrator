@@ -8,8 +8,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_orchestrator_server import reranker
 from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory, Project, SystemSetting
+from memory_orchestrator_server.models import ProjectSkeletonNode, SkeletonNodeMemory
 from memory_orchestrator_server.scoring import hybrid_score, truncate_by_budget
 from memory_orchestrator_server.time_utils import utc_now
+
+BUILTIN_SKELETON_NODES: list[dict] = [
+    {"name": "项目概况", "description": "项目基本信息、技术栈、架构概览、外部依赖", "prompt_hint": "记录项目说明、技术栈选型、架构概览或外部依赖", "sort_order": 0},
+    {"name": "需求",     "description": "产品需求、用户故事、需求拆解、待确认问题", "prompt_hint": "记录功能需求、用户故事、需求拆解或待确认问题", "sort_order": 1},
+    {"name": "设计",     "description": "架构设计、接口设计、数据模型、原型设计", "prompt_hint": "记录架构决策、接口约定、数据模型设计或原型说明", "sort_order": 2},
+    {"name": "技术栈",   "description": "前后端技术选型、数据存储、基础设施", "prompt_hint": "记录技术栈选择：框架、ORM、数据库、消息队列等", "sort_order": 3},
+    {"name": "前端",     "description": "前端功能实现、问题记录、优化记录、开发经验", "prompt_hint": "记录前端组件实现、页面结构、样式约定或开发经验", "sort_order": 4},
+    {"name": "后端",     "description": "后端功能实现、问题记录、优化记录、开发经验", "prompt_hint": "记录后端接口实现、业务逻辑、服务设计或开发经验", "sort_order": 5},
+    {"name": "数据库",   "description": "表结构、SQL优化、数据迁移、故障记录", "prompt_hint": "记录数据库表结构、查询优化方案、迁移经验或故障处理", "sort_order": 6},
+    {"name": "测试",     "description": "单元测试、集成测试、测试技巧、缺陷记录", "prompt_hint": "记录测试方法、测试工具使用、覆盖约定或已知缺陷", "sort_order": 7},
+    {"name": "部署",     "description": "环境配置、Docker部署、发布流程、故障恢复", "prompt_hint": "记录部署流程、环境变量、Docker配置或发布操作经验", "sort_order": 8},
+    {"name": "决策记录", "description": "技术选型决策、架构决策、历史原因、方案对比", "prompt_hint": "记录重要决策：背景、候选方案、最终选择及原因", "sort_order": 9},
+    {"name": "经验库",   "description": "开发技巧、调试技巧、测试技巧、常见坑", "prompt_hint": "记录踩过的坑、解决方案、最佳实践或开发调试技巧", "sort_order": 10},
+]
 
 ProjectRef = uuid.UUID | str
 
@@ -386,6 +401,144 @@ class MemoryRepository:
             )
         if project_id:
             await self.session.execute(_sync_project_count(project_id))
+
+    async def create_project_with_skeleton(self, slug: str, display_name: str) -> uuid.UUID:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        now = utc_now()
+        stmt = (
+            pg_insert(Project)
+            .values(slug=slug, display_name=display_name, root_paths=[], first_seen_at=now, last_active_at=now)
+            .on_conflict_do_nothing(index_elements=["slug"])
+            .returning(Project.id)
+        )
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if row is None:
+            existing = await self.session.execute(select(Project.id).where(Project.slug == slug))
+            row = existing.scalar_one()
+        project_id = row
+        existing_count = await self.session.execute(
+            select(func.count(ProjectSkeletonNode.id))
+            .where(ProjectSkeletonNode.project_id == project_id)
+        )
+        if existing_count.scalar_one() == 0:
+            for n in BUILTIN_SKELETON_NODES:
+                self.session.add(ProjectSkeletonNode(
+                    project_id=project_id,
+                    name=n["name"], description=n["description"],
+                    prompt_hint=n["prompt_hint"], sort_order=n["sort_order"],
+                    is_builtin=True,
+                ))
+        return project_id
+
+    async def get_skeleton_tree(self, project_id: uuid.UUID) -> list[dict]:
+        result = await self.session.execute(
+            select(ProjectSkeletonNode)
+            .where(ProjectSkeletonNode.project_id == project_id)
+            .order_by(ProjectSkeletonNode.sort_order, ProjectSkeletonNode.created_at)
+        )
+        nodes = result.scalars().all()
+        children: dict = {}
+        for n in nodes:
+            children.setdefault(n.parent_id, []).append(n)
+
+        def _build(parent_id):
+            return [
+                {
+                    "id": str(n.id), "name": n.name, "description": n.description,
+                    "prompt_hint": n.prompt_hint, "is_builtin": n.is_builtin,
+                    "sort_order": n.sort_order,
+                    "children": _build(n.id),
+                }
+                for n in children.get(parent_id, [])
+            ]
+        return _build(None)
+
+    async def patch_skeleton_node(
+        self, node_id: uuid.UUID, *, name: str | None = None, prompt_hint: str | None = None
+    ) -> bool:
+        node = await self.session.get(ProjectSkeletonNode, node_id)
+        if node is None:
+            return False
+        if name is not None and not node.is_builtin:
+            node.name = name
+        if prompt_hint is not None:
+            node.prompt_hint = prompt_hint
+        return True
+
+    async def delete_skeleton_node(self, node_id: uuid.UUID) -> bool:
+        node = await self.session.get(ProjectSkeletonNode, node_id)
+        if node is None or node.is_builtin:
+            return False
+        await self.session.delete(node)
+        return True
+
+    async def add_memory_to_node(self, node_id: uuid.UUID, memory_id: uuid.UUID) -> bool:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        stmt = (
+            pg_insert(SkeletonNodeMemory)
+            .values(skeleton_node_id=node_id, memory_id=memory_id)
+            .on_conflict_do_nothing(constraint="uq_snm_node_memory")
+        )
+        await self.session.execute(stmt)
+        return True
+
+    async def remove_memory_from_node(self, node_id: uuid.UUID, memory_id: uuid.UUID) -> None:
+        await self.session.execute(
+            sa_delete(SkeletonNodeMemory).where(
+                SkeletonNodeMemory.skeleton_node_id == node_id,
+                SkeletonNodeMemory.memory_id == memory_id,
+            )
+        )
+
+    async def get_node_memories(self, node_id: uuid.UUID) -> list[Memory]:
+        result = await self.session.execute(
+            select(Memory)
+            .join(SkeletonNodeMemory, SkeletonNodeMemory.memory_id == Memory.id)
+            .where(SkeletonNodeMemory.skeleton_node_id == node_id, Memory.superseded_by.is_(None))
+            .order_by(Memory.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def get_skeleton_flat(self, project_id: uuid.UUID) -> list[ProjectSkeletonNode]:
+        result = await self.session.execute(
+            select(ProjectSkeletonNode)
+            .where(ProjectSkeletonNode.project_id == project_id)
+            .order_by(ProjectSkeletonNode.sort_order, ProjectSkeletonNode.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def get_or_create_skeleton_node(
+        self, project_id: uuid.UUID, name: str, parent_name: str | None
+    ) -> uuid.UUID:
+        parent_id: uuid.UUID | None = None
+        if parent_name:
+            r = await self.session.execute(
+                select(ProjectSkeletonNode.id).where(
+                    ProjectSkeletonNode.project_id == project_id,
+                    ProjectSkeletonNode.name == parent_name,
+                    ProjectSkeletonNode.parent_id.is_(None),
+                )
+            )
+            parent_id = r.scalar_one_or_none()
+
+        r = await self.session.execute(
+            select(ProjectSkeletonNode.id).where(
+                ProjectSkeletonNode.project_id == project_id,
+                ProjectSkeletonNode.name == name,
+                (ProjectSkeletonNode.parent_id == parent_id) if parent_id else ProjectSkeletonNode.parent_id.is_(None),
+            )
+        )
+        existing = r.scalar_one_or_none()
+        if existing:
+            return existing
+        node = ProjectSkeletonNode(
+            project_id=project_id, parent_id=parent_id, name=name,
+            description="", prompt_hint="", is_builtin=False,
+        )
+        self.session.add(node)
+        await self.session.flush()
+        return node.id
 
 
 @dataclass
