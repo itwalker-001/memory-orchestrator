@@ -87,6 +87,7 @@ class BatchMoveBody(BaseModel):
 class TokenCreate(BaseModel):
     kind: str
     name: str
+    project_id: uuid.UUID | None = None
 
 
 class TokenPatch(BaseModel):
@@ -182,31 +183,29 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
 
     @router.post("/tokens", status_code=201)
     async def create_token(body: TokenCreate = Body(...)) -> dict:
+        from memory_orchestrator_server.auth_tokens import TOKEN_KIND_PROJECT
         from memory_orchestrator_server.models import ApiToken
 
-        if body.kind not in ("ui_admin", "mcp_client"):
-            raise HTTPException(status_code=422, detail="kind must be ui_admin or mcp_client")
+        if body.kind not in ("ui_admin", TOKEN_KIND_PROJECT):
+            raise HTTPException(status_code=422, detail="kind must be ui_admin or project_token")
+        if body.kind == TOKEN_KIND_PROJECT and not body.project_id:
+            raise HTTPException(status_code=422, detail="project_id required for project_token")
+
         raw, token_hash = _new_token_pair()
         async with maker() as s:
-            existing = (await s.execute(
-                select(ApiToken).where(
-                    ApiToken.name == body.name,
-                    ApiToken.kind == body.kind,
-                    ApiToken.revoked_at.is_(None),
-                ).limit(1)
-            )).scalars().first()
-            if existing is not None:
-                existing.token_hash = token_hash
-                tid = str(existing.id)
-                action = "rotated"
-            else:
-                tok = ApiToken(name=body.name, kind=body.kind, token_hash=token_hash)
-                s.add(tok)
-                await s.flush()
-                tid = str(tok.id)
-                action = "created"
+            t = ApiToken(
+                name=body.name, kind=body.kind, token_hash=token_hash,
+                project_id=body.project_id,
+            )
+            s.add(t)
             await s.commit()
-        return {"id": tid, "token": raw, "action": action}
+            await s.refresh(t)
+        return {
+            "id": str(t.id), "name": t.name, "kind": t.kind,
+            "token": raw,
+            "project_id": str(t.project_id) if t.project_id else None,
+            "created_at": isoformat_utc(t.created_at),
+        }
 
     @router.post("/tokens/{token_id}/reset", status_code=200)
     async def reset_token(
