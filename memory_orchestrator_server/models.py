@@ -70,6 +70,11 @@ class ApiToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class Session(Base):
     __tablename__ = "sessions"
 
@@ -79,3 +84,37 @@ class Session(Base):
     last_offset: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(Text, default="pending", nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class ProjectSkeletonNode(Base):
+    __tablename__ = "project_skeleton_nodes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project_skeleton_nodes.id", ondelete="CASCADE"),
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    prompt_hint: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    is_builtin: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class SkeletonNodeMemory(Base):
+    __tablename__ = "skeleton_node_memories"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    skeleton_node_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("project_skeleton_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    memory_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("memories.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
