@@ -148,14 +148,16 @@ When ingesting a transcript for a project that has a skeleton:
 Introduce **Vue Router** (history mode). Existing `App.vue` is **not modified**.
 
 Changes to existing files (minimal):
-- `main.js`: wrap app with `createRouter` + `createWebHistory`; route `/ui/` → `App.vue`, `/ui/projects/` → `SkeletonPage.vue`
+- `main.js`: wrap app with `createRouter` + `createWebHistory`; route `/ui/` → `SkeletonPage.vue`, `/ui/memories` → `App.vue`
 - `vite.config.js`: base stays `/ui/`, no other change needed
+
+`App.vue` is **not modified**. The existing `/ui/` bookmark becomes `/ui/memories` — add a nav link in `SkeletonPage.vue` to reach it.
 
 FastAPI `http_app.py`: SPA fallback already catches all `/ui/*` paths — no change needed.
 
 ### New file: `src/SkeletonPage.vue`
 
-Completely new page at `/ui/projects/`. Shares `apiFetch` auth helper (extracted to `src/api.js`).
+Completely new home page at `/ui/`. Shares `apiFetch` auth helper (extracted to `src/api.js`).
 
 #### Layout
 
