@@ -1,9 +1,12 @@
+# -*- coding: utf-8 -*-
 """backfill builtin skeleton node tags
 
 Revision ID: 0013_backfill_builtin_tags
 Revises: 0012_skeleton_node_tags
 Create Date: 2026-05-14
 """
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ARRAY
 from alembic import op
 
 revision = "0013_backfill_builtin_tags"
@@ -25,30 +28,31 @@ _BUILTIN_TAGS: list[tuple[str, list[str]]] = [
     ("经验库",    ["experience", "best_practice", "pitfall", "debug"]),
 ]
 
+_STMT_UP = sa.text(
+    "UPDATE project_skeleton_nodes "
+    "SET tags = :tags "
+    "WHERE name = :name AND tags = '{}'"
+).bindparams(
+    sa.bindparam("tags", type_=ARRAY(sa.Text())),
+    sa.bindparam("name", type_=sa.Text()),
+)
 
-def _pg_array(tags: list[str]) -> str:
-    escaped = ", ".join(f"'{t}'" for t in tags)
-    return f"ARRAY[{escaped}]::text[]"
+_STMT_DOWN = sa.text(
+    "UPDATE project_skeleton_nodes "
+    "SET tags = '{}' "
+    "WHERE name = :name"
+).bindparams(
+    sa.bindparam("name", type_=sa.Text()),
+)
 
 
 def upgrade() -> None:
+    conn = op.get_bind()
     for name, tags in _BUILTIN_TAGS:
-        op.execute(
-            f"""
-            UPDATE project_skeleton_nodes
-            SET    tags = {_pg_array(tags)}
-            WHERE  name = '{name}'
-              AND  tags = '{{}}'
-            """
-        )
+        conn.execute(_STMT_UP, {"name": name, "tags": tags})
 
 
 def downgrade() -> None:
+    conn = op.get_bind()
     for name, _ in _BUILTIN_TAGS:
-        op.execute(
-            f"""
-            UPDATE project_skeleton_nodes
-            SET    tags = '{{}}'
-            WHERE  name = '{name}'
-            """
-        )
+        conn.execute(_STMT_DOWN, {"name": name})
