@@ -691,39 +691,48 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
 
     @public.post("/register", status_code=201)
     async def register_client(body: dict = Body(...)) -> dict:
-        """Issue a new mcp_client token for a remote client (no auth required — localhost only).
+        """Issue a project_token for a remote client (no auth required — localhost only).
 
-        Body: {"name": str, "force": bool}
-          name  — host identifier, e.g. "BK-A-JA183(172.21.170.85)"
-          force — if false (default) and a valid token already exists for this name,
-                  return {"already_registered": true, "token": ""} without replacing.
-                  Pass force=true to rotate the token unconditionally.
-        Returns: {"token": "<plaintext>", "name": str, "already_registered": bool}
+        Body: {
+          "project_slug": str,     -- required; project to bind the token to
+          "name": str,             -- host identifier, e.g. "BK-A-JA183(172.21.170.85)"
+          "hostname": str,
+          "ip": str,
+          "force": bool            -- if false (default) and valid token exists, don't replace
+        }
+        Returns: {"token": str, "name": str, "project_slug": str, "already_registered": bool}
         """
         import hashlib
         import secrets
+        from memory_orchestrator_server.auth_tokens import TOKEN_KIND_PROJECT
         from memory_orchestrator_server.models import ApiToken
+        from sqlalchemy import select
+
+        project_slug = str(body.get("project_slug") or "").strip()
+        if not project_slug:
+            raise HTTPException(status_code=422, detail="project_slug is required")
 
         hostname = str(body.get("hostname") or "unknown")
         ip = str(body.get("ip") or "")
         name = str(body.get("name") or (f"{hostname}({ip})" if ip else hostname))
         force = bool(body.get("force", False))
 
-        from sqlalchemy import select
-
         async with maker() as s:
+            repo = MemoryRepository(s)
+            project_uuid = await repo.ensure_project(project_slug)
+
             existing = (await s.execute(
                 select(ApiToken).where(
                     ApiToken.name == name,
-                    ApiToken.kind == "mcp_client",
+                    ApiToken.kind == TOKEN_KIND_PROJECT,
+                    ApiToken.project_id == project_uuid,
                     ApiToken.revoked_at.is_(None),
                     ApiToken.enabled.is_(True),
                 )
             )).scalar_one_or_none()
 
             if existing is not None and not force:
-                # Valid token exists — don't rotate, tell client to use mo-mcp register --force
-                return {"token": "", "name": name, "already_registered": True}
+                return {"token": "", "name": name, "project_slug": project_slug, "already_registered": True}
 
             raw = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(raw.encode()).hexdigest()
@@ -731,10 +740,11 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             if existing is not None:
                 existing.token_hash = token_hash
             else:
-                s.add(ApiToken(name=name, kind="mcp_client", token_hash=token_hash))
+                s.add(ApiToken(name=name, kind=TOKEN_KIND_PROJECT, token_hash=token_hash,
+                               project_id=project_uuid))
             await s.commit()
 
-        return {"token": raw, "name": name, "already_registered": False}
+        return {"token": raw, "name": name, "project_slug": project_slug, "already_registered": False}
 
     # ── Projects ─────────────────────────────────────────────────────────────
 

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from memory_orchestrator_server.models import ApiToken
 from memory_orchestrator_server.time_utils import utc_now
 
-TOKEN_KIND_MCP = "mcp_client"
 TOKEN_KIND_UI = "ui_admin"
 TOKEN_KIND_PROJECT = "project_token"
 UI_SESSION_TTL = 1800  # 30 minutes; refreshed on every authenticated request
@@ -33,7 +32,7 @@ def bearer_token(authorization: str | None) -> str | None:
 
 
 def env_token_for_kind(kind: str) -> str | None:
-    if kind == TOKEN_KIND_MCP:
+    if kind == TOKEN_KIND_PROJECT:
         token = os.environ.get("MO_MCP_TOKEN")
     elif kind == TOKEN_KIND_UI:
         token = os.environ.get("MO_UI_TOKEN")
@@ -116,12 +115,23 @@ async def resolve_project_token(
     *,
     session: AsyncSession,
     authorization: str | None,
-) -> tuple[ApiToken, uuid.UUID]:
-    """Validate a project_token Bearer token. Returns (token_row, project_id) or raises 401."""
-    token = bearer_token(authorization)
-    if not token:
+) -> tuple[ApiToken | None, uuid.UUID]:
+    """Validate a project_token Bearer token. Returns (token_row_or_None, project_uuid) or raises 401.
+
+    If MO_MCP_TOKEN env var matches, returns (None, GLOBAL_PROJECT_ID) as dev/test fallback.
+    """
+    import hmac as _hmac
+    from memory_orchestrator_server.models import GLOBAL_PROJECT_ID
+
+    raw = bearer_token(authorization)
+    if not raw:
         raise HTTPException(status_code=401, detail="missing bearer token")
-    token_hash = hash_token(token)
+
+    env_tok = env_token_for_kind(TOKEN_KIND_PROJECT)
+    if env_tok and _hmac.compare_digest(raw, env_tok):
+        return None, GLOBAL_PROJECT_ID
+
+    token_hash = hash_token(raw)
     result = await session.execute(
         select(ApiToken).where(
             ApiToken.kind == TOKEN_KIND_PROJECT,

@@ -60,6 +60,16 @@ async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID
     return [_memory_to_dict(h.memory, score=h.score) for h in hits]
 
 
+async def _attach_to_skeleton(
+    repo: MemoryRepository, project_uuid: uuid.UUID, memory_id: uuid.UUID,
+    node_name: str | None, parent_node: str | None,
+) -> None:
+    if not node_name:
+        return
+    nid = await repo.get_or_create_skeleton_node(project_uuid, node_name, parent_node or None)
+    await repo.add_memory_to_node(nid, memory_id)
+
+
 async def handle_save_memory(
     *, session: AsyncSession, project_uuid: uuid.UUID, args: dict, cwd: str = "",
     client: str | None = None, **_
@@ -67,6 +77,8 @@ async def handle_save_memory(
     repo = MemoryRepository(session)
     mtype = args["type"]
     scope_slug = args.get("project_id")
+    node_name: str | None = args.get("node_name") or None
+    parent_node: str | None = args.get("parent_node") or None
     if scope_slug:
         scope_uuid = await repo.ensure_project(scope_slug, cwd or None)
     elif mtype == "user":
@@ -83,6 +95,7 @@ async def handle_save_memory(
             importance=int(args.get("importance", 3)), project_id=scope_uuid,
             source="explicit", source_client=current_client(client), embedding=embedding,
         )
+        await _attach_to_skeleton(repo, scope_uuid, m.id, node_name, parent_node)
         return {"id": str(m.id), "action": "merged"}
     dups = await repo.find_duplicates(type=mtype, project_id=scope_uuid, embedding=embedding,
                                        threshold=float((await repo.get_settings()).get("dup_threshold") or 0.92))
@@ -95,6 +108,7 @@ async def handle_save_memory(
         source="explicit", embedding=embedding,
         source_client=current_client(client),
     )
+    await _attach_to_skeleton(repo, scope_uuid, m.id, node_name, parent_node)
     return {"id": str(m.id), "action": "created"}
 
 

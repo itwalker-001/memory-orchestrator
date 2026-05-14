@@ -57,7 +57,37 @@ how_to_apply when this memory kicks in
 importance   integer 1–5 only, default 3 (out-of-range rejected)
 replace_id   UUID of memory to supersede
 project_id   omit = auto; "global" = 00000000-...
+node_name    optional — skeleton leaf node name, e.g. "功能实现"
+parent_node  optional — parent node, e.g. "后端" (disambiguates node_name)
 ```
+
+## Skeleton Nodes — Project Memory Tree
+
+Each project has a hierarchical skeleton. Use `node_name` + `parent_node` to file memories in the right place.
+
+```
+项目概况 / 技术栈 / 项目说明 / 架构概览 / 外部依赖
+需求     / 原始需求 / 需求拆解 / 需求变更 / 待确认
+设计     / 架构设计 / 接口设计 / 数据模型 / 原型设计
+前端     / 功能实现 / 问题记录 / 优化记录 / 开发经验
+后端     / 功能实现 / 问题记录 / 优化记录 / 开发经验
+数据库   / 表结构 / SQL优化 / 数据迁移 / 故障记录
+测试     / 单元测试 / 集成测试 / 测试技巧 / 缺陷记录
+部署     / 环境配置 / Docker部署 / 发布流程 / 故障恢复
+决策记录 / 技术选型 / 架构决策 / 历史原因 / 方案对比
+经验库   / 开发技巧 / 调试技巧 / 测试技巧 / 常见坑
+```
+
+| Signal | node_name | parent_node |
+|--------|-----------|-------------|
+| Backend API implementation | 功能实现 | 后端 |
+| Frontend bug fix | 问题记录 | 前端 |
+| Why we chose PostgreSQL | 技术选型 | 决策记录 |
+| DB schema change | 表结构 | 数据库 |
+| Architecture overview | 架构概览 | 项目概况 |
+| Deployment gotcha | 常见坑 | 经验库 |
+
+Omit `node_name` for `user` type memories (global, no tree).
 
 Save workflow: call `save_memory` → check `action` field.
 - `"created"` → done
