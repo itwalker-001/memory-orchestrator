@@ -18,6 +18,12 @@
         />
       </section>
 
+      <!-- Description -->
+      <section v-if="node.description" class="detail-section">
+        <div class="detail-label">{{ t('Description') }}</div>
+        <p class="detail-desc">{{ node.description }}</p>
+      </section>
+
       <!-- Prompt hint -->
       <section class="detail-section">
         <div class="detail-label">Prompt Hint</div>
@@ -93,6 +99,7 @@ function saveHint() {
 .detail-label { font-size: 10px; font-weight: 700; color: var(--fg-muted, #6e7681); text-transform: uppercase; letter-spacing: 0.05em; }
 .sk-input { border: 1px solid var(--border, #30363d); border-radius: 5px; padding: 6px 8px; font-size: 12px; font-family: inherit; background: var(--input-bg, #161b22); color: var(--fg, #e6edf3); width: 100%; outline: none; }
 .sk-input:focus { border-color: var(--accent, #58a6ff); }
+.detail-desc { font-size: 12px; color: var(--fg-muted, #8b949e); line-height: 1.5; margin: 0; }
 .mem-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .mem-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border, #21262d); border-radius: 5px; font-size: 12px; }
 .mem-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg, #c9d1d9); }

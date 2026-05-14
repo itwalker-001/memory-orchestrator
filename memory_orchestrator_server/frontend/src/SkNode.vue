@@ -22,18 +22,24 @@
         <span v-else style="opacity:0">▶</span>
       </span>
       <span class="sk-emoji">{{ nodeEmoji }}</span>
-      <span v-if="!editing" class="sk-node-name">{{ node.name }}</span>
-      <input
-        v-else
-        ref="editInput"
-        class="sk-node-edit-input"
-        v-model="editName"
-        @blur="saveEdit"
-        @keydown.enter="saveEdit"
-        @keydown.esc="editing = false"
-      />
-      <span v-if="memCount > 0" class="sk-node-badge">{{ memCount }}</span>
-      <span v-for="tag in (node.tags || []).slice(0, 2)" :key="tag" class="sk-node-tag">{{ tag }}</span>
+      <div class="sk-node-body">
+        <div class="sk-node-name-row">
+          <span v-if="!editing" class="sk-node-name">{{ node.name }}</span>
+          <input
+            v-else
+            ref="editInput"
+            class="sk-node-edit-input"
+            v-model="editName"
+            @blur="saveEdit"
+            @keydown.enter="saveEdit"
+            @keydown.esc="editing = false"
+          />
+          <span v-if="memCount > 0" class="sk-node-badge">{{ memCount }}</span>
+        </div>
+        <div v-if="node.tags?.length" class="sk-node-tags-row">
+          <span v-for="tag in node.tags" :key="tag" class="sk-node-tag">{{ tag }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Tooltip via Teleport -->
@@ -197,9 +203,12 @@ function onDragEnd() {
 .sk-drag-handle { color: var(--fg-muted, #6e7681); font-size: 10px; cursor: grab; flex-shrink: 0; }
 .sk-chevron { font-size: 8px; color: var(--fg-muted, #6e7681); width: 12px; text-align: center; flex-shrink: 0; }
 .sk-emoji { font-size: 12px; flex-shrink: 0; }
+.sk-node-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sk-node-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .sk-node-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg, #c9d1d9); }
 .sk-node-edit-input { flex: 1; border: 1px solid var(--accent, #58a6ff); border-radius: 3px; padding: 1px 4px; font-size: 12px; background: var(--input-bg, #161b22); color: var(--fg, #e6edf3); }
 .sk-node-badge { font-size: 9px; color: var(--fg-muted, #6e7681); background: var(--btn-bg, #21262d); border-radius: 8px; padding: 1px 5px; flex-shrink: 0; }
+.sk-node-tags-row { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 2px; }
 .sk-node-tag { font-size: 9px; background: var(--tag-bg, #1a3a52); color: var(--accent, #58a6ff); border-radius: 3px; padding: 1px 4px; flex-shrink: 0; }
 .sk-tree { list-style: none; padding: 0; margin: 0; }
 .sk-subtree { padding-left: 16px; }
