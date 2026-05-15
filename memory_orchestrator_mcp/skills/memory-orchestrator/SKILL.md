@@ -184,57 +184,32 @@ parent_node  optional — parent node name, e.g. "后端" (disambiguates node_na
 
 ## Skeleton Nodes — Organizing Memories into a Project Tree
 
-Each project has a hierarchical skeleton tree. Specify `node_name` (+ `parent_node` when the name is
-ambiguous) to file the memory in the right category.
+Each project has a flat skeleton tree. Specify `node_name` to file the memory in the right category.
 
 ### Default Skeleton Tree
 
 ```
-项目概况 / 技术栈          项目概况 / 项目说明
-项目概况 / 架构概览        项目概况 / 外部依赖
-
-需求 / 原始需求            需求 / 需求拆解
-需求 / 需求变更            需求 / 待确认
-
-设计 / 架构设计            设计 / 接口设计
-设计 / 数据模型            设计 / 原型设计
-
-前端 / 功能实现            前端 / 问题记录
-前端 / 优化记录            前端 / 开发经验
-
-后端 / 功能实现            后端 / 问题记录
-后端 / 优化记录            后端 / 开发经验
-
-数据库 / 表结构            数据库 / SQL优化
-数据库 / 数据迁移          数据库 / 故障记录
-
-测试 / 单元测试            测试 / 集成测试
-测试 / 测试技巧            测试 / 缺陷记录
-
-部署 / 环境配置            部署 / Docker部署
-部署 / 发布流程            部署 / 故障恢复
-
-决策记录 / 技术选型        决策记录 / 架构决策
-决策记录 / 历史原因        决策记录 / 方案对比
-
-经验库 / 开发技巧          经验库 / 调试技巧
-经验库 / 测试技巧          经验库 / 常见坑
+项目概况    需求        设计        技术栈
+前端        后端        数据库      测试
+部署        决策记录    经验库
 ```
 
 ### When to specify `node_name`
 
-Always set `node_name` + `parent_node` when saving `project`, `feedback`, or `reference` memories
-that clearly belong to a category. Omit for `user` type (global, no tree).
+Always set `node_name` when saving `project`, `feedback`, or `reference` memories that clearly
+belong to a category. `parent_node` is only needed if you add custom child nodes.
+Omit for `user` type (no tree).
 
-| Signal | node_name | parent_node |
-|--------|-----------|-------------|
-| Implementing a backend API | 功能实现 | 后端 |
-| Fixing a frontend bug | 问题记录 | 前端 |
-| Why we chose PostgreSQL | 技术选型 | 决策记录 |
-| DB schema design | 表结构 | 数据库 |
-| A deployment gotcha | 常见坑 | 经验库 |
-| Architecture overview | 架构概览 | 项目概况 |
-| Integration test technique | 测试技巧 | 测试 |
+| Signal | node_name |
+|--------|-----------|
+| Tech stack choice | 技术栈 |
+| Implementing a backend API | 后端 |
+| Frontend bug fix | 前端 |
+| DB schema or query | 数据库 |
+| Architecture or interface design | 设计 |
+| A deployment gotcha | 部署 |
+| Why we made a decision | 决策记录 |
+| Reusable tip or pitfall | 经验库 |
 
 **Save workflow:**
 1. Call `save_memory` → check `action` field in response
