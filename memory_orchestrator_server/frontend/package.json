@@ -12,11 +12,13 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@fontsource/orbitron": "^5.2.8",
     "marked": "^18.0.2",
+    "pinia": "^3.0.4",
     "vue": "^3.5.32",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.6",
-    "vite": "^8.0.9"
+    "vite": "^8.0.9",
+    "vite-svg-loader": "^5.1.1"
   }
 }

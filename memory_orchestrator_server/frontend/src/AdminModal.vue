@@ -3,6 +3,11 @@ import { ref, onMounted } from 'vue'
 import { BASE, apiFetch } from './api.js'
 import enLocale from './locales/en.json'
 import zhLocale from './locales/zh.json'
+import IconLock from './icons/IconLock.svg'
+import IconPlus from './icons/IconPlus.svg'
+import IconClose from './icons/IconClose.svg'
+import IconSync from './icons/IconSync.svg'
+import IconTrash from './icons/IconTrash.svg'
 
 const props = defineProps({
   open: { type: Boolean, required: true },
@@ -120,19 +125,16 @@ defineExpose({ load })
     <div class="modal admin-modal">
       <div class="modal-header">
         <span class="modal-title">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <IconLock width="13" height="13" style="margin-right:6px;vertical-align:-2px" />
           {{ t('API Tokens') }}
         </span>
         <div style="display:flex;align-items:center;gap:8px">
           <button class="btn-new admin-create-toggle" @click="adminCreateOpen = !adminCreateOpen">
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <IconPlus width="11" height="11" />
             {{ t('New') }}
           </button>
           <button class="modal-close" @click="close">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
+            <IconClose width="12" height="12" />
           </button>
         </div>
       </div>
@@ -188,11 +190,11 @@ defineExpose({ load })
               <td class="admin-date">{{ tok.last_used_at ? relTime(tok.last_used_at) : '—' }}</td>
               <td class="admin-actions-cell">
                 <button class="btn-cancel admin-reset" @click="openTokenAction(tok, 'reset')" :title="t('Reset')">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/></svg>
+                  <IconSync width="11" height="11" />
                   {{ t('Reset') }}
                 </button>
                 <button class="btn-token-revoke admin-revoke" @click="openTokenAction(tok, 'revoke')" :title="t('Revoke')">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                  <IconTrash width="11" height="11" />
                   {{ t('Revoke') }}
                 </button>
               </td>
@@ -209,19 +211,12 @@ defineExpose({ load })
       <div class="modal-header">
         <span class="modal-title">{{ tokenActionTarget.action === 'reset' ? t('Reset token') : t('Revoke token') }}</span>
         <button class="modal-close" @click="tokenActionTarget = null">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
+          <IconClose width="12" height="12" />
         </button>
       </div>
       <div class="modal-body delete-modal-body">
-        <svg v-if="tokenActionTarget.action === 'reset'" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon" style="color:var(--accent)">
-          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/>
-        </svg>
-        <svg v-else width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-        </svg>
+        <IconSync v-if="tokenActionTarget.action === 'reset'" width="32" height="32" class="delete-icon" style="color:var(--accent)" />
+        <IconTrash v-else width="32" height="32" class="delete-icon" />
         <p class="delete-confirm-text"><strong>{{ tokenActionTarget.tok.name }}</strong></p>
         <p class="delete-confirm-sub">{{ tokenActionTarget.action === 'reset' ? t('Reset token desc') : t('Revoke token desc') }}</p>
       </div>

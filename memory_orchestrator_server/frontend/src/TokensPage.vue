@@ -1,21 +1,20 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import AppHeader from './AppHeader.vue'
 import { BASE, apiFetch } from './api.js'
-import { useLocale } from './useLocale.js'
+import { useAppStore } from './stores/app.js'
+import IconLock from './icons/IconLock.svg'
+import IconPlus from './icons/IconPlus.svg'
+import IconSync from './icons/IconSync.svg'
+import IconTrash from './icons/IconTrash.svg'
+import IconClose from './icons/IconClose.svg'
 
 const router = useRouter()
-const { lang, t, toggleLang } = useLocale()
-
-// ── Theme ──
-const storedTheme = localStorage.getItem('mo-theme')
-const isDark = ref(storedTheme ? storedTheme === 'dark' : true)
-function toggleTheme() {
-  isDark.value = !isDark.value
-  localStorage.setItem('mo-theme', isDark.value ? 'dark' : 'light')
-  document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
-}
+const appStore = useAppStore()
+const { isDark, lang } = storeToRefs(appStore)
+const { t, toggleTheme, toggleLang } = appStore
 
 function relTime(iso) {
   if (!iso) return '—'
@@ -133,8 +132,7 @@ onMounted(() => { load() })
 
 <template>
   <div class="tp-app">
-    <AppHeader :isDark="isDark" :lang="lang" :loginOpen="false"
-      @toggle-theme="toggleTheme" @toggle-lang="toggleLang"
+    <AppHeader :loginOpen="false"
       @open-settings="router.push('/settings')" @logout="logout">
       <template #nav>
         <router-link to="/memories">← {{ t('Memories') }}</router-link>
@@ -143,11 +141,11 @@ onMounted(() => { load() })
 
     <!-- Toolbar -->
     <div class="toolbar">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <IconLock width="13" height="13" style="flex-shrink:0" />
       <span class="tp-title">{{ t('API Tokens') }}</span>
       <div class="toolbar-spacer" />
       <button class="btn-new" @click="adminCreateOpen = !adminCreateOpen">
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <IconPlus width="11" height="11" />
         {{ t('New') }}
       </button>
     </div>
@@ -211,11 +209,11 @@ onMounted(() => { load() })
             <td class="admin-date">{{ tok.last_used_at ? relTime(tok.last_used_at) : '—' }}</td>
             <td class="admin-actions-cell">
               <button class="btn-cancel admin-reset" @click="openTokenAction(tok, 'reset')" :title="t('Reset')">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/></svg>
+                <IconSync width="11" height="11" />
                 {{ t('Reset') }}
               </button>
               <button class="btn-token-revoke admin-revoke" @click="openTokenAction(tok, 'revoke')" :title="t('Revoke')">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                <IconTrash width="11" height="11" />
                 {{ t('Revoke') }}
               </button>
             </td>
@@ -231,19 +229,12 @@ onMounted(() => { load() })
           <div class="modal-header">
             <span class="modal-title">{{ tokenActionTarget.action === 'reset' ? t('Reset token') : t('Revoke token') }}</span>
             <button class="modal-close" @click="tokenActionTarget = null">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
+              <IconClose width="12" height="12" />
             </button>
           </div>
           <div class="modal-body delete-modal-body">
-            <svg v-if="tokenActionTarget.action === 'reset'" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon" style="color:var(--accent)">
-              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10"/><path d="M20.5 15a9 9 0 0 1-14.9 3.4L1 14"/>
-            </svg>
-            <svg v-else width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="delete-icon">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-            </svg>
+            <IconSync v-if="tokenActionTarget.action === 'reset'" width="32" height="32" class="delete-icon" style="color:var(--accent)" />
+            <IconTrash v-else width="32" height="32" class="delete-icon" />
             <p class="delete-confirm-text"><strong>{{ tokenActionTarget.tok.name }}</strong></p>
             <p class="delete-confirm-sub">{{ tokenActionTarget.action === 'reset' ? t('Reset token desc') : t('Revoke token desc') }}</p>
           </div>

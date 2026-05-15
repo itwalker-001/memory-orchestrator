@@ -1,21 +1,23 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import AppHeader from './AppHeader.vue'
 import { BASE, apiFetch } from './api.js'
-import { useLocale } from './useLocale.js'
+import { useAppStore } from './stores/app.js'
+import IconChevron from './icons/IconChevron.svg'
+import IconCheck from './icons/IconCheck.svg'
+import IconFetchRefresh from './icons/IconFetchRefresh.svg'
+import IconDownload from './icons/IconDownload.svg'
+import IconUpload from './icons/IconUpload.svg'
+import IconClose from './icons/IconClose.svg'
+import IconWarn from './icons/IconWarn.svg'
+import IconCheckLg from './icons/IconCheckLg.svg'
 
 const router = useRouter()
-const { lang, t, toggleLang } = useLocale()
-
-// ── Theme ──
-const storedTheme = localStorage.getItem('mo-theme')
-const isDark = ref(storedTheme ? storedTheme === 'dark' : true)
-function toggleTheme() {
-  isDark.value = !isDark.value
-  localStorage.setItem('mo-theme', isDark.value ? 'dark' : 'light')
-  document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
-}
+const appStore = useAppStore()
+const { isDark, lang } = storeToRefs(appStore)
+const { t, toggleTheme, toggleLang } = appStore
 
 // ── Settings form ──
 const KEY_SENTINEL = '__keep__'
@@ -161,8 +163,7 @@ onMounted(() => { load() })
 
 <template>
   <div class="sp-app">
-    <AppHeader :isDark="isDark" :lang="lang" :loginOpen="false"
-      @toggle-theme="toggleTheme" @toggle-lang="toggleLang"
+    <AppHeader :loginOpen="false"
       @open-settings="() => {}" @logout="logout">
       <template #nav>
         <router-link to="/memories">← {{ t('Memories') }}</router-link>
@@ -197,27 +198,20 @@ onMounted(() => { load() })
                   placeholder="gpt-4o-mini" autocomplete="off"
                   @focus="onModelFocus" @blur="onModelBlur"
                   @input="modelHighlight = -1" @keydown="onModelKeydown" />
-                <svg v-if="availableModels.length" class="combobox-chevron" :class="{open: modelDropOpen}" width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+                <IconChevron v-if="availableModels.length" class="combobox-chevron" :class="{open: modelDropOpen}" width="10" height="10" />
                 <div v-if="modelDropOpen && modelFilteredList.length" class="combobox-dropdown">
                   <div v-for="(m, i) in modelFilteredList" :key="m"
                     :class="['combobox-option', {highlighted: i === modelHighlight, selected: m === form.extraction_model}]"
                     @mousedown.prevent="selectModel(m)">
                     <span class="combobox-check">
-                      <svg v-if="m === form.extraction_model" width="11" height="11" viewBox="0 0 11 11" fill="none">
-                        <path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
+                      <IconCheck v-if="m === form.extraction_model" width="11" height="11" />
                     </span>
                     {{ m }}
                   </div>
                 </div>
               </div>
               <button class="btn-fetch-models" @click.prevent="fetchModels" :disabled="!form.extraction_base_url || isFetchingModels">
-                <svg v-if="!isFetchingModels" width="11" height="11" viewBox="0 0 11 11" fill="none">
-                  <path d="M10 5.5A4.5 4.5 0 1 1 5.5 1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-                  <path d="M7 1h3v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+                <IconFetchRefresh v-if="!isFetchingModels" width="11" height="11" />
                 <svg v-else width="11" height="11" viewBox="0 0 11 11" fill="none" class="spinning">
                   <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 14" stroke-linecap="round"/>
                 </svg>
@@ -267,7 +261,7 @@ onMounted(() => { load() })
               <div class="wb-seg wb-importance" :style="{flex: wf('score_importance_weight', 0.3)}"><span v-if="wf('score_importance_weight', 0.3) >= 0.10">{{ t('Imp.') }}</span></div>
               <div class="wb-seg wb-recency" :style="{flex: wf('score_recency_weight', 0.1)}"><span v-if="wf('score_recency_weight', 0.1) >= 0.07">{{ t('Rec.') }}</span></div>
             </div>
-            <div v-if="!weightSumOk" class="score-warn">⚠ {{ t('Weights should sum to 1.0') }} ({{ t('current') }}: {{ weightSum }})</div>
+            <div v-if="!weightSumOk" class="score-warn"><IconWarn width="12" height="12" /> {{ t('Weights should sum to 1.0') }} ({{ t('current') }}: {{ weightSum }})</div>
           </div>
           <div class="settings-group">
             <div class="settings-group-title">{{ t('Recency Decay') }}</div>
@@ -310,10 +304,7 @@ onMounted(() => { load() })
             <div class="settings-group-title">{{ t('Export') }}</div>
             <p class="backup-desc">{{ t('Download a full SQL backup of the database (pg_dump).') }}</p>
             <button class="btn-save backup-action-btn" @click="exportMemories">
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                <path d="M5.5 1v6.5M2.5 5l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="1.5" y1="9.5" x2="9.5" y2="9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-              </svg>
+              <IconDownload width="11" height="11" />
               {{ t('Download Backup') }}
             </button>
           </div>
@@ -322,10 +313,7 @@ onMounted(() => { load() })
             <p class="backup-desc">{{ t('Upload a .sql file to restore the database. Existing data will be overwritten.') }}</p>
             <input ref="importFileRef" type="file" accept=".sql" style="display:none" @change="onImportFile" />
             <button class="btn-save backup-action-btn" @click="openImport">
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                <path d="M5.5 7.5V1M2.5 4l3-3 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-                <line x1="1.5" y1="9.5" x2="9.5" y2="9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-              </svg>
+              <IconUpload width="11" height="11" />
               {{ t('Select .sql file…') }}
             </button>
           </div>
@@ -351,10 +339,7 @@ onMounted(() => { load() })
           <div class="modal-header">
             <span class="modal-title">{{ t('Import Memories') }}</span>
             <button class="modal-close" @click="importModalOpen = false">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
+              <IconClose width="12" height="12" />
             </button>
           </div>
           <div class="modal-body delete-modal-body">
@@ -366,7 +351,7 @@ onMounted(() => { load() })
               <p class="delete-confirm-text">{{ t('Restoring…') }}</p>
             </template>
             <template v-else-if="importProgress.total === 1">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--green);opacity:0.8"><polyline points="20 6 9 17 4 12"/></svg>
+              <IconCheckLg width="32" height="32" style="color:var(--green);opacity:0.8" />
               <p class="delete-confirm-text">{{ t('Restored ✓') }}</p>
             </template>
             <template v-else-if="importProgress.total === -1">
@@ -407,4 +392,5 @@ onMounted(() => { load() })
   box-shadow: 0 4px 24px var(--shadow);
   overflow: hidden;
 }
+.score-warn { display: flex; align-items: center; gap: 4px; font-size: 10.5px; color: #e05050; font-weight: 500; padding-left: 86px; margin-top: 2px; }
 </style>

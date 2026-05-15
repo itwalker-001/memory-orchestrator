@@ -17,8 +17,7 @@
 
     <template v-if="!loginOpen">
       <AppHeader
-        :isDark="isDark" :lang="lang" :loginOpen="loginOpen"
-        @toggle-theme="isDark = !isDark" @toggle-lang="toggleLang"
+        :loginOpen="loginOpen"
         @open-settings="router.push('/settings')"
         @logout="logout"
       >
@@ -85,7 +84,7 @@
       <div class="modal" style="max-width:380px">
         <div class="modal-header">
           <span class="modal-title">{{ t('New Project') }}</span>
-          <button class="modal-close" @click="newProjectOpen = false">✕</button>
+          <button class="modal-close" @click="newProjectOpen = false"><IconClose width="12" height="12" /></button>
         </div>
         <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
           <input class="sk-input" v-model="newProjectName" :placeholder="t('Project name…')"
@@ -102,7 +101,7 @@
       <div class="write-modal">
         <div class="write-header">
           <span class="write-title">{{ t('Add memory → {name}', { name: selectedNode?.name }) }}</span>
-          <button class="modal-close" @click="addMemoryOpen = false">✕</button>
+          <button class="modal-close" @click="addMemoryOpen = false"><IconClose width="12" height="12" /></button>
         </div>
 
         <!-- Tab strip -->
@@ -185,64 +184,36 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick, provide } from 'vue'
 import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { BASE, apiFetch, apiJSON } from './api.js'
-import { useLocale } from './useLocale.js'
+import { useAppStore } from './stores/app.js'
 import AppHeader from './AppHeader.vue'
 import ProjectIconStrip from './ProjectIconStrip.vue'
+import IconClose from './icons/IconClose.svg'
 import SkeletonTreePanel from './SkeletonTreePanel.vue'
 import NodeDetailPanel from './NodeDetailPanel.vue'
 import ContextMenu from './ContextMenu.vue'
 import MemoryDetailModal from './MemoryDetailModal.vue'
 
 const router = useRouter()
-
-// ── Theme + lang ──────────────────────────────────────────────────────────────
-const isDark = ref(
-  document.documentElement.getAttribute('data-theme') === 'dark' ||
-  (!document.documentElement.getAttribute('data-theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)
-)
-watch(isDark, v => document.documentElement.setAttribute('data-theme', v ? 'dark' : 'light'))
-// Sync initial dark state to data-theme attribute (needed for teleported elements)
-document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
-const { lang, t, toggleLang } = useLocale()
+const appStore = useAppStore()
+const { isDark, lang, loginOpen, loginInput, loginError, loginLoading } = storeToRefs(appStore)
+const { t, toggleTheme, toggleLang } = appStore
 provide('t', t)
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
-const loginOpen = ref(false)
-const loginInput = ref('')
-const loginError = ref('')
-const loginLoading = ref(false)
-
+// ── Auth (delegates to store) ─────────────────────────────────────────────────
 async function submitLogin() {
-  loginLoading.value = true; loginError.value = ''
-  try {
-    const r = await fetch(`${BASE}/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: loginInput.value }),
-    })
-    if (r.status === 401) { loginError.value = 'Invalid token'; return }
-    loginOpen.value = false; loginInput.value = ''
-    await loadProjects()
-  } catch (e) { loginError.value = e.message }
-  finally { loginLoading.value = false }
+  const ok = await appStore.submitLogin(BASE)
+  if (ok) await loadProjects()
 }
 
 async function skipLogin() {
-  loginLoading.value = true
-  try {
-    const r = await fetch(`${BASE}/login`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: '' }),
-    })
-    if (r.status === 401) { loginError.value = 'Server requires a token'; return }
-    loginOpen.value = false
-    await loadProjects()
-  } finally { loginLoading.value = false }
+  const ok = await appStore.skipLogin(BASE)
+  if (ok) await loadProjects()
 }
 
 async function logout() {
-  await fetch(`${BASE}/logout`, { method: 'POST' })
-  loginOpen.value = true
+  await appStore.logout(BASE)
 }
 
 const detailMemory = ref(null)
@@ -502,7 +473,13 @@ onMounted(async () => {
 
 <style scoped>
 .sk-app { width: 100%; min-height: 100vh; background: var(--bg, #fff); color: var(--fg, #1a1a1a); font-family: 'JetBrains Mono', monospace; box-sizing: border-box; text-align: left; }
+.sk-app.dark {
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,212,138,0.009) 2px, rgba(0,212,138,0.009) 3px),
+    #010205;
+}
 .sk-body { display: flex; height: calc(100vh - 41px); overflow: hidden; }
+.dark .sk-body { border-top: 1px solid rgba(0,212,138,0.14); }
 .tree-empty { width: 220px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--fg-muted, #6e7681); font-size: 12px; border-right: 1px solid var(--border, #30363d); }
 /* Login */
 .login-overlay { display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
@@ -550,11 +527,84 @@ onMounted(async () => {
 .select-mem-item.chosen { background: var(--active-bg, #e8f0fe); border-color: var(--accent, #2563eb); }
 .select-mem-name { font-size: 12px; font-weight: 600; color: var(--fg, #1a1a1a); flex-shrink: 0; }
 .select-mem-desc { font-size: 11px; color: var(--fg-muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Dark theme vars */
+/* Dark theme vars — aligned with global [data-theme=dark] sci-fi palette */
 .dark {
-  --bg: #0d1117; --fg: #e6edf3; --fg-muted: #8b949e; --border: #30363d;
-  --hover: #161b22; --active-bg: #1d2d3e; --input-bg: #161b22; --btn-bg: #21262d;
-  --hint-bg: #161b22; --accent: #58a6ff; --tag-bg: #1a3a52; --accent-dim: #1f6feb44;
-  --tooltip-bg: #1c2128;
+  --bg: #080d17; --fg: #C8E8F2; --fg-muted: #3E6878;
+  --border: rgba(0,212,138,0.20);
+  --hover: rgba(0,212,138,0.06); --active-bg: rgba(0,212,138,0.13);
+  --input-bg: #030608; --btn-bg: rgba(0,212,138,0.08);
+  --hint-bg: #030608; --accent: #00D48A;
+  --tag-bg: rgba(0,212,138,0.10); --accent-dim: rgba(0,212,138,0.14);
+  --tooltip-bg: #090e1a;
+}
+
+/* ── Dark sci-fi modal surfaces ── */
+[data-theme=dark] .modal,
+[data-theme=dark] .write-modal {
+  background: var(--surface-2, #050910);
+  border-color: rgba(0,212,138,0.18);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.80), 0 0 0 1px rgba(0,212,138,0.08);
+}
+[data-theme=dark] .modal-header,
+[data-theme=dark] .write-header,
+[data-theme=dark] .modal-tabs,
+[data-theme=dark] .write-footer {
+  border-color: rgba(0,212,138,0.10);
+}
+[data-theme=dark] .write-input {
+  background: var(--surface-1, #030608);
+  border-color: rgba(0,212,138,0.14);
+  color: var(--fg, #C8E8F2);
+}
+[data-theme=dark] .write-input:focus {
+  border-color: rgba(0,212,138,0.45);
+  box-shadow: 0 0 0 2px rgba(0,212,138,0.10);
+  outline: none;
+}
+[data-theme=dark] .modal-tab.active {
+  color: var(--accent, #00D48A);
+  border-bottom-color: var(--accent, #00D48A);
+}
+[data-theme=dark] .select-mem-item:hover {
+  background: rgba(0,212,138,0.06);
+}
+[data-theme=dark] .select-mem-item.chosen {
+  background: rgba(0,212,138,0.10);
+  border-color: rgba(0,212,138,0.35);
+}
+[data-theme=dark] .btn-save {
+  background: rgba(0,212,138,0.16);
+  color: var(--accent, #00D48A);
+  border: 1px solid rgba(0,212,138,0.35);
+}
+[data-theme=dark] .btn-save:hover:not(:disabled) {
+  background: rgba(0,212,138,0.24);
+  border-color: rgba(0,212,138,0.55);
+}
+[data-theme=dark] .btn-cancel {
+  background: transparent;
+  border-color: rgba(0,212,138,0.14);
+  color: var(--fg-muted, #3E6878);
+}
+[data-theme=dark] .btn-cancel:hover {
+  border-color: rgba(0,212,138,0.30);
+  color: var(--fg, #C8E8F2);
+}
+[data-theme=dark] .type-tab.active {
+  background: rgba(0,212,138,0.16);
+  color: var(--accent, #00D48A);
+  border-color: rgba(0,212,138,0.35);
+}
+[data-theme=dark] .sk-prompt-hint-text {
+  background: var(--surface-1, #030608);
+  border-left: 2px solid rgba(0,212,138,0.30);
+  color: var(--fg-muted, #3E6878);
+  border-radius: 0 4px 4px 0;
+  padding: 6px 10px;
+}
+[data-theme=dark] .login-modal {
+  background: var(--surface-2, #050910);
+  border: 1px solid rgba(0,212,138,0.18);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.80);
 }
 </style>

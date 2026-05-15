@@ -11,22 +11,22 @@
         :class="['ctx-item', { disabled: depth >= 2 }]"
         @click="depth < 2 && emit('add-child')"
       >
-        <span class="ctx-icon">➕</span>
+        <span class="ctx-icon"><IconPlus width="12" height="12" /></span>
         {{ t('Add child node') }}
         <span v-if="depth >= 2" class="ctx-dim">{{ t('Max depth reached') }}</span>
       </div>
       <div class="ctx-item" @click="emit('rename')">
-        <span class="ctx-icon">✏️</span>
+        <span class="ctx-icon"><IconEdit width="12" height="12" /></span>
         {{ t('Rename') }}
         <span class="ctx-shortcut">F2</span>
       </div>
       <div class="ctx-item" @click="emit('manage-tags')">
-        <span class="ctx-icon">🏷️</span>
+        <span class="ctx-icon"><IconTag width="12" height="12" /></span>
         {{ t('Manage tags') }}
       </div>
       <div class="ctx-sep"></div>
       <div class="ctx-item danger" @click="emit('delete')">
-        <span class="ctx-icon">🗑</span>
+        <span class="ctx-icon"><IconTrash width="12" height="12" /></span>
         {{ t('Delete node') }}
       </div>
     </div>
@@ -35,6 +35,10 @@
 
 <script setup>
 import { computed, inject } from 'vue'
+import IconPlus from './icons/IconPlus.svg'
+import IconEdit from './icons/IconEdit.svg'
+import IconTag from './icons/IconTag.svg'
+import IconTrash from './icons/IconTrash.svg'
 
 const t = inject('t', k => k)
 
@@ -69,7 +73,7 @@ const menuStyle = computed(() => {
 .ctx-item.disabled { color: var(--fg-muted, #6e7681); cursor: not-allowed; }
 .ctx-item.danger { color: #ff7b72; }
 .ctx-item.danger:hover { background: #ff7b7211; }
-.ctx-icon { width: 16px; text-align: center; font-size: 12px; }
+.ctx-icon { width: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .ctx-shortcut { margin-left: auto; font-size: 9px; color: var(--fg-muted, #6e7681); background: var(--btn-bg, #21262d); padding: 1px 5px; border-radius: 3px; }
 .ctx-dim { margin-left: auto; font-size: 9px; color: var(--fg-muted, #6e7681); }
 .ctx-sep { height: 1px; background: var(--border, #30363d); margin: 3px 6px; }

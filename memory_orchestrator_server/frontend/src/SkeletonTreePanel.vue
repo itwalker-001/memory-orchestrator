@@ -4,7 +4,7 @@
     <div class="tree-header">
       <div class="tree-proj-name">{{ projName }}</div>
       <div class="search-wrap">
-        <span class="search-icon">🔍</span>
+        <IconSearch width="11" height="11" class="search-icon" aria-hidden="true" />
         <input v-model="searchQuery" class="search-input" :placeholder="t('Search nodes…')" />
         <span v-if="searchQuery" class="search-count">{{ t('{n} results', { n: matchCount }) }}</span>
         <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
@@ -32,6 +32,7 @@
 <script setup>
 import { ref, computed, provide, inject } from 'vue'
 import SkNode from './SkNode.vue'
+import IconSearch from './icons/IconSearch.svg'
 
 const t = inject('t', k => k)
 
@@ -119,10 +120,56 @@ function findSiblingsContaining(nodes, id1, id2) {
   background: var(--input-bg, #161b22); border: 1px solid var(--border, #30363d);
   border-radius: 5px; padding: 4px 8px;
 }
-.search-icon { font-size: 10px; color: var(--fg-muted, #6e7681); flex-shrink: 0; }
+.search-icon { color: var(--fg-muted, #6e7681); flex-shrink: 0; display: block; }
 .search-input { background: none; border: none; outline: none; font-size: 11px; color: var(--fg, #c9d1d9); width: 100%; font-family: inherit; }
 .search-count { font-size: 9px; color: var(--fg-muted, #6e7681); flex-shrink: 0; white-space: nowrap; }
 .search-clear { background: none; border: none; color: var(--fg-muted, #6e7681); cursor: pointer; font-size: 13px; padding: 0; line-height: 1; flex-shrink: 0; }
 .tree-scroll { flex: 1; overflow-y: auto; padding: 4px 0; list-style: none; margin: 0; }
 .faded { opacity: 0.35; }
+
+/* ── Dark sci-fi enhancements ── */
+[data-theme=dark] .tree-panel {
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,212,138,0.007) 2px, rgba(0,212,138,0.007) 3px),
+    var(--surface-2, #050910);
+  border-right: 1px solid rgba(0,212,138,0.16);
+  box-shadow: 1px 0 20px -8px rgba(0,212,138,0.14);
+}
+[data-theme=dark] .tree-header {
+  border-bottom-color: rgba(0,212,138,0.14);
+  position: relative;
+  overflow: visible;
+}
+[data-theme=dark] .tree-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0,212,138,0.75), transparent 65%);
+  pointer-events: none;
+}
+[data-theme=dark] .tree-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 50%;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0,212,138,0.40), transparent);
+  animation: mo-pulse-glow 3.2s ease-in-out infinite;
+}
+[data-theme=dark] .tree-proj-name {
+  color: var(--accent, #00D48A);
+  font-family: 'Orbitron', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0,212,138,0.40);
+}
+[data-theme=dark] .search-wrap {
+  border-color: rgba(0,212,138,0.18);
+}
+[data-theme=dark] .search-wrap:focus-within {
+  border-color: rgba(0,212,138,0.50);
+  box-shadow: 0 0 0 2px rgba(0,212,138,0.10);
+}
 </style>

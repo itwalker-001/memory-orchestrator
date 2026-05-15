@@ -2,12 +2,25 @@
 # push.ps1 — pack source into tar, stream to server via plink, then rebuild
 #
 # Usage:
-#   .\scripts\push.ps1               # sync + rebuild (token unchanged)
-#   .\scripts\push.ps1 -NoRebuild    # sync only
-#   .\scripts\push.ps1 -Force        # sync + rebuild base image
-#   .\scripts\push.ps1 -RotateToken  # sync + rebuild + rotate ui_admin token
+#   .\scripts\push.ps1 -Server 172.16.10.123           # sync + rebuild
+#   .\scripts\push.ps1 -Server 172.16.10.123 -NoRebuild
+#   .\scripts\push.ps1 -Server 172.16.10.123 -Force
+#   .\scripts\push.ps1 -Server 172.16.10.123 -RotateToken
+#
+# Credentials can be supplied via parameters or environment variables:
+#   MO_PUSH_USER     (default: root)
+#   MO_PUSH_PASSWORD
 
 param(
+    [Parameter(Mandatory=$true)]
+    [string]$Server,
+
+    [string]$User     = $(if ($env:MO_PUSH_USER)     { $env:MO_PUSH_USER }     else { "root" }),
+    [string]$Password = $(if ($env:MO_PUSH_PASSWORD) { $env:MO_PUSH_PASSWORD } else {
+        Read-Host "Password for ${User}@${Server}"
+    }),
+    [string]$Remote   = "/opt/memory-orchestrator",
+
     [switch]$NoRebuild,
     [switch]$Force,
     [switch]$RotateToken
@@ -15,15 +28,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$TAR    = "$env:SystemRoot\System32\tar.exe"
-$PLINK  = "C:\Program Files\PuTTY\plink.exe"
-$PW     = "6L2inux~"
-$SRV    = "172.16.10.124"
-$RUSER  = "root"
-$REMOTE = "/opt/memory-orchestrator"
-$LOCAL  = Split-Path $PSScriptRoot -Parent
+$TAR   = "$env:SystemRoot\System32\tar.exe"
+$PLINK = "C:\Program Files\PuTTY\plink.exe"
+$LOCAL = Split-Path $PSScriptRoot -Parent
 
-Write-Host "=== Syncing source to ${RUSER}@${SRV}:${REMOTE} ==="
+Write-Host "=== Syncing source to ${User}@${Server}:${Remote} ==="
 
 $tmpTar = [System.IO.Path]::Combine(
     [System.IO.Path]::GetTempPath(),
@@ -49,9 +58,8 @@ try {
     $sizeMB = [math]::Round((Get-Item $tmpTar).Length / 1MB, 2)
     Write-Host "  Uploading ${sizeMB} MB..."
 
-    # Write a temp bat to avoid cmd quoting issues with paths containing spaces
     $bat = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "mo-push-$(Get-Random).bat")
-    "@echo off`n`"$PLINK`" -batch -pw $PW ${RUSER}@${SRV} `"tar -xf - -C $REMOTE`" < `"$tmpTar`"" |
+    "@echo off`n`"$PLINK`" -batch -pw $Password ${User}@${Server} `"tar -xf - -C $Remote`" < `"$tmpTar`"" |
         Out-File $bat -Encoding ASCII
     try {
         cmd /c $bat
@@ -67,17 +75,22 @@ try {
 Write-Host ""
 Write-Host "=== Sync complete ==="
 
+# Fix CRLF on all uploaded .sh files
+Write-Host "  Fixing line endings on remote .sh files..."
+& $PLINK -pw $Password -batch "${User}@${Server}" `
+    "find $Remote/scripts -name '*.sh' -exec sed -i 's/\r//' {} \; && chmod +x $Remote/scripts/*.sh"
+
 if ($NoRebuild) {
     Write-Host "Skipping rebuild (-NoRebuild)."
     exit 0
 }
 
 $buildArgs = [System.Collections.Generic.List[string]]::new()
-if ($Force)       { $buildArgs.Add("--force") }
+if ($Force)          { $buildArgs.Add("--force") }
 if (-not $RotateToken) { $buildArgs.Add("--skip-token") }
 $buildArgsStr = if ($buildArgs.Count -gt 0) { " " + ($buildArgs -join " ") } else { "" }
 
 Write-Host ""
 Write-Host "=== Rebuilding on server ==="
-& $PLINK -pw $PW -batch "${RUSER}@${SRV}" `
-    "chmod +x $REMOTE/scripts/build.sh && cd $REMOTE && ./scripts/build.sh$buildArgsStr"
+& $PLINK -pw $Password -batch "${User}@${Server}" `
+    "cd $Remote && ./scripts/build.sh$buildArgsStr"

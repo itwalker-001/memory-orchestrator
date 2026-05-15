@@ -291,35 +291,79 @@ code {
   }
 }
 
-/* Knowledge Tree UI — dark theme CSS vars (used by SkeletonPage and sub-components) */
+/* ── Dark mode OLED base ── */
+[data-theme=dark] body {
+  background: #010205;
+}
+[data-theme=dark] #app {
+  background: #010205;
+}
+
+/* ── Knowledge Tree shared vars (SkeletonPage + sub-components) ── */
 [data-theme=dark] {
-  --hover: #161b22;
-  --active-bg: #1d2d3e;
-  --input-bg: #161b22;
-  --btn-bg: #21262d;
-  --hint-bg: #161b22;
-  --accent: #58a6ff;
-  --tag-bg: #1a3a52;
-  --accent-dim: #1f6feb44;
-  --tooltip-bg: #1c2128;
-  --fg: #e6edf3;
-  --fg-muted: #8b949e;
-  --border: #30363d;
-  --strip-bg: #010409;
+  /* surface ladder (Linear-inspired depth hierarchy) */
+  --surface-0:  #010205;
+  --surface-1:  #030608;
+  --surface-2:  #050910;
+  --surface-3:  #080d17;
+  --surface-card: #0c1120;
+  /* legacy surface aliases */
+  --hover:      rgba(0,212,138,0.06);
+  --active-bg:  rgba(0,212,138,0.13);
+  --input-bg:   #070c18;
+  --btn-bg:     rgba(0,212,138,0.08);
+  --hint-bg:    #070c18;
+  --tooltip-bg: #090e1a;
+  --strip-bg:   var(--surface-1);
+  /* colour */
+  --accent:     #00D48A;
+  --accent-dim: rgba(0,212,138,0.14);
+  --tag-bg:     rgba(0,212,138,0.10);
+  /* text */
+  --fg:         #C8E8F2;
+  --fg-muted:   #3E6878;
+  /* borders */
+  --border:     rgba(0,212,138,0.20);
 }
 
 [data-theme=light] {
-  --hover: #f0f0f0;
-  --active-bg: #e8f0fe;
-  --input-bg: #f8f9fa;
-  --btn-bg: #e9ecef;
-  --hint-bg: #f8f9fa;
-  --accent: #2563eb;
-  --tag-bg: #dbeafe;
-  --accent-dim: #93c5fd44;
+  --hover:      #f0f4f8;
+  --active-bg:  #dff0ff;
+  --input-bg:   #f8fafc;
+  --btn-bg:     #edf2f7;
+  --hint-bg:    #f8fafc;
   --tooltip-bg: #ffffff;
-  --fg: #1a1a1a;
-  --fg-muted: #6b7280;
-  --border: #e5e7eb;
-  --strip-bg: #f3f4f6;
+  --strip-bg:   #f1f5f9;
+  --accent:     #006AFF;
+  --accent-dim: rgba(0,106,255,0.10);
+  --tag-bg:     rgba(0,106,255,0.08);
+  --fg:         #0E1C28;
+  --fg-muted:   #5E7888;
+  --border:     #A8C0D4;
+}
+
+/* ── Dark mode sci-fi enhancements ── */
+[data-theme=dark] {
+  /* glow utilities used by tree + node panels */
+  --glow-accent: 0 0 8px rgba(0,212,138,0.40);
+  --glow-blue:   0 0 8px rgba(0,200,245,0.35);
+  --glow-purple: 0 0 8px rgba(176,144,248,0.35);
+}
+
+/* Keyframes shared across all components */
+@keyframes mo-pulse-glow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+@keyframes mo-scan {
+  from { background-position: 0 0; }
+  to   { background-position: 0 100vh; }
+}
+@keyframes mo-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

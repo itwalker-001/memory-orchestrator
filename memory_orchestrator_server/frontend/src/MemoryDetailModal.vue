@@ -1,14 +1,16 @@
 <script setup>
 import { ref } from 'vue'
 import { marked } from 'marked'
-import { useLocale } from './useLocale.js'
+import { useAppStore } from './stores/app.js'
+import IconEdit from './icons/IconEdit.svg'
+import IconClose from './icons/IconClose.svg'
 
 const props = defineProps({
   memory: { type: Object, default: null },
 })
 const emit = defineEmits(['close', 'edit'])
 
-const { t } = useLocale()
+const { t } = useAppStore()
 
 marked.setOptions({ breaks: true, gfm: true })
 function md(text) {
@@ -58,15 +60,10 @@ function fmtDateTime(iso) {
           </div>
           <div class="write-header-right">
             <button class="btn-header-edit" @click="emit('edit', memory)" :title="t('Edit')">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-              </svg>
+              <IconEdit width="13" height="13" />
             </button>
             <button class="modal-close" @click="emit('close')">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                <line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-              </svg>
+              <IconClose width="12" height="12" />
             </button>
           </div>
         </div>

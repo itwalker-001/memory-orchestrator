@@ -21,7 +21,9 @@
         <span v-if="node.children?.length">{{ expanded ? '▼' : '▶' }}</span>
         <span v-else style="opacity:0">▶</span>
       </span>
-      <span class="sk-emoji">{{ nodeEmoji }}</span>
+      <span class="sk-icon">
+        <component :is="nodeIcon" width="13" height="13" />
+      </span>
       <div class="sk-node-body">
         <div class="sk-node-name-row">
           <span v-if="!editing" class="sk-node-name">{{ node.name }}</span>
@@ -42,14 +44,17 @@
     <!-- Tooltip via Teleport -->
     <Teleport to="body">
       <div v-if="showTooltip" class="sk-tooltip" :style="tooltipStyle">
-        <div class="sk-tooltip-name">{{ nodeEmoji }} {{ node.name }}</div>
+        <div class="sk-tooltip-name">
+          <component :is="nodeIcon" width="12" height="12" class="sk-tooltip-icon" />
+          {{ node.name }}
+        </div>
         <div v-if="node.prompt_hint" class="sk-tooltip-hint">{{ node.prompt_hint.slice(0, 80) }}</div>
         <div class="sk-tooltip-stats">
           <span>{{ t('Memories') }}: {{ memCount }}</span>
           <span>{{ t('Child nodes') }}: {{ node.children?.length || 0 }}</span>
         </div>
         <div v-if="node.tags?.length" class="sk-tooltip-tags">
-          <span v-for="t in node.tags" :key="t" class="sk-tooltip-tag">{{ t }}</span>
+          <span v-for="tag in node.tags" :key="tag" class="sk-tooltip-tag">{{ tag }}</span>
         </div>
       </div>
     </Teleport>
@@ -74,6 +79,7 @@
 
 <script setup>
 import { ref, computed, nextTick, inject } from 'vue'
+import { NODE_ICON_MAP, DEFAULT_NODE_ICON } from './icons/nodeIcons.js'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -87,13 +93,8 @@ const emit = defineEmits(['select', 'patch', 'delete', 'context-menu', 'reorder'
 const expanded = ref(true)
 function toggleExpand() { expanded.value = !expanded.value }
 
-// ── Emoji map ────────────────────────────────────────────────────────────────
-const EMOJI_MAP = {
-  '项目概况': '📌', '需求': '📋', '设计': '🎨', '技术栈': '🔧',
-  '前端': '💻', '后端': '🔩', '数据库': '💾', '测试': '🧪',
-  '部署': '🚀', '决策记录': '📝', '经验库': '💡',
-}
-const nodeEmoji = computed(() => EMOJI_MAP[props.node.name] || '📄')
+// ── Node icon ────────────────────────────────────────────────────────────────
+const nodeIcon = computed(() => NODE_ICON_MAP[props.node.name] || DEFAULT_NODE_ICON)
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const t = inject('t', k => k)
@@ -199,7 +200,8 @@ function onDragEnd() {
 .sk-node-row.drop-below { border-bottom-color: var(--accent, #58a6ff); }
 .sk-drag-handle { color: var(--fg-muted, #6e7681); font-size: 10px; cursor: grab; flex-shrink: 0; }
 .sk-chevron { font-size: 8px; color: var(--fg-muted, #6e7681); width: 12px; text-align: center; flex-shrink: 0; }
-.sk-emoji { font-size: 13px; flex-shrink: 0; width: 16px; text-align: center; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.sk-icon { flex-shrink: 0; width: 16px; display: flex; align-items: center; justify-content: center; color: var(--fg-muted, #6e7681); }
+.sk-node-row.active .sk-icon { color: var(--accent, #58a6ff); }
 .sk-node-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .sk-node-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .sk-node-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg, #c9d1d9); }
@@ -212,9 +214,29 @@ function onDragEnd() {
   border-radius: 8px; padding: 10px 12px; max-width: 240px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.5); pointer-events: none;
 }
-.sk-tooltip-name { font-size: 12px; font-weight: 700; color: var(--fg, #e6edf3); margin-bottom: 4px; }
+.sk-tooltip-name { font-size: 12px; font-weight: 700; color: var(--fg, #e6edf3); margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+.sk-tooltip-icon { color: var(--accent, #58a6ff); flex-shrink: 0; }
 .sk-tooltip-hint { font-size: 10px; color: var(--fg-muted, #8b949e); margin-bottom: 6px; font-style: italic; line-height: 1.5; }
 .sk-tooltip-stats { display: flex; gap: 12px; font-size: 10px; color: var(--fg-muted, #6e7681); margin-bottom: 4px; }
 .sk-tooltip-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .sk-tooltip-tag { font-size: 9px; background: var(--tag-bg, #1a3a52); color: var(--accent, #58a6ff); border-radius: 3px; padding: 1px 4px; }
+
+/* Dark sci-fi enhancements */
+[data-theme=dark] .sk-node-row.active {
+  box-shadow: inset 2px 0 0 var(--accent, #00D48A), inset 0 0 16px -8px rgba(0,212,138,0.15);
+}
+[data-theme=dark] .sk-node-row.active .sk-node-name {
+  text-shadow: 0 0 8px rgba(0,212,138,0.40);
+}
+[data-theme=dark] .sk-node-row.active .sk-icon { color: var(--accent, #00D48A); }
+[data-theme=dark] .sk-node-row:hover { box-shadow: inset 2px 0 0 rgba(0,212,138,0.35); }
+[data-theme=dark] .sk-tooltip {
+  border-color: rgba(0,212,138,0.24);
+  background: rgba(6,10,20,0.96);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,212,138,0.10);
+}
+[data-theme=dark] .sk-node-edit-input {
+  border-color: rgba(0,212,138,0.50);
+  box-shadow: 0 0 0 2px rgba(0,212,138,0.12);
+}
 </style>
