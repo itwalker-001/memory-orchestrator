@@ -177,7 +177,7 @@ why          optional — reason behind rule/decision (feedback/project)
 how_to_apply optional — when this memory kicks in
 importance   integer 1–5 only, default 3 (out-of-range rejected)
 replace_id   UUID of memory to supersede (soft-deletes old, saves new)
-project_id   omit = auto; "global" = 00000000-...; slug = specific project
+project_id   omit = current project; slug = specific project
 node_name    optional — skeleton leaf node name, e.g. "功能实现"
 parent_node  optional — parent node name, e.g. "后端" (disambiguates node_name)
 ```
@@ -260,9 +260,8 @@ Prefer soft delete unless memory is wrong or sensitive.
 ```
 id           (required) UUID
 importance   1–5
-make_global  true = moves memory to global project (UUID 00000000-...)
 ```
-Use when a project memory turns out to apply everywhere.
+Use to boost the importance of a memory.
 
 ### ingest_session
 ```
@@ -297,7 +296,7 @@ Valid range: **1–5 only** (integers). Values outside this range are rejected b
 ## project_id Scoping
 
 ```
-omit           → current project + global (00000000-...) ← default for most saves
+omit           → current project ← default for most saves
 "all"          → search across every project (read-only, for broad lookup)
 specific slug  → pin to exact project (use for cross-project references)
 ```

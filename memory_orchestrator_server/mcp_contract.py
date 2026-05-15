@@ -36,8 +36,8 @@ TOOLS: list[Tool] = [
          inputSchema={"type": "object", "properties": {"project_id": {"type": "string"}, "type": {"type": "string"}, "limit": {"type": "integer", "default": 50}}}),
     Tool(name="delete_memory", description="Soft or hard delete a memory.",
          inputSchema={"type": "object", "properties": {"id": {"type": "string"}, "hard": {"type": "boolean"}}, "required": ["id"]}),
-    Tool(name="promote_memory", description="Change importance or scope.",
-         inputSchema={"type": "object", "properties": {"id": {"type": "string"}, "importance": {"type": "integer"}, "make_global": {"type": "boolean"}}, "required": ["id"]}),
+    Tool(name="promote_memory", description="Change memory importance.",
+         inputSchema={"type": "object", "properties": {"id": {"type": "string"}, "importance": {"type": "integer"}}, "required": ["id"]}),
     Tool(name="ingest_session", description="Ingest transcript for auto extraction.",
          inputSchema={"type": "object", "properties": {"session_id": {"type": "string"}, "project_id": {"type": "string"}, "transcript_path": {"type": "string"}}, "required": ["session_id", "transcript_path"]}),
 ]

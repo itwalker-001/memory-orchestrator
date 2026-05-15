@@ -2,7 +2,7 @@ import uuid as _uuid
 import pytest
 from sqlalchemy import select
 from unittest.mock import AsyncMock, patch
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID, Memory
+from memory_orchestrator_server.models import Memory
 from memory_orchestrator_server.mcp_core import (
     handle_delete_memory,
     handle_list_memories,
@@ -223,22 +223,6 @@ async def test_promote_memory_importance(session):
     row = await session.execute(select(Memory).where(Memory.id == _uuid.UUID(saved["id"])))
     assert row.scalar_one().importance == 5
 
-
-@pytest.mark.asyncio
-async def test_promote_memory_make_global(session):
-    repo = MemoryRepository(session)
-    project_uuid = await repo.ensure_project("github.com/a/promote-global")
-    await repo.ensure_project("*")  # create global project row (FK target)
-    with patch(PATCH, new=AsyncMock(return_value=FAKE_EMB)):
-        saved = await handle_save_memory(
-            session=session, project_uuid=project_uuid,
-            args={"type": "project", "name": "proj-mem", "description": "d", "content": "c"},
-        )
-    result = await handle_promote_memory(session=session, args={"id": saved["id"], "make_global": True})
-    assert result["updated"] is True
-    assert "project_id" in result["changes"]
-    row = await session.execute(select(Memory).where(Memory.id == _uuid.UUID(saved["id"])))
-    assert row.scalar_one().project_id == GLOBAL_PROJECT_ID
 
 
 # ── resources ─────────────────────────────────────────────────────────────────
