@@ -13,4 +13,26 @@ tmp_pytest/
 .worktrees/
 
 # Per-project MCP secrets (contains project token — do not commit)
-.mcp.json                        # written by setup for both Claude and Codex
+# written by mo-mcp setup for both Claude and Codex
+.mcp.json
+
+# Claude Code local config
+.claude/
+
+# Python build artifacts
+*.egg-info/
+
+# Environment secrets
+.env
+
+# IDE
+.vscode/
+
+# ML models (downloaded at runtime, too large to commit)
+memory_orchestrator_server/models/
+
+# Runtime logs
+memory_orchestrator_server/logs/
+
+# Vite cache
+memory_orchestrator_server/frontend/.vite/
