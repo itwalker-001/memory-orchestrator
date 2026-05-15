@@ -1,43 +1,63 @@
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: ${MO_DB_IMAGE}
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+      args:
+        SOCKS5_PROXY: ${SOCKS5_PROXY}
+    container_name: memory-orchestrator-db
+    hostname: memory-orchestrator-db
     environment:
-      POSTGRES_DB: memory_orchestrator
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${MO_DB_PASSWORD:-mo_secret}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MO_DB_PASSWORD}
+    ports:
+      - "${MO_DB_HOST_PORT}:${MO_DB_PORT}"
+    command: >
+      postgres
+      -c shared_preload_libraries=age,vector
+      -c search_path=ag_catalog,"$$user",public
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ${MO_PGDATA}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  migrate:
-    build: .
-    command: >
-      sh -c "alembic upgrade head"
+  server:
+    image: memory-orchestrator-server:latest
+    container_name: memory-orchestrator-server
+    hostname: memory-orchestrator-server
+    build:
+      context: ./memory_orchestrator_server
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${MO_BASE_IMAGE}
+        TORCH_INDEX: ${TORCH_INDEX}
+    ports:
+      - "${MO_HTTP_PORT}:8765"
     environment:
-      MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
+      MO_DB_DSN: postgresql+asyncpg://${POSTGRES_USER}:${MO_DB_PASSWORD}@${MO_DB_HOST}:${MO_DB_PORT}/${POSTGRES_DB}
+      MO_HTTP_HOST: ${MO_HTTP_HOST}
+      MO_HTTP_PORT: ${MO_HTTP_PORT}
+      MO_EMBED_MODEL: ${MO_EMBED_MODEL}
+      MO_EMBED_DIM: ${MO_EMBED_DIM}
+      MO_RERANK_MODEL: ${MO_RERANK_MODEL}
+      MO_LOG_LEVEL: ${MO_LOG_LEVEL}
+      MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL}
+      MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL}
+      MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY}
+    volumes:
+      - ${MO_MODELS_DIR}:/app/memory_orchestrator_server/models
     depends_on:
       db:
         condition: service_healthy
-
-  api:
-    build: .
-    ports:
-      - "${MO_HTTP_PORT:-8765}:8765"
-    environment:
-      MO_DB_DSN: postgresql+asyncpg://postgres:${MO_DB_PASSWORD:-mo_secret}@db:5432/memory_orchestrator
-      MO_HTTP_PORT: "8765"
-      MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL:-}
-      MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL:-gpt-4o-mini}
-      MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY:-}
-      HF_HUB_OFFLINE: "1"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${MO_HTTP_PORT}/healthz')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 45
+      start_period: 30s
     restart: unless-stopped
-
-volumes:
-  pgdata:

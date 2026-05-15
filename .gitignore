@@ -1,11 +1,16 @@
-.venv/
+# Python generated files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-dist/
-build/
-*.egg-info/
-.env
-.env.local
+.coverage
+htmlcov/
+tmp_pytest/
+
+# Git worktrees
+.worktrees/
+
+# Per-project MCP secrets (contains project token — do not commit)
+.mcp.json                        # written by setup for both Claude and Codex
