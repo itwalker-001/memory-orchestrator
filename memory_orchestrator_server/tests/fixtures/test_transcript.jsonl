@@ -1,0 +1,6 @@
+{"role": "user", "content": "我们这个项目用 PostgreSQL 16 作为主数据库，pgvector 做向量存储，Apache AGE 做图谱。端口是 5433。"}
+{"role": "assistant", "content": "好的，我已记录技术选型。PostgreSQL 16 + pgvector + AGE，端口 5433。"}
+{"role": "user", "content": "对，还有一点：不要在测试里 mock 数据库，我们上季度因为 mock 和真实 DB 行为不一致导致一个迁移 bug 漏到生产，所以所有集成测试必须打真实数据库。"}
+{"role": "assistant", "content": "明白，集成测试不 mock DB，必须连接真实数据库。已记录这个规范。"}
+{"role": "user", "content": "另外我的角色是后端工程师，Python 是主力语言，Go 也很熟悉，但前端 Vue 不太会，需要你解释多一点。"}
+{"role": "assistant", "content": "了解，我会在涉及 Vue 前端时多加解释。"}
