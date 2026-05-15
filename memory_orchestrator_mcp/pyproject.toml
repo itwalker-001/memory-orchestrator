@@ -1,6 +1,6 @@
 [project]
 name = "memory-orchestrator-mcp"
-version = "0.1.0"
+version = "1.0.0"
 description = "Memory Orchestrator MCP client: hooks, client rules, agents, skills"
 requires-python = ">=3.11"
 dependencies = [
@@ -8,6 +8,10 @@ dependencies = [
     "httpx>=0.27",
     "mcp>=1.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/itwalker-001/memory-orchestrator"
+Repository = "https://github.com/itwalker-001/memory-orchestrator"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -17,7 +21,7 @@ build-backend = "setuptools.build_meta"
 mo-mcp = "memory_orchestrator_mcp.cli:main"
 
 [tool.setuptools.packages.find]
-where = [".."]
+where = ["."]
 include = ["memory_orchestrator_mcp*"]
 exclude = ["memory_orchestrator_mcp.tests*"]
 
