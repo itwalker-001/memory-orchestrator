@@ -917,6 +917,7 @@ async function submitLogin() {
     loginOpen.value = false
     loginInput.value = ''
     projects.value = await apiFetch(`${BASE}/projects`).then(r => r.json())
+    autoSelectProject()
     await load()
   } catch (e) {
     loginError.value = e.message
@@ -940,6 +941,7 @@ async function skipLogin() {
     }
     loginOpen.value = false
     projects.value = await apiFetch(`${BASE}/projects`).then(r => r.json())
+    autoSelectProject()
     await load()
   } catch (e) {
     loginError.value = e.message
@@ -965,6 +967,12 @@ const projectSlugMap = computed(() => Object.fromEntries(projects.value.map(p =>
 const memories = ref([])
 const stats = ref(null)
 const selectedProject = ref('')
+
+function autoSelectProject() {
+  if (!selectedProject.value && projects.value.length > 0) {
+    selectedProject.value = projects.value[0].slug
+  }
+}
 const selectedType = ref('')
 const searchText = ref('')
 const detailTarget = ref(null)
@@ -1621,6 +1629,7 @@ onMounted(async () => {
     return
   }
   projects.value = await projRes.json()
+  autoSelectProject()
   await load()
 })
 </script>
