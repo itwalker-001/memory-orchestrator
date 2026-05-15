@@ -39,6 +39,23 @@ the `Stop` hook extracts and persists new memories when the session ends.
 → Server installation detail: [`memory_orchestrator_server/README.md`](memory_orchestrator_server/README.md)
 → Client wiring detail: [`memory_orchestrator_mcp/README.md`](memory_orchestrator_mcp/README.md)
 
+## Install the MCP client
+
+**Option A — from the GitHub release (wheel):**
+
+```bash
+uv tool install memory_orchestrator_mcp-1.0.0-py3-none-any.whl
+```
+
+**Option B — from source:**
+
+```bash
+cd memory_orchestrator_mcp
+uv sync
+```
+
+After either option, `mo-mcp` is available directly on your PATH.
+
 ## Client setup
 
 `mo-mcp setup` writes `.mcp.json` and project-level hooks into the current directory.
