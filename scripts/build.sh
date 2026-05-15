@@ -8,12 +8,16 @@ server_root="$repo_root/memory_orchestrator_server"
 image="memory-orchestrator-server-base"
 db_image="memory-orchestrator-db"
 force=0
+skip_token=0
 admin_token_name="${MO_ADMIN_TOKEN_NAME:-bootstrap-admin}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --force)
       force=1
+      ;;
+    --skip-token)
+      skip_token=1
       ;;
     --image)
       shift
@@ -32,9 +36,10 @@ while [ "$#" -gt 0 ]; do
       admin_token_name="$1"
       ;;
     *)
-      echo "usage: $0 [--force] [--image IMAGE] [--admin-token-name NAME]" >&2
-      echo "  (no flags)  rebuild app image using cached base; always recompiles server code" >&2
-      echo "  --force     also rebuild base image (heavy: Python deps + ML models)" >&2
+      echo "usage: $0 [--force] [--skip-token] [--image IMAGE] [--admin-token-name NAME]" >&2
+      echo "  (no flags)   rebuild app image using cached base; always recompiles server code" >&2
+      echo "  --force      also rebuild base image (heavy: Python deps + ML models)" >&2
+      echo "  --skip-token skip ui_admin token creation/rotation" >&2
       exit 2
       ;;
   esac
@@ -187,12 +192,15 @@ echo "Running database migrations..."
 # 6. Wait for server healthy
 wait_healthy memory-orchestrator-server 450 2 "Service" || "$compose_cmd" ps
 
-token_output="$(
-  "$compose_cmd" exec -T server \
-    mo-server token create --kind ui_admin --name "$admin_token_name"
-)"
-
-echo
-echo "ADMIN TOKEN"
-echo "==========="
-echo "$token_output"
+if [ "$skip_token" -eq 1 ]; then
+  echo "Skipping token creation (--skip-token)."
+else
+  token_output="$(
+    "$compose_cmd" exec -T server \
+      mo-server token create --kind ui_admin --name "$admin_token_name"
+  )"
+  echo
+  echo "ADMIN TOKEN"
+  echo "==========="
+  echo "$token_output"
+fi
