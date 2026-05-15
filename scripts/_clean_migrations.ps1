@@ -1,0 +1,5 @@
+$plink = "C:\Program Files\PuTTY\plink.exe"
+$pw = "6L2inux~"
+$srv = "root@172.16.10.124"
+& $plink -pw $pw -batch $srv "ls /opt/memory-orchestrator/memory_orchestrator_server/alembic/versions/"
+& $plink -pw $pw -batch $srv "cd /opt/memory-orchestrator/memory_orchestrator_server/alembic/versions && ls 0*.py | grep -v '^0001_' | xargs rm -f && ls"

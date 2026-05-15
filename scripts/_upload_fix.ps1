@@ -1,0 +1,6 @@
+$pscp = "C:\Program Files\PuTTY\pscp.exe"
+$plink = "C:\Program Files\PuTTY\plink.exe"
+$pw = "6L2inux~"
+$srv = "root@172.16.10.124"
+& $pscp -pw $pw -batch "D:\AIPROJECT\memory-orchestrator\scripts\_fix_crlf.sh" "${srv}:/tmp/_fix_crlf.sh"
+& $plink -pw $pw -batch $srv "sh /tmp/_fix_crlf.sh"
