@@ -248,8 +248,10 @@ async function logout() {
 const detailMemory = ref(null)
 
 // ── Projects ──────────────────────────────────────────────────────────────────
+const LS_PROJECT_KEY = 'mo_selected_project'
 const projects = ref([])
 const selectedProject = ref(null)
+watch(selectedProject, p => { if (p) localStorage.setItem(LS_PROJECT_KEY, p.slug) })
 
 async function loadProjects() {
   try {
@@ -490,7 +492,11 @@ onMounted(async () => {
   const r = await apiFetch(`${BASE}/projects`)
   if (r.status === 401) { loginOpen.value = true; return }
   projects.value = await r.json()
-  if (projects.value.length > 0) await selectProject(projects.value[0])
+  if (projects.value.length > 0) {
+    const saved = localStorage.getItem(LS_PROJECT_KEY)
+    const match = saved && projects.value.find(p => p.slug === saved)
+    await selectProject(match || projects.value[0])
+  }
 })
 </script>
 
