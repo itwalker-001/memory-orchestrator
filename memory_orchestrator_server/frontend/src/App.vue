@@ -917,6 +917,7 @@ async function submitLogin() {
     loginOpen.value = false
     loginInput.value = ''
     projects.value = await apiFetch(`${BASE}/projects`).then(r => r.json())
+    autoSelectProject()
     await load()
   } catch (e) {
     loginError.value = e.message
@@ -940,6 +941,7 @@ async function skipLogin() {
     }
     loginOpen.value = false
     projects.value = await apiFetch(`${BASE}/projects`).then(r => r.json())
+    autoSelectProject()
     await load()
   } catch (e) {
     loginError.value = e.message
@@ -964,7 +966,19 @@ const projectMap = computed(() => Object.fromEntries(projects.value.map(p => [p.
 const projectSlugMap = computed(() => Object.fromEntries(projects.value.map(p => [p.slug, p.display_name || p.slug])))
 const memories = ref([])
 const stats = ref(null)
-const selectedProject = ref('')
+const LS_PROJECT_KEY = 'mo_selected_project'
+const selectedProject = ref(localStorage.getItem(LS_PROJECT_KEY) || '')
+watch(selectedProject, v => localStorage.setItem(LS_PROJECT_KEY, v))
+
+function autoSelectProject() {
+  const saved = localStorage.getItem(LS_PROJECT_KEY)
+  const slugs = projects.value.map(p => p.slug)
+  if (saved && slugs.includes(saved)) {
+    selectedProject.value = saved
+  } else if (projects.value.length > 0) {
+    selectedProject.value = projects.value[0].slug
+  }
+}
 const selectedType = ref('')
 const searchText = ref('')
 const detailTarget = ref(null)
@@ -1621,6 +1635,7 @@ onMounted(async () => {
     return
   }
   projects.value = await projRes.json()
+  autoSelectProject()
   await load()
 })
 </script>
