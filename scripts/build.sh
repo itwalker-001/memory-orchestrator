@@ -115,6 +115,7 @@ if [ ! -d "$models_dir/BAAI/bge-m3" ]; then
   echo "Models not found, downloading via base image..."
   docker run --rm \
     -v "$models_dir:/app/memory_orchestrator_server/models" \
+    -v "$server_root/download_models.py:/app/memory_orchestrator_server/download_models.py:ro" \
     "${tag}" \
     python /app/memory_orchestrator_server/download_models.py
   echo "Models downloaded to $models_dir"
