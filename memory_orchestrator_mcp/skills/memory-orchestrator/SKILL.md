@@ -275,20 +275,38 @@ Each project has a flat skeleton tree. Specify `node_name` to file the memory in
 
 ### When to specify `node_name`
 
-Always set `node_name` when saving `project`, `feedback`, or `reference` memories that clearly
-belong to a category. `parent_node` is only needed if you add custom child nodes.
-Omit for `user` type (no tree).
+Always set `node_name` (+ `parent_node` for L2/L3 nodes) when saving `project`, `feedback`, or
+`reference` memories. Omit for `user` type (no tree).
 
-| Signal | node_name |
-|--------|-----------|
-| Tech stack choice | 技术栈 |
-| Implementing a backend API | 后端 |
-| Frontend bug fix | 前端 |
-| DB schema or query | 数据库 |
-| Architecture or interface design | 设计 |
-| A deployment gotcha | 部署 |
-| Why we made a decision | 决策记录 |
-| Reusable tip or pitfall | 经验库 |
+| Signal | node_name | parent_node |
+|--------|-----------|-------------|
+| Project overview / goals | 项目概况 | _(omit)_ |
+| Project description detail | 项目说明 | 项目概况 |
+| Architecture diagram | 架构概览 | 项目概况 |
+| External service dependencies | 外部依赖 | 项目概况 |
+| Requirements / user stories | 需求 | _(omit)_ |
+| Requirement breakdown | 需求拆解 | 需求 |
+| Interface or data model design | 设计 | _(omit)_ |
+| API interface spec | 接口设计 | 设计 |
+| Frontend framework or build tool | 前端技术栈 | 技术栈 |
+| Specific frontend lib (e.g. Vue) | 框架 | 前端技术栈 |
+| Backend framework or ORM | 后端技术栈 | 技术栈 |
+| Database / cache choice | 数据存储 | 技术栈 |
+| Infra / queue / monitoring | 基础设施 | 技术栈 |
+| Frontend feature implementation | 功能实现 | 前端 |
+| Frontend bug | 问题记录 | 前端 |
+| Backend feature implementation | 功能实现 | 后端 |
+| Backend bug or incident | 问题记录 | 后端 |
+| DB table design | 表结构 | 数据库 |
+| Slow query / index tuning | SQL优化 | 数据库 |
+| Unit test design | 单元测试 | 测试 |
+| Test technique or tool tip | 测试技巧 | 测试 |
+| Deployment config | 环境配置 | 部署 |
+| Docker / compose setup | Docker部署 | 部署 |
+| Why we chose technology X | 技术选型 | 决策记录 |
+| Architecture tradeoff | 架构决策 | 决策记录 |
+| Debugging tip or common pitfall | 常见坑 | 经验库 |
+| Dev efficiency tip | 开发技巧 | 经验库 |
 
 **Save workflow:**
 1. Call `save_memory` → check `action` field in response
