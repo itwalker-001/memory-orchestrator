@@ -966,10 +966,16 @@ const projectMap = computed(() => Object.fromEntries(projects.value.map(p => [p.
 const projectSlugMap = computed(() => Object.fromEntries(projects.value.map(p => [p.slug, p.display_name || p.slug])))
 const memories = ref([])
 const stats = ref(null)
-const selectedProject = ref('')
+const LS_PROJECT_KEY = 'mo_selected_project'
+const selectedProject = ref(localStorage.getItem(LS_PROJECT_KEY) || '')
+watch(selectedProject, v => localStorage.setItem(LS_PROJECT_KEY, v))
 
 function autoSelectProject() {
-  if (!selectedProject.value && projects.value.length > 0) {
+  const saved = localStorage.getItem(LS_PROJECT_KEY)
+  const slugs = projects.value.map(p => p.slug)
+  if (saved && slugs.includes(saved)) {
+    selectedProject.value = saved
+  } else if (projects.value.length > 0) {
     selectedProject.value = projects.value[0].slug
   }
 }
