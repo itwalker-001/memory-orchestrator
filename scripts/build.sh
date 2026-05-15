@@ -167,21 +167,24 @@ wait_healthy() {
 # 2. Wait for database to become healthy
 wait_healthy memory-orchestrator-db 90 1 "Database" || { "$compose_cmd" ps; exit 1; }
 
-# 3. Run database migrations
-echo "Running database migrations..."
-"$compose_cmd" --env-file "$env_file" run --rm \
-  server \
-  sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
-
-# 4. Build server image — CACHE_BUST forces app layer to always recompile;
-#    --force also passes --no-cache to skip all Docker layer cache.
+# 3. Build server image first — migrations run with the NEW code, not the previous image.
+#    CACHE_BUST forces the app layer to always recompile.
 cache_bust="$(date +%s)"
 # shellcheck disable=SC2086
 "$compose_cmd" --env-file "$env_file" build $compose_build_opts \
   --build-arg "CACHE_BUST=${cache_bust}" \
   server
+
+# 4. Run database migrations using the freshly built image
+echo "Running database migrations..."
+"$compose_cmd" --env-file "$env_file" run --rm \
+  server \
+  sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
+
+# 5. Start server
 "$compose_cmd" --env-file "$env_file" up -d server
 
+# 6. Wait for server healthy
 wait_healthy memory-orchestrator-server 450 2 "Service" || "$compose_cmd" ps
 
 token_output="$(
