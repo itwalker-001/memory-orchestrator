@@ -16,18 +16,20 @@ memories across all projects via MCP and HTTP API.
 # 1. Ensure PostgreSQL 16 (+ pgvector + Apache AGE) is running
 #    Default DSN: localhost:5433, user postgres, db memory_orchestrator
 
-# 2. Install and set up the server
+# 2. Install and start the server
 cd memory_orchestrator_server
 uv sync
 uv run alembic upgrade head
 uv run python download_models.py   # BGE-M3 + reranker (~1 GB)
+uv run mo-server serve-http        # http://127.0.0.1:8765
 
-# 3. Wire hooks + MCP into your coding client
-uv run mo-server setup --scope user              # Claude Code
-uv run mo-server setup --client codex --scope user  # or Codex
+# 3. Create a project_token via the UI: http://127.0.0.1:8765/ui → Admin → Tokens
+#    (select kind=project_token and bind it to your project)
 
-# 4. Start the service
-uv run mo-server serve-http                      # http://127.0.0.1:8765
+# 4. Wire MCP into your project (run from the project directory)
+cd <your-project>
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>               # Claude Code
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token> --client codex  # or Codex
 ```
 
 Open Claude Code or Codex in any project. The `UserPromptSubmit` hook pre-injects relevant
@@ -39,26 +41,28 @@ the `Stop` hook extracts and persists new memories when the session ends.
 
 ## Client setup
 
+`mo-mcp setup` writes `.mcp.json` and project-level hooks into the current directory.
+Run it once per project from the project root.
+
 ### Claude Code
 
 ```bash
-cd memory_orchestrator_server
-uv run mo-server setup --client claude --scope user
-uv run mo-server doctor --client claude
+cd <your-project>
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>
+mo-mcp doctor
 ```
 
-Installs: `UserPromptSubmit` + `Stop` hooks, MCP server entry (`mo-mcp serve-mcp`),
-skill file at `~/.claude/skills/memory-orchestrator/SKILL.md`.
+Writes `.mcp.json` with the MCP server entry and injects `MO_MCP_TOKEN` + `MO_HTTP_BASE_URL`.
 
 ### Codex
 
 ```bash
-cd memory_orchestrator_server
-uv run mo-server setup --client codex --scope user
-uv run mo-server doctor --client codex
+cd <your-project>
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token> --client codex
+mo-mcp doctor
 ```
 
-Writes: `~/.codex/config.toml`, `~/.codex/hooks.json`, `~/.codex/AGENTS.md`.
+Writes `.mcp.json` and Codex hook configuration for the project.
 
 → What each setup step installs: [`memory_orchestrator_mcp/README.md § What setup installs`](memory_orchestrator_mcp/README.md)
 
@@ -100,7 +104,7 @@ Env vars prefixed `MO_`, or a `.env` file in the repository root next to `docker
 |---|---|---|
 | `MO_DB_DSN` | `postgresql+asyncpg://postgres:1234@localhost:5433/memory_orchestrator` | PostgreSQL connection |
 | `MO_HTTP_PORT` | `8765` | HTTP port |
-| `MO_EMBED_MODEL` | `BAAI/bge-m3` | Embedding model |
+| `MO_EMBED_MODEL` | `models/BAAI/bge-m3` | Embedding model path (relative to server package) |
 | `MO_DB_PORT` | `15432` (Docker) | Exposed Postgres port |
 | `MO_PGDATA` | `./data/postgres` (Docker) | Postgres data directory |
 | `MO_DB_IMAGE` | `memory-orchestrator-db:latest` | DB image override |
@@ -117,14 +121,15 @@ MO_PGDATA=/opt/memory-orchestrator/data/postgres
 
 ## Authentication
 
-```bash
-cd memory_orchestrator_server
-uv run mo-server token create --kind ui_admin --name admin
-uv run mo-server token create --kind mcp_client --name "local claude"
-```
+Two token kinds:
+- **`ui_admin`** — grants access to `/ui/*` and `/api/*`. Create via CLI:
+  ```bash
+  cd memory_orchestrator_server
+  uv run mo-server token create --kind ui_admin --name admin
+  ```
+- **`project_token`** — grants access to `/mcp/*`; must be bound to a project. Create via the UI (Admin → Tokens) or `POST /api/register` (localhost-only).
 
-`mo-server setup` auto-injects `MO_MCP_TOKEN` into the client. Set `MO_UI_TOKEN` /
-`MO_MCP_TOKEN` as env vars to bypass DB token checks in local dev.
+Set `MO_UI_TOKEN` / `MO_MCP_TOKEN` as env vars to bypass DB token checks in local dev.
 
 → Token detail: [`memory_orchestrator_server/README.md § Authentication`](memory_orchestrator_server/README.md)
 
@@ -160,3 +165,5 @@ uv run python scripts/smoke_ingest.py
 
 - AGE Graph Design: `docs/superpowers/specs/2026-05-11-apache-age-graph-reasoning-design.md`
 - AGE Graph Plan: `docs/superpowers/plans/2026-05-11-apache-age-graph-reasoning.md`
+- Knowledge Tree UI Design: `memory_orchestrator_server/docs/superpowers/specs/2026-05-14-knowledge-tree-ui-design.md`
+- Knowledge Tree UI Plan: `memory_orchestrator_server/docs/superpowers/plans/2026-05-14-knowledge-tree-ui.md`

@@ -23,11 +23,7 @@ uv sync
 
 ### 1. Create a project token on the server
 
-Via the server UI, or from `memory_orchestrator_server/`:
-
-```bash
-uv run mo-server token create --kind project_token --project-slug <slug> --name "my-laptop"
-```
+Via the server UI at `http://<server>:8765/ui` → Admin → Tokens (select kind `project_token` and bind to a project), or call `POST /api/register` (localhost-only, no auth required).
 
 ### 2. Configure the current project
 

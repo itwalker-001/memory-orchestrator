@@ -12,12 +12,12 @@ uv run pytest            # Run all tests
 uv run mo-mcp setup --client claude --base-url http://<server>:8765 --project-token <TOKEN>
 uv run mo-mcp setup --client codex  --base-url http://<server>:8765 --project-token <TOKEN>
 uv run mo-mcp teardown --client claude   # Remove hooks + MCP server entry (project scope)
-uv run mo-mcp doctor    --client claude  # Check client-side wiring + server reachability
+uv run mo-mcp doctor                     # Check client-side wiring + server reachability
 uv run mo-mcp serve-mcp --client claude  # Start stdio MCP server (called by client, not by user)
 ```
 
 `--base-url` and `--project-token` are required for `setup`.
-Create a token first via the server UI or: `mo-server token create --kind project_token --project-slug <slug> --name <label>`
+Create a `project_token` first via the server UI (Admin → Tokens) or `POST /api/register` (localhost-only). The server CLI does not support creating `project_token` kind.
 
 ## Package constraints
 

@@ -10,15 +10,16 @@ uv run alembic upgrade head                      # Apply DB migrations
 uv run python download_models.py                 # Download BGE-M3 + reranker via ModelScope
 
 uv run mo-server serve-http                      # Start HTTP server on port 8765
-uv run mo-server setup --scope user              # Wire Claude Code hooks + MCP
-uv run mo-server setup --client codex --scope user  # Wire Codex hooks + MCP
-uv run mo-server doctor                          # Check DB + HTTP health
 uv run mo-server migrate-embeddings              # Re-embed all memories after model change
 
 uv run mo-server token create --kind ui_admin --name admin
-uv run mo-server token create --kind mcp_client --name "local claude"
 uv run mo-server token list
 uv run mo-server token revoke <token-id>
+# project_token: create via UI (http://localhost:8765/ui → Admin → Tokens) or POST /api/register
+
+# Wire a project (run from the project directory, not from here):
+#   mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>
+#   mo-mcp doctor
 
 uv run pytest                                    # All tests
 uv run pytest tests/unit/                        # No DB required
@@ -48,7 +49,7 @@ HTTP request
 | `cli.py` | `mo-server` entry point; `serve-http`, `doctor`, `token`, `migrate-embeddings` |
 | `http_app.py` | FastAPI app factory; mounts routers; SPA static fallback |
 | `config.py` | Pydantic Settings; all `MO_*` env vars |
-| `models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `SystemSetting`, `ApiToken` |
+| `models.py` | SQLAlchemy ORM: `Project`, `Memory`, `Session`, `SystemSetting`, `ApiToken`, `ProjectSkeletonNode`, `SkeletonNodeMemory` |
 | `repository.py` | All DB operations; settings cache (60 s TTL) |
 | `auth_tokens.py` | Token validation; FastAPI dependency; env-var fallback |
 | `ingestor.py` | Parse transcript JSON lines → LLM extraction → structured memories |
@@ -57,8 +58,6 @@ HTTP request
 | `scoring.py` | `hybrid_score()` = cosine + importance + recency decay; `truncate_by_budget()` |
 | `mcp_core.py` | MCP tool implementations: search, save, list, delete, promote, ingest |
 | `mcp_contract.py` | Tool/resource schema definitions (MCP protocol contracts) |
-| `client_adapters.py` | Claude/Codex setup/teardown; delegates to `client_rules.py` |
-| `client_rules.py` | Reads `memory_orchestrator_mcp` JSON rules; applies config patches |
 | `graph.py` | Apache AGE vertex/edge ops + LLM relation extraction |
 | `project_id.py` | Project slug/UUID resolution from cwd |
 | `db_check.py` | DB connectivity preflight; auto-create DB if missing |
@@ -69,13 +68,16 @@ HTTP request
 - `memories` — `type` ∈ {user, feedback, project, reference}; `embedding vector(1024)`; `superseded_by` for soft-delete chain.
 - `system_settings` — key-value; cached 60 s; editable at runtime without restart.
 - `sessions` — ingestion progress per session (`last_offset`, `status` ∈ pending/done/failed).
-- `api_tokens` — SHA256-hashed bearer tokens; `kind` ∈ {ui_admin, mcp_client}.
+- `api_tokens` — SHA256-hashed bearer tokens; `kind` ∈ {ui_admin, project_token}; `project_id` FK required for project_token; `enabled` flag.
+- `project_skeleton_nodes` — knowledge tree nodes; `parent_id` self-FK for hierarchy; `tags` ARRAY; `sort_order`; `is_builtin` flag for default nodes.
+- `skeleton_node_memories` — junction table linking nodes to memories (many-to-many).
 
 ## Authentication
 
 - `/ui/*` and `/api/*` require `ui_admin` token (or `MO_UI_TOKEN` env var).
-- `/mcp/*` requires `mcp_client` token (or `MO_MCP_TOKEN` env var).
+- `/mcp/*` requires `project_token` bound to a project (or `MO_MCP_TOKEN` env var).
 - No token rows → auth disabled (open access).
+- `project_token` is created via the UI (Admin → Tokens) or `POST /api/register` (localhost-only).
 
 ## Runtime config (system_settings)
 

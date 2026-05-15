@@ -52,14 +52,16 @@ Server starts on `http://127.0.0.1:8765` by default.
 
 ### 4. Wire a coding client
 
+Create a `project_token` via the UI at `http://127.0.0.1:8765/ui` (Admin → Tokens), then run from the project directory:
+
 ```bash
 # Claude Code
-uv run mo-server setup --client claude --scope user
-uv run mo-server doctor --client claude
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>
+mo-mcp doctor
 
 # Codex
-uv run mo-server setup --client codex --scope user
-uv run mo-server doctor --client codex
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token> --client codex
+mo-mcp doctor
 ```
 
 ## Configuration
@@ -88,34 +90,36 @@ Runtime parameters (search weights, cooldown, graph depth, etc.) are stored in t
 Tokens are required once any token row exists in the database.
 
 ```bash
-uv run mo-server token create --kind ui_admin   --name admin
-uv run mo-server token create --kind mcp_client --name "local claude"
+uv run mo-server token create --kind ui_admin --name admin
 uv run mo-server token list
 uv run mo-server token revoke <token-id>
 ```
 
-| Token kind | Protects |
-|---|---|
-| `ui_admin` | `/ui/*`, `/api/*` — web UI and management API |
-| `mcp_client` | `/mcp/*` — MCP tool bridge |
+| Token kind | Protects | How to create |
+|---|---|---|
+| `ui_admin` | `/ui/*`, `/api/*` — web UI and management API | CLI: `mo-server token create --kind ui_admin` |
+| `project_token` | `/mcp/*` — MCP tool bridge; bound to a specific project | UI (Admin → Tokens) or `POST /api/register` (localhost-only) |
 
-The `setup` command automatically injects `MO_MCP_TOKEN` into the client environment.
 Set `MO_UI_TOKEN` / `MO_MCP_TOKEN` as env vars to bypass the DB token check during local dev.
 
 ## API
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/healthz` | Liveness check |
-| `GET` | `/context` | Fetch memory context for a project (used by hooks) |
-| `POST` | `/hooks/ingest` | Trigger session transcript ingestion |
-| `POST` | `/mcp/tools/{tool}` | MCP tool call (Bearer `mcp_client` token) |
-| `GET` | `/mcp/resources/{uri}` | MCP resource read |
-| `GET/POST` | `/ui/memories` | List/search memories |
-| `GET/PUT` | `/ui/memories/{id}` | Read/update a single memory |
-| `GET/POST` | `/ui/tokens` | List/create tokens |
-| `DELETE` | `/ui/tokens/{id}` | Revoke a token |
-| `GET/POST` | `/ui/settings` | Read/update runtime settings |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/healthz` | none | Liveness check |
+| `GET` | `/context` | none | Fetch memory context for a project (used by hooks) |
+| `POST` | `/hooks/ingest` | none | Trigger session transcript ingestion |
+| `POST` | `/mcp/tools/call` | `project_token` | MCP tool call |
+| `POST` | `/mcp/resources/read` | `project_token` | MCP resource read |
+| `GET` | `/api/memories` | `ui_admin` | List/search memories |
+| `POST` | `/api/memories` | `ui_admin` | Create a memory |
+| `PATCH/DELETE` | `/api/memories/{id}` | `ui_admin` | Update/delete a memory |
+| `GET/POST` | `/api/tokens` | `ui_admin` | List/create tokens |
+| `DELETE` | `/api/tokens/{id}` | `ui_admin` | Revoke a token |
+| `GET/PATCH` | `/api/settings` | `ui_admin` | Read/update runtime settings |
+| `POST` | `/api/register` | none (localhost only) | Issue a project_token for a client |
+| `GET` | `/api/projects/{id}/skeleton` | `ui_admin` | Get knowledge tree for a project |
+| `POST/PATCH/DELETE` | `/api/skeleton-nodes/…` | `ui_admin` | Manage skeleton tree nodes |
 
 ## MCP tools
 

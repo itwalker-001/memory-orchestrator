@@ -22,11 +22,15 @@ uv sync
 uv run alembic upgrade head
 uv run python download_models.py
 uv run mo-server serve-http                            # port 8765
-uv run mo-server setup --scope user                    # wire Claude Code
-uv run mo-server setup --client codex --scope user     # wire Codex
-uv run mo-server doctor
+uv run mo-server token create --kind ui_admin --name admin
 uv run mo-server migrate-embeddings                    # after model change
 uv run pytest
+
+# --- Wire a project (run from the project directory) ---
+# Create a project_token first via UI: http://localhost:8765/ui → Admin → Tokens
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>               # Claude Code
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token> --client codex  # Codex
+mo-mcp doctor
 
 # --- MCP client package (run from memory_orchestrator_mcp/) ---
 uv sync
@@ -86,21 +90,23 @@ Defined in `memory_orchestrator_server/models.py`; consumed by both packages via
 - `memories` — `type` ∈ {user, feedback, project, reference}; `embedding vector(1024)` (BGE-M3); `superseded_by` for soft-delete chain.
 - `system_settings` — key-value; cached 60 s; editable at runtime without restart.
 - `sessions` — ingestion progress per session (`last_offset`, `status` ∈ pending/done/failed).
-- `api_tokens` — SHA256-hashed bearer tokens; `kind` ∈ {ui_admin, mcp_client}.
+- `api_tokens` — SHA256-hashed bearer tokens; `kind` ∈ {ui_admin, project_token}; `project_id` FK required for project_token; `enabled` flag.
+- `project_skeleton_nodes` — knowledge tree nodes; `parent_id` self-FK for hierarchy; `tags` ARRAY; `sort_order`; `is_builtin` flag for default nodes.
+- `skeleton_node_memories` — junction table linking nodes to memories (many-to-many).
 
 ## Authentication
 
 - `/ui/*` and `/api/*` require `ui_admin` token (or `MO_UI_TOKEN` env var).
-- `/mcp/*` requires `mcp_client` token (or `MO_MCP_TOKEN` env var).
+- `/mcp/*` requires `project_token` bound to a project (or `MO_MCP_TOKEN` env var).
 - No token rows in DB → auth disabled.
 
 ```bash
-# From memory_orchestrator_server/:
+# From memory_orchestrator_server/ — create a ui_admin token:
 uv run mo-server token create --kind ui_admin --name admin
-uv run mo-server token create --kind mcp_client --name "local claude"
+# project_token is created via the UI (Admin → Tokens) or POST /api/register (localhost-only).
 ```
 
-`mo-server setup` auto-injects `MO_MCP_TOKEN` into the client environment.
+`mo-mcp setup` writes the project token into `.mcp.json` as `MO_MCP_TOKEN`.
 
 ## Runtime config (system_settings)
 
