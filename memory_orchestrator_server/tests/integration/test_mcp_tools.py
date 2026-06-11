@@ -73,10 +73,11 @@ async def test_save_user_type_goes_to_global_project(session):
 
 
 @pytest.mark.asyncio
-async def test_save_with_explicit_project_id(session):
+async def test_save_ignores_project_id_arg(session):
+    # The token-bound project is authoritative: a stray project_id arg must NOT
+    # redirect the save (and must not auto-create the other project).
     repo = MemoryRepository(session)
     project_uuid = await repo.ensure_project("github.com/a/explicit")
-    other_uuid = await repo.ensure_project("github.com/a/other")
     with patch(PATCH, new=AsyncMock(return_value=FAKE_EMB)):
         saved = await handle_save_memory(
             session=session, project_uuid=project_uuid,
@@ -84,7 +85,7 @@ async def test_save_with_explicit_project_id(session):
                   "project_id": "github.com/a/other"},
         )
     row = await session.execute(select(Memory).where(Memory.id == _uuid.UUID(saved["id"])))
-    assert row.scalar_one().project_id == other_uuid
+    assert row.scalar_one().project_id == project_uuid
 
 
 @pytest.mark.asyncio

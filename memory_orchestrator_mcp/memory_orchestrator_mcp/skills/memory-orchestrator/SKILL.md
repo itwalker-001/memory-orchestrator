@@ -20,7 +20,7 @@ Persistent cross-session memory for Claude Code. Memories are scoped to a projec
 
 ### user — 判断标准
 
-`user` 记录**用户本人的持久特征**，用于跨项目个性化协作。自动路由到 global，无需指定 project_id。
+`user` 记录**用户本人的持久特征**，用于跨项目个性化协作。自动路由到 global 范围。
 
 触发条件（满足任一即保存为 user）：
 - 用户的角色/职位（前端工程师、数据科学家、独立开发者）
@@ -177,10 +177,11 @@ why          optional — reason behind rule/decision (feedback/project)
 how_to_apply optional — when this memory kicks in
 importance   integer 1–5 only, default 3 (out-of-range rejected)
 replace_id   UUID of memory to supersede (soft-deletes old, saves new)
-project_id   omit = current project; slug = specific project
 node_name    optional — skeleton leaf node name, e.g. "功能实现"
 parent_node  optional — parent node name, e.g. "后端" (disambiguates node_name)
 ```
+
+> **范围由 token 决定，不可覆盖。** `save_memory` 始终写入 token 绑定的项目；不接受 `project_id` 参数。唯一例外是 `user` 类型，自动写入全局（`*`）范围以跨项目共享。
 
 ## Skeleton Nodes — Organizing Memories into a Project Tree
 
@@ -388,7 +389,8 @@ Valid range: **1–5 only** (integers). Values outside this range are rejected b
 
 | Mistake | Fix |
 |---------|-----|
-| Saving `user` type to project scope | `user` type auto-routes to global; omit `project_id` |
+| Saving `user` type to project scope | `user` type auto-routes to global — nothing to specify |
+| Trying to save into another project | Not possible — `save_memory` always writes to the token's project |
 | Acting on stale memory | Always verify against current files before recommending |
 | Ignoring `conflict` response | Always check `action` field; use `replace_id` to merge |
 | Hard-deleting by default | Use soft delete; hard delete only for wrong/sensitive content |
@@ -396,8 +398,10 @@ Valid range: **1–5 only** (integers). Values outside this range are rejected b
 
 ## project_id Scoping
 
+`project_id` 仅用于 **读取类** 工具（`search_memory` / `list_memories`）。`save_memory` **不接受** 此参数——写入范围始终由 token 绑定的项目决定。
+
 ```
-omit           → current project ← default for most saves
+omit           → current project ← default for most reads
 "all"          → search across every project (read-only, for broad lookup)
 specific slug  → pin to exact project (use for cross-project references)
 ```

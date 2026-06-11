@@ -48,6 +48,21 @@ done
 
 cd "$server_root"
 
+# Build the mo-mcp client wheel and stage it under downloads/ so the server image
+# (Dockerfile `COPY . …`) bundles it; the Help page serves it via /api/downloads.
+mcp_root="$repo_root/memory_orchestrator_mcp"
+downloads_dir="$server_root/downloads"
+mkdir -p "$downloads_dir"
+if command -v uv >/dev/null 2>&1 && [ -d "$mcp_root" ]; then
+  echo "Building mo-mcp wheel into downloads/ ..."
+  rm -f "$downloads_dir"/*.whl
+  ( cd "$mcp_root" && uv build --wheel --out-dir "$downloads_dir" )
+else
+  echo "uv or mcp source unavailable here — using pre-staged wheel(s) in downloads/." >&2
+fi
+echo "Staged mo-mcp wheel(s):"
+ls -1 "$downloads_dir"/*.whl 2>/dev/null || echo "  (none)"
+
 hash_files="Dockerfile.base pyproject.toml uv.lock download_models.py"
 
 for file in $hash_files; do

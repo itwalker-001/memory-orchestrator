@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     log_level: str = "DEBUG"
     log_dir: str = str(Path.cwd() / "logs")
 
+    # Directory holding distributable client artifacts (mo-mcp wheels) served by the
+    # /api/downloads endpoints. Defaults to a package-local `downloads/` dir; override
+    # with MO_DOWNLOADS_DIR (e.g. a Docker volume mount) to manage files without redeploy.
+    downloads_dir: str = Field(default=str(_PKG_ROOT / "downloads"), validation_alias="MO_DOWNLOADS_DIR")
+
     @model_validator(mode="after")
     def _resolve_model_paths(self) -> "Settings":
         for field in ("embed_model", "rerank_model"):

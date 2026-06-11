@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 import httpx
 from fastapi import APIRouter, Body, Cookie, Depends, Header, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select, func, update as sa_update
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -343,6 +343,26 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             if not p:
                 raise HTTPException(status_code=404, detail="project not found")
             return _project_dict(p)
+
+    @router.get("/downloads", tags=["Downloads"], summary="List downloadable client artifacts")
+    async def list_downloads() -> list[dict]:
+        d = Path(get_settings().downloads_dir)
+        if not d.is_dir():
+            return []
+        files = []
+        for p in sorted(d.iterdir()):
+            if p.is_file() and not p.name.startswith("."):
+                files.append({"name": p.name, "size": p.stat().st_size})
+        return files
+
+    @router.get("/downloads/{filename}", tags=["Downloads"], summary="Download a client artifact")
+    async def download_file(filename: str) -> FileResponse:
+        d = Path(get_settings().downloads_dir).resolve()
+        target = (d / filename).resolve()
+        # Path-traversal guard: the resolved target must stay inside downloads_dir.
+        if d not in target.parents or not target.is_file():
+            raise HTTPException(status_code=404, detail="file not found")
+        return FileResponse(target, filename=target.name, media_type="application/octet-stream")
 
     @router.get("/stats", tags=["System"], summary="Memory stats")
     async def stats(project_slug: str | None = None) -> dict:

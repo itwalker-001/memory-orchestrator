@@ -51,6 +51,7 @@ try {
         '--exclude=memory_orchestrator_server/logs' `
         '--exclude=*.pyc' `
         'memory_orchestrator_server' `
+        'memory_orchestrator_mcp' `
         'scripts/build.sh' `
         'docker-compose.yml'
     if ($LASTEXITCODE -ne 0) { throw "tar failed (exit $LASTEXITCODE)" }

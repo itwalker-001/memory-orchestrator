@@ -76,12 +76,12 @@ async def handle_save_memory(
 ) -> dict:
     repo = MemoryRepository(session)
     mtype = args["type"]
-    scope_slug = args.get("project_id")
     node_name: str | None = args.get("node_name") or None
     parent_node: str | None = args.get("parent_node") or None
-    if scope_slug:
-        scope_uuid = await repo.ensure_project(scope_slug, cwd or None)
-    elif mtype == "user":
+    # The token-bound project is authoritative — callers cannot redirect a save to
+    # another project. `user`-type memories are the one exception: they live in the
+    # global "*" scope so they apply across every project.
+    if mtype == "user":
         scope_uuid = await repo.ensure_project("*")
     else:
         scope_uuid = project_uuid

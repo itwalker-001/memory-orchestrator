@@ -1,11 +1,11 @@
 <script setup>
-import { computed, h } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NSpace, NText, NIcon, NDropdown } from 'naive-ui'
+import { NButton, NSpace, NText, NIcon } from 'naive-ui'
 import { useAppStore } from './stores/app.js'
 import {
   IconDatabase, IconFolder, IconLock, IconLogout, IconMoon, IconSettings,
-  IconSun,
+  IconSun, IconInfo,
 } from './icons.js'
 import BrandLogo from './BrandLogo.vue'
 
@@ -20,23 +20,18 @@ const route = useRoute()
 const app = useAppStore()
 const { isDark, lang, t, toggleTheme, toggleLang } = app
 
-function navIcon(icon) {
-  return () => h(NIcon, null, { default: () => h(icon) })
-}
-
 const navOptions = computed(() => [
-  { label: t('Projects'), key: '/', icon: navIcon(IconFolder), disabled: route.path === '/' },
-  { label: t('Memories'), key: '/memories', icon: navIcon(IconDatabase), disabled: route.path === '/memories' },
-  { label: t('Tokens'), key: '/tokens', icon: navIcon(IconLock), disabled: route.path === '/tokens' },
+  { label: t('Projects'), key: '/', iconComponent: IconFolder },
+  { label: t('Memories'), key: '/memories', iconComponent: IconDatabase },
+  { label: t('Tokens'), key: '/tokens', iconComponent: IconLock },
 ])
-
-const currentNavLabel = computed(() => {
-  const active = navOptions.value.find(option => option.key === route.path)
-  return active?.label || t('Projects')
-})
 
 function openNav(key) {
   if (key !== route.path) router.push(key)
+}
+
+function openInNewTab(path) {
+  window.open(router.resolve(path).href, '_blank')
 }
 </script>
 
@@ -49,11 +44,18 @@ function openNav(key) {
     </div>
 
     <nav class="header-nav">
-      <n-dropdown trigger="hover" :options="navOptions" @select="openNav">
-        <n-button quaternary size="small" class="nav-trigger">
-          {{ currentNavLabel }}
-        </n-button>
-      </n-dropdown>
+      <n-button
+        v-for="opt in navOptions"
+        :key="opt.key"
+        quaternary
+        size="small"
+        class="nav-item"
+        :type="route.path === opt.key ? 'primary' : 'default'"
+        @click="openNav(opt.key)"
+      >
+        <template #icon><n-icon><component :is="opt.iconComponent" /></n-icon></template>
+        {{ opt.label }}
+      </n-button>
       <slot name="nav" />
     </nav>
 
@@ -68,7 +70,11 @@ function openNav(key) {
         <span style="font-size:11px;font-weight:600">{{ lang === 'en' ? '中' : 'EN' }}</span>
       </n-button>
 
-      <n-button v-if="!loginOpen" quaternary circle @click="router.push('/settings')" :title="t('Settings')">
+      <n-button v-if="!loginOpen" quaternary circle @click="openInNewTab('/help')" :title="t('Help')">
+        <template #icon><n-icon><IconInfo /></n-icon></template>
+      </n-button>
+
+      <n-button v-if="!loginOpen" quaternary circle @click="openInNewTab('/settings')" :title="t('Settings')">
         <template #icon><n-icon><IconSettings /></n-icon></template>
       </n-button>
 
@@ -94,9 +100,9 @@ function openNav(key) {
   opacity: 0.65;
   letter-spacing: 0.02em;
 }
-.header-nav { display: flex; align-items: center; gap: 12px; }
+.header-nav { display: flex; align-items: center; gap: 4px; }
 .header-nav :deep(a) { font-size: 13px; text-decoration: none; color: inherit; opacity: 0.7; }
 .header-nav :deep(a:hover) { opacity: 1; text-decoration: underline; }
-.nav-trigger { font-size: 13px; }
+.nav-item { font-size: 13px; }
 .header-spacer { flex: 1; }
 </style>
