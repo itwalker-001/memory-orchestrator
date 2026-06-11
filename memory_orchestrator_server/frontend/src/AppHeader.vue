@@ -45,6 +45,7 @@ function openNav(key) {
     <div class="logo">
       <BrandLogo :size="20" />
       <n-text strong style="font-size:14px;white-space:nowrap">Memory Orchestrator</n-text>
+      <span v-if="app.version" class="version-badge">v{{ app.version }}</span>
     </div>
 
     <nav class="header-nav">
@@ -86,6 +87,13 @@ function openNav(key) {
   padding: 8px 12px;
 }
 .logo { display: flex; align-items: center; gap: 8px; }
+.version-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--n-text-color-disabled, #9ca3af);
+  opacity: 0.65;
+  letter-spacing: 0.02em;
+}
 .header-nav { display: flex; align-items: center; gap: 12px; }
 .header-nav :deep(a) { font-size: 13px; text-decoration: none; color: inherit; opacity: 0.7; }
 .header-nav :deep(a:hover) { opacity: 1; text-decoration: underline; }

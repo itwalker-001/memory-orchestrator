@@ -8,7 +8,7 @@ import {
 } from 'naive-ui'
 import AppHeader from './AppHeader.vue'
 import BaseModal from './BaseModal.vue'
-import { apiFetch, apiJSON, errText } from './api.js'
+import { apiFetch, apiJSON, errText, copyText } from './api.js'
 import { useAppStore } from './stores/app.js'
 import { IconLock, IconPlus, IconSync, IconTrash, IconClone, IconCheck } from './icons.js'
 
@@ -31,7 +31,7 @@ function relTime(iso) {
 
 const copied = ref(null)
 async function copy(text) {
-  await navigator.clipboard.writeText(text)
+  await copyText(text)
   copied.value = text
   setTimeout(() => { copied.value = null }, 1500)
 }
@@ -44,7 +44,7 @@ async function copyToken(tok) {
   revealingId.value = tok.id
   try {
     const data = await apiJSON(`/tokens/${tok.id}/reveal`, { method: 'POST', skipErrorToast: true })
-    await navigator.clipboard.writeText(data.token)
+    await copyText(data.token)
     copiedRowId.value = tok.id
     setTimeout(() => { if (copiedRowId.value === tok.id) copiedRowId.value = null }, 1500)
   } catch (e) {

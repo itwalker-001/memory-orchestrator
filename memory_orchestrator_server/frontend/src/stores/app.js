@@ -29,6 +29,16 @@ export const useAppStore = defineStore('app', () => {
 
   function toggleLang() { lang.value = lang.value === 'en' ? 'zh' : 'en' }
 
+  // ── App version (from /healthz, no auth required) ───────────────────────────
+  const version = ref('')
+  async function loadVersion() {
+    try {
+      const r = await fetch('/healthz')
+      if (r.ok) version.value = (await r.json()).version || ''
+    } catch { /* leave blank if unreachable */ }
+  }
+  loadVersion()
+
   function t(key, vars) {
     const locale = _locales[lang.value] || _locales.en
     const str = locale[key] ?? key
@@ -80,6 +90,7 @@ export const useAppStore = defineStore('app', () => {
   return {
     isDark, toggleTheme,
     lang, toggleLang, t,
+    version,
     loginOpen, loginInput, loginError, loginLoading,
     submitLogin, skipLogin, logout,
   }

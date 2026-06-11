@@ -48,6 +48,7 @@ services:
       MO_EXTRACTION_BASE_URL: ${MO_EXTRACTION_BASE_URL}
       MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL}
       MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY}
+      MO_TOKEN_SECRET_KEY: ${MO_TOKEN_SECRET_KEY}
     volumes:
       - ${MO_MODELS_DIR}:/app/memory_orchestrator_server/models
     depends_on:

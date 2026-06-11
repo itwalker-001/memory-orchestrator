@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { NModal, NIcon, NText, NScrollbar, NCollapse, NCollapseItem, NRate, useThemeVars } from 'naive-ui'
 import { renderMarkdown } from './markdown.js'
-import { apiJSON } from './api.js'
+import { apiJSON, copyText } from './api.js'
 import { useAppStore } from './stores/app.js'
 import { IconEdit, IconClose } from './icons.js'
 
@@ -73,7 +73,7 @@ function md(text) {
 
 const copied = ref(null)
 async function copy(text) {
-  await navigator.clipboard.writeText(text)
+  await copyText(text)
   copied.value = text
   setTimeout(() => { copied.value = null }, 1500)
 }

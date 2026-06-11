@@ -22,15 +22,16 @@ class IngestRequest(BaseModel):
 def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_embedder: bool = False) -> APIRouter:
     router = APIRouter(tags=["Hooks"])
 
-    @router.get("/healthz", summary="Health check", description="Returns database connectivity and embedder load status. Used by Docker healthchecks and the build script.")
+    @router.get("/healthz", summary="Health check", description="Returns database connectivity, embedder load status, and app version. Used by Docker healthchecks and the build script.")
     async def healthz() -> dict:
+        from memory_orchestrator_server.http_app import read_version
         try:
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
             db_ok = "ok"
         except Exception as e:
             db_ok = f"err:{e}"
-        return {"db": db_ok, "embedder": "skipped" if skip_embedder else "ok"}
+        return {"db": db_ok, "embedder": "skipped" if skip_embedder else "ok", "version": read_version()}
 
     @router.get("/context", summary="Build injected context", description="Returns markdown memory context for a project, truncated to the token budget. Called by the UserPromptSubmit hook.")
     async def context(

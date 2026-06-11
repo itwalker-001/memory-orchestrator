@@ -8,7 +8,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://172.16.10.123:8765', changeOrigin: true }
+      '/api': { target: 'http://172.16.10.123:8765', changeOrigin: true },
+      '/healthz': { target: 'http://172.16.10.123:8765', changeOrigin: true }
     }
   },
   build: { outDir: 'dist' }

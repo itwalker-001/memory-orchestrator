@@ -149,3 +149,26 @@ export function errText(error) {
   }
   return error?.message || 'Request failed'
 }
+
+// Copy text to the clipboard. navigator.clipboard only exists in secure contexts
+// (HTTPS or localhost); when the UI is served over plain HTTP from a LAN IP it is
+// undefined, so fall back to the legacy execCommand('copy') via a hidden textarea.
+// Throws if both paths fail so callers can surface an error.
+export async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.top = '-9999px'
+  ta.setAttribute('readonly', '')
+  document.body.appendChild(ta)
+  ta.select()
+  try {
+    if (!document.execCommand('copy')) throw new Error('copy command rejected')
+  } finally {
+    document.body.removeChild(ta)
+  }
+}

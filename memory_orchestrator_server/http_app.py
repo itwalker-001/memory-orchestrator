@@ -7,6 +7,14 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
+def read_version() -> str:
+    """App version from version.txt (single source of truth), falling back to 0.0.0."""
+    try:
+        return (Path(__file__).parent / "version.txt").read_text(encoding="utf-8").strip() or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
 class SPAStaticFiles(StaticFiles):
     """Serve index.html for any path that doesn't match a static file (SPA fallback)."""
     async def get_response(self, path: str, scope):
@@ -39,7 +47,7 @@ def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: boo
 
     app = FastAPI(
         title="Memory Orchestrator",
-        version="0.1.0",
+        version=read_version(),
         description=(
             "Memory Orchestrator HTTP API — context injection hooks, the MCP bridge "
             "(search/save/skeleton), and the admin UI/API for managing memories, "
