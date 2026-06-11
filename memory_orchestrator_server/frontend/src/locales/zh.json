@@ -217,6 +217,7 @@
   "Name…": "名称…",
   "No tokens yet.": "暂无令牌",
   "Token value (save this — shown only once):": "令牌值（请保存 — 仅显示一次）：",
+  "Token cannot be revealed (created before encryption was enabled, or key unavailable)": "无法显示该令牌（在启用加密之前创建，或密钥不可用）",
   "Reset token": "重置令牌",
   "Revoke token": "撤销令牌",
   "Reset token desc": "这将生成一个新的令牌值，当前令牌将立即失效。",

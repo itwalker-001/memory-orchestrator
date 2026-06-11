@@ -48,7 +48,12 @@ async function copyToken(tok) {
     copiedRowId.value = tok.id
     setTimeout(() => { if (copiedRowId.value === tok.id) copiedRowId.value = null }, 1500)
   } catch (e) {
-    message.error(errText(e) || t('Token cannot be revealed'))
+    // The backend's 409 detail is hardcoded English; localize it here instead
+    // of passing the raw detail through to the toast.
+    const status = e?.response?.status
+    message.error(status === 409 || status === 404
+      ? t('Token cannot be revealed (created before encryption was enabled, or key unavailable)')
+      : (errText(e) || t('Token cannot be revealed (created before encryption was enabled, or key unavailable)')))
   } finally {
     revealingId.value = null
   }

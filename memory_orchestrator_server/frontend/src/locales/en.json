@@ -217,6 +217,7 @@
   "Name…": "Name…",
   "No tokens yet.": "No tokens yet.",
   "Token value (save this — shown only once):": "Token value (save this — shown only once):",
+  "Token cannot be revealed (created before encryption was enabled, or key unavailable)": "Token cannot be revealed (created before encryption was enabled, or key unavailable)",
   "Reset token": "Reset Token",
   "Revoke token": "Revoke Token",
   "Reset token desc": "This generates a new token value. The current token will stop working immediately.",
