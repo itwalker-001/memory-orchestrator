@@ -167,8 +167,9 @@ wait_healthy() {
 }
 
 # 1. Start (and build) the database
-# shellcheck disable=SC2086
-"$compose_cmd" --env-file "$env_file" up -d --build $compose_build_opts db
+#    NOTE: --no-cache is a `build` flag, not an `up` flag; only apply it to the
+#    explicit `build` step below (server). The db image is selected by hash tag.
+"$compose_cmd" --env-file "$env_file" up -d --build db
 
 # 2. Wait for database to become healthy
 wait_healthy memory-orchestrator-db 90 1 "Database" || { "$compose_cmd" ps; exit 1; }
