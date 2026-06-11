@@ -4,6 +4,8 @@ import hashlib
 import hmac
 import os
 import uuid
+from functools import lru_cache
+from pathlib import Path
 
 from fastapi import Cookie, Header, HTTPException, Response
 from sqlalchemy import select, update
@@ -16,9 +18,65 @@ TOKEN_KIND_UI = "ui_admin"
 TOKEN_KIND_PROJECT = "project_token"
 UI_SESSION_TTL = 1800  # 30 minutes; refreshed on every authenticated request
 
+_PKG_ROOT = Path(__file__).parent  # memory_orchestrator_server/
+
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+# ── Reversible token encryption (for UI reveal/copy) ────────────────────────────
+# Authentication still relies on the SHA256 hash (one-way). This stores a second,
+# decryptable copy so the UI can show the original token on demand. Losing the key
+# only means existing ciphertexts can't be decrypted — the tokens themselves stay
+# valid because auth uses the hash.
+
+def _persist_generated_key(key: str) -> None:
+    """Append a freshly generated key to the package .env so it survives restarts."""
+    env_path = _PKG_ROOT / ".env"
+    try:
+        line = f"MO_TOKEN_SECRET_KEY={key}\n"
+        if env_path.exists():
+            existing = env_path.read_text(encoding="utf-8")
+            prefix = "" if existing.endswith("\n") or existing == "" else "\n"
+            env_path.write_text(existing + prefix + line, encoding="utf-8")
+        else:
+            env_path.write_text(line, encoding="utf-8")
+    except OSError:
+        # Non-fatal: encryption still works this run, just not persisted.
+        pass
+
+
+@lru_cache(maxsize=1)
+def _get_token_cipher():
+    """Return a Fernet cipher, generating+persisting a key on first use if unset."""
+    from cryptography.fernet import Fernet
+    from memory_orchestrator_server.config import get_settings
+
+    key = (get_settings().token_secret_key or "").strip() or os.environ.get("MO_TOKEN_SECRET_KEY", "").strip()
+    if not key:
+        key = Fernet.generate_key().decode("utf-8")
+        _persist_generated_key(key)
+        os.environ["MO_TOKEN_SECRET_KEY"] = key
+    return Fernet(key.encode("utf-8"))
+
+
+def encrypt_token(raw: str) -> str | None:
+    """Encrypt a raw token for later reveal. Returns None if encryption is unavailable."""
+    try:
+        return _get_token_cipher().encrypt(raw.encode("utf-8")).decode("utf-8")
+    except Exception:
+        return None
+
+
+def decrypt_token(blob: str | None) -> str | None:
+    """Decrypt a stored ciphertext back to the raw token, or None if unavailable/invalid."""
+    if not blob:
+        return None
+    try:
+        return _get_token_cipher().decrypt(blob.encode("utf-8")).decode("utf-8")
+    except Exception:
+        return None
 
 
 def bearer_token(authorization: str | None) -> str | None:

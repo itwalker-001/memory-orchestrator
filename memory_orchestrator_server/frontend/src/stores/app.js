@@ -42,10 +42,14 @@ export const useAppStore = defineStore('app', () => {
   const loginError = ref('')
   const loginLoading = ref(false)
 
-  async function submitLogin(BASE) {
+  // Auth calls use raw fetch on purpose: routing them through the axios instance
+  // would let the 401 interceptor re-open the login modal in a loop. Login/logout
+  // surface their own inline errors instead of the global toast.
+  const AUTH_BASE = '/api'
+  async function submitLogin() {
     loginLoading.value = true; loginError.value = ''
     try {
-      const r = await fetch(`${BASE}/login`, {
+      const r = await fetch(`${AUTH_BASE}/login`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: loginInput.value }),
       })
@@ -56,10 +60,10 @@ export const useAppStore = defineStore('app', () => {
     finally { loginLoading.value = false }
   }
 
-  async function skipLogin(BASE) {
+  async function skipLogin() {
     loginLoading.value = true
     try {
-      const r = await fetch(`${BASE}/login`, {
+      const r = await fetch(`${AUTH_BASE}/login`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: '' }),
       })
@@ -68,8 +72,8 @@ export const useAppStore = defineStore('app', () => {
     } finally { loginLoading.value = false }
   }
 
-  async function logout(BASE) {
-    await fetch(`${BASE}/logout`, { method: 'POST' })
+  async function logout() {
+    await fetch(`${AUTH_BASE}/logout`, { method: 'POST' })
     loginOpen.value = true
   }
 

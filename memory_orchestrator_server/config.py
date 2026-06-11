@@ -1,3 +1,10 @@
+"""
+# @Author: walker.you
+# @Date: 2026-06-09 11:13:00
+# @LastEditors: walker.you
+# @LastEditTime: 2026-06-10 15:42:04
+"""
+
 from functools import lru_cache
 from pathlib import Path
 from pydantic import Field, model_validator
@@ -13,7 +20,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    db_dsn: str = Field(default="postgresql+asyncpg://postgres:1234@localhost:5432/memory_orchestrator")
+    db_dsn: str = Field(default="postgresql+asyncpg://postgres:mo_secret@172.16.10.123:25432/memory_orchestrator")
     http_host: str = "127.0.0.1"
     http_port: int = 8765
     embed_model: str = str(_PKG_ROOT / "models" / "BAAI" / "bge-m3")
@@ -33,6 +40,10 @@ class Settings(BaseSettings):
     extraction_base_url: str = Field(default="", validation_alias="MO_EXTRACTION_BASE_URL")
     extraction_model: str = Field(default="gpt-4o-mini", validation_alias="MO_EXTRACTION_MODEL")
     extraction_api_key: str = Field(default="local", validation_alias="MO_EXTRACTION_API_KEY")
+
+    # Fernet key for reversible token encryption. Empty → auto-generated on first
+    # use and persisted to .env. See auth_tokens._get_token_cipher.
+    token_secret_key: str = Field(default="", validation_alias="MO_TOKEN_SECRET_KEY")
 
 
 @lru_cache(maxsize=1)

@@ -30,18 +30,23 @@ async def test_create_project_seeds_skeleton(engine):
 
 
 @pytest.mark.asyncio
-async def test_patch_skeleton_node_prompt_hint(engine):
+async def test_patch_skeleton_node_details(engine):
     async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
         r = await c.post("/api/projects", json={"slug": "proj-patch", "display_name": "P"})
         project_id = r.json()["id"]
         tree = (await c.get(f"/api/projects/{project_id}/skeleton")).json()
         node_id = tree[0]["id"]
 
-        r2 = await c.patch(f"/api/skeleton-nodes/{node_id}", json={"prompt_hint": "test hint"})
+        r2 = await c.patch(
+            f"/api/skeleton-nodes/{node_id}",
+            json={"description": "test description", "prompt_hint": "test hint", "tags": ["alpha", "beta"]},
+        )
         assert r2.status_code == 200
 
         tree2 = (await c.get(f"/api/projects/{project_id}/skeleton")).json()
+        assert tree2[0]["description"] == "test description"
         assert tree2[0]["prompt_hint"] == "test hint"
+        assert tree2[0]["tags"] == ["alpha", "beta"]
 
 
 @pytest.mark.asyncio

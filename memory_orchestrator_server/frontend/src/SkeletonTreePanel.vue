@@ -1,38 +1,52 @@
 <!-- frontend/src/SkeletonTreePanel.vue -->
 <template>
-  <div class="tree-panel">
+  <div class="tree-panel" :style="cssVars">
     <div class="tree-header">
-      <div class="tree-proj-name">{{ projName }}</div>
-      <div class="search-wrap">
-        <IconSearch width="11" height="11" class="search-icon" aria-hidden="true" />
-        <input v-model="searchQuery" class="search-input" :placeholder="t('Search nodes…')" />
-        <span v-if="searchQuery" class="search-count">{{ t('{n} results', { n: matchCount }) }}</span>
-        <button v-if="searchQuery" class="search-clear" @click="searchQuery = ''">×</button>
+      <div class="tree-title-row">
+        <n-text strong class="tree-proj-name">{{ projName }}</n-text>
+        <n-button quaternary circle size="tiny" :title="t('Add top-level node')" @click="$emit('add-root')">
+          <template #icon><n-icon :size="15"><IconPlus /></n-icon></template>
+        </n-button>
       </div>
+      <n-input v-model:value="searchQuery" size="small" clearable :placeholder="t('Search nodes…')">
+        <template #prefix><n-icon :size="13"><IconSearch /></n-icon></template>
+        <template #suffix>
+          <n-text v-if="searchQuery" depth="3" style="font-size:10px;white-space:nowrap">{{ matchCount }}</n-text>
+        </template>
+      </n-input>
     </div>
 
-    <ul class="sk-tree tree-scroll">
-      <SkNode
-        v-for="node in visibleRoots"
-        :key="node.id"
-        :node="node"
-        :selected-id="selectedId"
-        :depth="0"
-        :class="{ faded: searchQuery && !matchIds.has(node.id) && !hasMatchDescendant(node) }"
-        @select="$emit('select', $event)"
-        @patch="$emit('patch', $event)"
-        @delete="$emit('delete', $event)"
-        @context-menu="$emit('context-menu', $event)"
-        @reorder="handleReorder"
-      />
-    </ul>
+    <n-scrollbar class="tree-scroll">
+      <ul class="sk-tree">
+        <SkNode
+          v-for="node in visibleRoots"
+          :key="node.id"
+          :node="node"
+          :selected-id="selectedId"
+          :depth="0"
+          :class="{ faded: searchQuery && !matchIds.has(node.id) && !hasMatchDescendant(node) }"
+          @select="$emit('select', $event)"
+          @patch="$emit('patch', $event)"
+          @delete="$emit('delete', $event)"
+          @context-menu="$emit('context-menu', $event)"
+          @reorder="handleReorder"
+        />
+      </ul>
+    </n-scrollbar>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, provide, inject } from 'vue'
+import { NButton, NIcon, NInput, NScrollbar, NText, useThemeVars } from 'naive-ui'
 import SkNode from './SkNode.vue'
-import IconSearch from './icons/IconSearch.svg'
+import { IconPlus, IconSearch } from './icons.js'
+
+const vars = useThemeVars()
+const cssVars = computed(() => ({
+  '--panel-bg': vars.value.cardColor,
+  '--border': vars.value.borderColor,
+}))
 
 const t = inject('t', k => k)
 
@@ -43,7 +57,7 @@ const props = defineProps({
   memoryCountMap: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['select', 'patch', 'delete', 'context-menu', 'reorder', 'add-child'])
+const emit = defineEmits(['select', 'patch', 'delete', 'context-menu', 'reorder', 'add-child', 'add-root'])
 
 provide('memoryCountMap', computed(() => props.memoryCountMap))
 
@@ -110,66 +124,13 @@ function findSiblingsContaining(nodes, id1, id2) {
 <style scoped>
 .tree-panel {
   width: 220px; flex-shrink: 0;
-  background: var(--bg, #0d1117); border-right: 1px solid var(--border, #30363d);
+  background: var(--panel-bg); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; overflow: hidden;
 }
-.tree-header { padding: 10px 10px 6px; border-bottom: 1px solid var(--border, #21262d); flex-shrink: 0; }
-.tree-proj-name { font-size: 12px; font-weight: 700; color: var(--fg, #e6edf3); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.search-wrap {
-  display: flex; align-items: center; gap: 5px;
-  background: var(--input-bg, #161b22); border: 1px solid var(--border, #30363d);
-  border-radius: 5px; padding: 4px 8px;
-}
-.search-icon { color: var(--fg-muted, #6e7681); flex-shrink: 0; display: block; }
-.search-input { background: none; border: none; outline: none; font-size: 11px; color: var(--fg, #c9d1d9); width: 100%; font-family: inherit; }
-.search-count { font-size: 9px; color: var(--fg-muted, #6e7681); flex-shrink: 0; white-space: nowrap; }
-.search-clear { background: none; border: none; color: var(--fg-muted, #6e7681); cursor: pointer; font-size: 13px; padding: 0; line-height: 1; flex-shrink: 0; }
-.tree-scroll { flex: 1; overflow-y: auto; padding: 4px 0; list-style: none; margin: 0; }
+.tree-header { padding: 10px 10px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
+.tree-title-row { display: flex; align-items: center; gap: 6px; }
+.tree-proj-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.tree-scroll { flex: 1; min-height: 0; }
+.sk-tree { padding: 4px 0; list-style: none; margin: 0; }
 .faded { opacity: 0.35; }
-
-/* ── Dark sci-fi enhancements ── */
-[data-theme=dark] .tree-panel {
-  background:
-    repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,212,138,0.007) 2px, rgba(0,212,138,0.007) 3px),
-    var(--surface-2, #050910);
-  border-right: 1px solid rgba(0,212,138,0.16);
-  box-shadow: 1px 0 20px -8px rgba(0,212,138,0.14);
-}
-[data-theme=dark] .tree-header {
-  border-bottom-color: rgba(0,212,138,0.14);
-  position: relative;
-  overflow: visible;
-}
-[data-theme=dark] .tree-header::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(0,212,138,0.75), transparent 65%);
-  pointer-events: none;
-}
-[data-theme=dark] .tree-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0;
-  width: 50%;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(0,212,138,0.40), transparent);
-  animation: mo-pulse-glow 3.2s ease-in-out infinite;
-}
-[data-theme=dark] .tree-proj-name {
-  color: var(--accent, #00D48A);
-  font-family: 'Orbitron', ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  text-shadow: 0 0 10px rgba(0,212,138,0.40);
-}
-[data-theme=dark] .search-wrap {
-  border-color: rgba(0,212,138,0.18);
-}
-[data-theme=dark] .search-wrap:focus-within {
-  border-color: rgba(0,212,138,0.50);
-  box-shadow: 0 0 0 2px rgba(0,212,138,0.10);
-}
 </style>

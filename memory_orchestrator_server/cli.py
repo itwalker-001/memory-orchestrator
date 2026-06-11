@@ -181,9 +181,11 @@ def token_create(kind: str, name: str) -> None:
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
     from sqlalchemy.orm import sessionmaker
     from memory_orchestrator_server.models import ApiToken
+    from memory_orchestrator_server.auth_tokens import encrypt_token
 
     raw = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    token_encrypted = encrypt_token(raw)
 
     action = "created"
 
@@ -202,9 +204,11 @@ def token_create(kind: str, name: str) -> None:
             )).scalars().first()
             if existing is not None:
                 existing.token_hash = token_hash
+                existing.token_encrypted = token_encrypted
                 action = "rotated"
             else:
-                session.add(ApiToken(name=name, kind=kind, token_hash=token_hash))
+                session.add(ApiToken(name=name, kind=kind, token_hash=token_hash,
+                                     token_encrypted=token_encrypted))
             await session.commit()
         await engine.dispose()
 

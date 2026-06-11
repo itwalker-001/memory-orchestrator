@@ -20,9 +20,9 @@ class IngestRequest(BaseModel):
 
 
 def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_embedder: bool = False) -> APIRouter:
-    router = APIRouter()
+    router = APIRouter(tags=["Hooks"])
 
-    @router.get("/healthz")
+    @router.get("/healthz", summary="Health check", description="Returns database connectivity and embedder load status. Used by Docker healthchecks and the build script.")
     async def healthz() -> dict:
         try:
             async with engine.connect() as conn:
@@ -32,7 +32,7 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             db_ok = f"err:{e}"
         return {"db": db_ok, "embedder": "skipped" if skip_embedder else "ok"}
 
-    @router.get("/context")
+    @router.get("/context", summary="Build injected context", description="Returns markdown memory context for a project, truncated to the token budget. Called by the UserPromptSubmit hook.")
     async def context(
         project_slug: str | None = None,
         project_id: str | None = None,
@@ -52,7 +52,7 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             md = await repo.build_context(project_id=project_uuid, budget_tokens=effective_budget)
         return Response(content=md, media_type="text/markdown; charset=utf-8")
 
-    @router.get("/stats")
+    @router.get("/stats", summary="Memory counts", description="Total memory count and a per-type breakdown, optionally filtered to a single project.")
     async def stats(project_slug: str | None = None, project_id: str | None = None) -> dict:
         slug = project_slug or project_id
         async with maker() as s:
@@ -69,7 +69,7 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             by_type = {row[0]: row[1] for row in result.all()}
             return {"total": sum(by_type.values()), "by_type": by_type}
 
-    @router.post("/ingest", status_code=202)
+    @router.post("/ingest", status_code=202, summary="Trigger ingestion", description="Queues background LLM extraction of memories from a session transcript. Called by the Stop hook. Returns immediately (202).")
     async def ingest(req: IngestRequest, background: BackgroundTasks) -> dict:
         log.info("ingest client=%s session=%s project=%s", req.client or "unknown", req.session_id, req.project_slug)
         async def _run() -> None:

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Memory Card — Light Theme</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f7f7f4;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 40px;
+  min-height: 100vh;
+}
+h2 {
+  font-family: 'Orbitron', monospace;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: rgba(30,50,40,0.38);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.grid { display: flex; flex-direction: column; gap: 12px; max-width: 360px; }
+
+/* ── Base Card ── */
+.mc {
+  background: #ffffff;
+  border: 1px solid #e6e5e0;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  height: 148px;
+  display: flex; flex-direction: column;
+  transition: border-color 0.20s, box-shadow 0.20s, background 0.20s, transform 0.20s;
+}
+/* top inner highlight — subtle warm sheen */
+.mc::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 3px; right: 0; height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.90), transparent 55%);
+  pointer-events: none; z-index: 1;
+}
+/* left type-color accent bar */
+.mc::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: 4px 0 0 4px;
+  pointer-events: none;
+}
+.mc.feedback::after  { background: linear-gradient(180deg, rgba(230,90,20,0.88), rgba(230,90,20,0.35)); }
+.mc.project::after   { background: linear-gradient(180deg, rgba(50,130,230,0.88), rgba(50,130,230,0.35)); }
+.mc.reference::after { background: linear-gradient(180deg, rgba(0,165,105,0.88), rgba(0,165,105,0.35)); }
+.mc.user::after      { background: linear-gradient(180deg, rgba(140,90,210,0.88), rgba(140,90,210,0.35)); }
+
+/* base subtle type shadow */
+.mc.feedback  { box-shadow: 0 1px 8px -2px rgba(230,90,20,0.10); }
+.mc.project   { box-shadow: 0 1px 8px -2px rgba(50,130,230,0.10); }
+.mc.reference { box-shadow: 0 1px 8px -2px rgba(0,165,105,0.10); }
+.mc.user      { box-shadow: 0 1px 8px -2px rgba(140,90,210,0.10); }
+
+/* hover */
+.mc:hover { background: #faf9f6; transform: translateY(-2px); }
+.mc.feedback:hover  { border-color: rgba(230,90,20,0.32);  box-shadow: 0 6px 22px -4px rgba(230,90,20,0.20),  0 0 0 1px rgba(230,90,20,0.08) inset; }
+.mc.project:hover   { border-color: rgba(50,130,230,0.32);  box-shadow: 0 6px 22px -4px rgba(50,130,230,0.20),  0 0 0 1px rgba(50,130,230,0.08) inset; }
+.mc.reference:hover { border-color: rgba(0,165,105,0.32);   box-shadow: 0 6px 22px -4px rgba(0,165,105,0.20),   0 0 0 1px rgba(0,165,105,0.08) inset; }
+.mc.user:hover      { border-color: rgba(140,90,210,0.32);  box-shadow: 0 6px 22px -4px rgba(140,90,210,0.20),  0 0 0 1px rgba(140,90,210,0.08) inset; }
+
+/* ── Header ── */
+.mc-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px 9px 14px;
+  border-bottom: 1px solid #eeede8;
+  position: relative; flex-shrink: 0;
+}
+.mc-head::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 14px; right: 0; height: 1px;
+  background: linear-gradient(90deg, rgba(0,0,0,0.06), transparent 65%);
+}
+.mc-badge {
+  font-size: 8px; font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px; border-radius: 3px;
+  text-transform: uppercase; flex-shrink: 0; border: 1px solid;
+}
+.mc.feedback  .mc-badge { background: rgba(230,90,20,0.09);  color: #c04010; border-color: rgba(230,90,20,0.28); }
+.mc.project   .mc-badge { background: rgba(50,130,230,0.09);  color: #1a60c0; border-color: rgba(50,130,230,0.28); }
+.mc.reference .mc-badge { background: rgba(0,165,105,0.09);   color: #007a50; border-color: rgba(0,165,105,0.28); }
+.mc.user      .mc-badge { background: rgba(140,90,210,0.09);  color: #7030b8; border-color: rgba(140,90,210,0.28); }
+.mc-name {
+  flex: 1; font-size: 12px; font-weight: 600;
+  color: #26251e; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.022em;
+}
+
+/* importance bars */
+.mc-importance { display: flex; gap: 2px; flex-shrink: 0; align-items: center; }
+.mc-dot { width: 8px; height: 3px; border-radius: 1px; }
+.mc-dot.off { background: rgba(0,0,0,0.10); }
+.mc.feedback  .mc-dot.on { background: rgba(230,90,20,0.75);  box-shadow: 0 0 4px rgba(230,90,20,0.35); }
+.mc.project   .mc-dot.on { background: rgba(50,130,230,0.75);  box-shadow: 0 0 4px rgba(50,130,230,0.35); }
+.mc.reference .mc-dot.on { background: rgba(0,165,105,0.75);   box-shadow: 0 0 4px rgba(0,165,105,0.35); }
+.mc.user      .mc-dot.on { background: rgba(140,90,210,0.75);  box-shadow: 0 0 4px rgba(140,90,210,0.35); }
+
+/* ── Body ── */
+.mc-body { padding: 10px 12px 10px 14px; flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+.mc-desc {
+  font-size: 11px; font-style: italic;
+  color: #9c9890; line-height: 1.5;
+  padding-left: 8px; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+}
+.mc.feedback  .mc-desc { border-left: 1.5px solid rgba(230,90,20,0.30); }
+.mc.project   .mc-desc { border-left: 1.5px solid rgba(50,130,230,0.30); }
+.mc.reference .mc-desc { border-left: 1.5px solid rgba(0,165,105,0.30); }
+.mc.user      .mc-desc { border-left: 1.5px solid rgba(140,90,210,0.30); }
+.mc-content {
+  font-size: 12px; color: #5a5852; line-height: 1.65;
+  overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.mc-content code {
+  background: rgba(0,0,0,0.05);
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 3px; padding: 0px 4px;
+  font-size: 10px; color: #26251e;
+}
+
+/* ── Footer ── */
+.mc-foot {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 12px 7px 14px;
+  border-top: 1px solid #eeede8;
+  position: relative; flex-shrink: 0;
+}
+.mc-tag {
+  font-size: 8px; font-weight: 500;
+  padding: 1px 6px; border-radius: 10px;
+  letter-spacing: 0.05em;
+}
+.mc.feedback  .mc-tag { background: rgba(230,90,20,0.08);  color: rgba(180,60,10,0.70);  border: 1px solid rgba(230,90,20,0.18); }
+.mc.project   .mc-tag { background: rgba(50,130,230,0.08);  color: rgba(20,80,180,0.70);  border: 1px solid rgba(50,130,230,0.18); }
+.mc.reference .mc-tag { background: rgba(0,165,105,0.08);   color: rgba(0,120,75,0.70);   border: 1px solid rgba(0,165,105,0.18); }
+.mc.user      .mc-tag { background: rgba(140,90,210,0.08);  color: rgba(100,50,170,0.70); border: 1px solid rgba(140,90,210,0.18); }
+.mc-meta { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.mc-proj { font-size: 8px; letter-spacing: 0.10em; color: rgba(30,28,22,0.30); text-transform: uppercase; }
+.mc-date { font-size: 8px; color: rgba(30,28,22,0.28); letter-spacing: 0.04em; }
+
+/* corner square */
+.mc.feedback  .mc-foot::after { content: ''; position: absolute; bottom: 0; right: 0; width: 5px; height: 5px; background: rgba(230,90,20,0.55);  border-radius: 0 0 4px 0; }
+.mc.project   .mc-foot::after { content: ''; position: absolute; bottom: 0; right: 0; width: 5px; height: 5px; background: rgba(50,130,230,0.55);  border-radius: 0 0 4px 0; }
+.mc.reference .mc-foot::after { content: ''; position: absolute; bottom: 0; right: 0; width: 5px; height: 5px; background: rgba(0,165,105,0.55);   border-radius: 0 0 4px 0; }
+.mc.user      .mc-foot::after { content: ''; position: absolute; bottom: 0; right: 0; width: 5px; height: 5px; background: rgba(140,90,210,0.55); border-radius: 0 0 4px 0; }
+</style>
+</head>
+<body>
+
+<h2>Memory Card &middot; Light Theme</h2>
+
+<div class="grid">
+
+  <div class="mc feedback">
+    <div class="mc-head">
+      <span class="mc-badge">feedback</span>
+      <span class="mc-name">不要在集成测试中使用 mock 数据库</span>
+      <div class="mc-importance">
+        <div class="mc-dot on"></div><div class="mc-dot on"></div>
+        <div class="mc-dot on"></div><div class="mc-dot on"></div>
+        <div class="mc-dot off"></div>
+      </div>
+    </div>
+    <div class="mc-body">
+      <div class="mc-desc">集成测试必须命中真实数据库，不允许 mock</div>
+      <div class="mc-content">上季度 mock 测试全部通过，但 prod 迁移失败——mock 与真实 DB 行为不一致导致问题被掩盖。凡涉及 repository 层的测试，使用 <code>MO_TEST_DB_DSN</code> 指向真实 PostgreSQL。</div>
+    </div>
+    <div class="mc-foot">
+      <span class="mc-tag">testing</span>
+      <span class="mc-tag">database</span>
+      <div class="mc-meta">
+        <span class="mc-proj">memory-orchestrator</span>
+        <span class="mc-date">2026-05-08</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mc project">
+    <div class="mc-head">
+      <span class="mc-badge">project</span>
+      <span class="mc-name">BGE-M3 嵌入模型选型</span>
+      <div class="mc-importance">
+        <div class="mc-dot on"></div><div class="mc-dot on"></div>
+        <div class="mc-dot on"></div><div class="mc-dot off"></div>
+        <div class="mc-dot off"></div>
+      </div>
+    </div>
+    <div class="mc-body">
+      <div class="mc-desc">嵌入层使用 BGE-M3，维度 1024，CLS token + L2 归一化</div>
+      <div class="mc-content">BGE-M3 支持中英双语，MTEB 排名靠前，且可本地离线部署无需外部 API。修改嵌入相关代码时参考 <code>embedder.py</code>，切换模型后需运行 <code>migrate-embeddings</code>。</div>
+    </div>
+    <div class="mc-foot">
+      <span class="mc-tag">embedding</span>
+      <span class="mc-tag">ml</span>
+      <div class="mc-meta">
+        <span class="mc-proj">memory-orchestrator</span>
+        <span class="mc-date">2026-04-20</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mc reference">
+    <div class="mc-head">
+      <span class="mc-badge">reference</span>
+      <span class="mc-name">Git 仓库地址</span>
+      <div class="mc-importance">
+        <div class="mc-dot on"></div><div class="mc-dot on"></div>
+        <div class="mc-dot off"></div><div class="mc-dot off"></div>
+        <div class="mc-dot off"></div>
+      </div>
+    </div>
+    <div class="mc-body">
+      <div class="mc-desc">主项目 Git 仓库的远程地址</div>
+      <div class="mc-content"><code>https://github.com/org/memory-orchestrator</code>
+需要查看提交历史、PR 或 issue 时访问此地址。</div>
+    </div>
+    <div class="mc-foot">
+      <span class="mc-tag">git</span>
+      <div class="mc-meta">
+        <span class="mc-proj">guardian</span>
+        <span class="mc-date">2026-05-01</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mc user">
+    <div class="mc-head">
+      <span class="mc-badge">user</span>
+      <span class="mc-name">回复语言偏好</span>
+      <div class="mc-importance">
+        <div class="mc-dot on"></div><div class="mc-dot on"></div>
+        <div class="mc-dot on"></div><div class="mc-dot on"></div>
+        <div class="mc-dot on"></div>
+      </div>
+    </div>
+    <div class="mc-body">
+      <div class="mc-desc">始终用中文回复，无论用户用何种语言提问</div>
+      <div class="mc-content">所有回复、注释建议、错误说明均使用简体中文。代码本身保持英文标识符不变。</div>
+    </div>
+    <div class="mc-foot">
+      <span class="mc-tag">language</span>
+      <span class="mc-tag">preference</span>
+      <div class="mc-meta">
+        <span class="mc-proj">global</span>
+        <span class="mc-date">2026-03-10</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

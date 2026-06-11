@@ -151,6 +151,20 @@ npm run build   # production build → dist/
 npm run dev     # dev server with HMR (separate from FastAPI)
 ```
 
+### i18n (multi-language) — required for all user-facing text
+
+The SPA ships English + Chinese. **Never hardcode user-facing strings** (toasts,
+labels, placeholders, button text, error messages). Always go through `t()`.
+
+- `src/useLocale.js` — `const { t } = useLocale()`. `t('English key', { var })` looks
+  up the current locale and interpolates `{var}` placeholders. Default locale is `en`.
+- `src/locales/en.json` and `src/locales/zh.json` — the English string itself is the
+  key. Add the **same key to both files** whenever you introduce new copy; a missing
+  key silently falls back to the raw key string.
+- Non-component modules (e.g. `src/api.js`) can import `useLocale` at module scope —
+  `t` reads the live `lang` ref on each call, so it stays reactive to language switches.
+- After adding copy, verify both languages render (toggle via the EN/中 header button).
+
 ## Docker
 
 Docker files live in this directory (`Dockerfile`, `Dockerfile.base`); compose and DB image

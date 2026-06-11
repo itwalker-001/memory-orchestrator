@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:8765' }
+      '/api': { target: 'http://172.16.10.123:8765', changeOrigin: true }
     }
   },
   build: { outDir: 'dist' }

@@ -10,7 +10,7 @@ from sqlalchemy import select, func, update as sa_update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from memory_orchestrator_server.config import get_settings
-from memory_orchestrator_server.models import Memory, Project
+from memory_orchestrator_server.models import Memory, Project, ProjectSkeletonNode
 from memory_orchestrator_server.repository import MemoryRepository, _sync_project_count
 from memory_orchestrator_server.time_utils import isoformat_utc, utc_now
 
@@ -100,14 +100,22 @@ class ProjectCreate(BaseModel):
     display_name: str
 
 
+class ProjectPatch(BaseModel):
+    display_name: str
+
+
 class SkeletonNodeCreate(BaseModel):
     project_id: uuid.UUID
     name: str
     parent_id: uuid.UUID | None = None
+    description: str | None = None
+    prompt_hint: str | None = None
+    tags: list[str] | None = None
 
 
 class SkeletonNodePatch(BaseModel):
     name: str | None = None
+    description: str | None = None
     prompt_hint: str | None = None
     tags: list[str] | None = None
 
@@ -121,12 +129,12 @@ class NodeMemoryAdd(BaseModel):
     memory_id: uuid.UUID
 
 
-def _new_token_pair() -> tuple[str, str]:
+def _new_token_pair() -> tuple[str, str, str | None]:
     import secrets
-    from memory_orchestrator_server.auth_tokens import hash_token
+    from memory_orchestrator_server.auth_tokens import hash_token, encrypt_token
 
     raw = secrets.token_urlsafe(32)
-    return raw, hash_token(raw)
+    return raw, hash_token(raw), encrypt_token(raw)
 
 
 def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
@@ -135,7 +143,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     )
 
     outer = APIRouter()
-    public = APIRouter(prefix="/api")
+    public = APIRouter(prefix="/api", tags=["Auth"])
     _auth_dep = auth_dependency(maker=maker, kind=TOKEN_KIND_UI)
     router = APIRouter(prefix="/api", dependencies=[Depends(_auth_dep)])
 
@@ -173,7 +181,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
 
     # ── Token management (protected) ─────────────────────────────────────────
 
-    @router.get("/tokens")
+    @router.get("/tokens", tags=["Tokens"], summary="List tokens")
     async def list_tokens() -> list[dict]:
         from memory_orchestrator_server.models import ApiToken
         async with maker() as s:
@@ -190,11 +198,12 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 "project_id": str(t.project_id) if t.project_id else None,
                 "created_at": isoformat_utc(t.created_at),
                 "last_used_at": isoformat_utc(t.last_used_at) if t.last_used_at else None,
+                "revealable": bool(t.token_encrypted),
             }
             for t in rows
         ]
 
-    @router.post("/tokens", status_code=201)
+    @router.post("/tokens", status_code=201, tags=["Tokens"], summary="Create token")
     async def create_token(body: TokenCreate = Body(...)) -> dict:
         from memory_orchestrator_server.auth_tokens import TOKEN_KIND_PROJECT
         from memory_orchestrator_server.models import ApiToken
@@ -204,10 +213,11 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         if body.kind == TOKEN_KIND_PROJECT and not body.project_id:
             raise HTTPException(status_code=422, detail="project_id required for project_token")
 
-        raw, token_hash = _new_token_pair()
+        raw, token_hash, token_encrypted = _new_token_pair()
         async with maker() as s:
             t = ApiToken(
                 name=body.name, kind=body.kind, token_hash=token_hash,
+                token_encrypted=token_encrypted,
                 project_id=body.project_id,
             )
             s.add(t)
@@ -220,7 +230,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             "created_at": isoformat_utc(t.created_at),
         }
 
-    @router.post("/tokens/{token_id}/reset", status_code=200)
+    @router.post("/tokens/{token_id}/reset", status_code=200, tags=["Tokens"], summary="Reset token value")
     async def reset_token(
         token_id: uuid.UUID,
         authorization: str | None = Header(default=None),
@@ -229,7 +239,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         from memory_orchestrator_server.auth_tokens import bearer_token, hash_token
         from memory_orchestrator_server.models import ApiToken
 
-        raw, token_hash = _new_token_pair()
+        raw, token_hash, token_encrypted = _new_token_pair()
         current_hash = hash_token(bearer_token(authorization) or (mo_ui_session or ""))
         refresh_session = False
         async with maker() as s:
@@ -238,6 +248,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 raise HTTPException(status_code=404, detail="not found")
             refresh_session = tok.kind == TOKEN_KIND_UI and tok.token_hash == current_hash
             tok.token_hash = token_hash
+            tok.token_encrypted = token_encrypted
             await s.commit()
         response = JSONResponse(content={"id": str(token_id), "token": raw, "action": "rotated"})
         if refresh_session:
@@ -251,7 +262,23 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             )
         return response
 
-    @router.patch("/tokens/{token_id}", status_code=200)
+    @router.post("/tokens/{token_id}/reveal", status_code=200, tags=["Tokens"], summary="Reveal token value")
+    async def reveal_token(token_id: uuid.UUID) -> dict:
+        from memory_orchestrator_server.auth_tokens import decrypt_token
+        from memory_orchestrator_server.models import ApiToken
+        async with maker() as s:
+            tok = await s.get(ApiToken, token_id)
+            if not tok or tok.revoked_at is not None:
+                raise HTTPException(status_code=404, detail="not found")
+            raw = decrypt_token(tok.token_encrypted)
+            if raw is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="token cannot be revealed (created before encryption was enabled, or key unavailable)",
+                )
+        return {"id": str(token_id), "token": raw}
+
+    @router.patch("/tokens/{token_id}", status_code=200, tags=["Tokens"], summary="Enable/disable token")
     async def patch_token(token_id: uuid.UUID, body: TokenPatch = Body(...)) -> dict:
         from memory_orchestrator_server.models import ApiToken
         async with maker() as s:
@@ -265,7 +292,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"ok": True}
 
-    @router.delete("/tokens/{token_id}", status_code=200)
+    @router.delete("/tokens/{token_id}", status_code=200, tags=["Tokens"], summary="Revoke token")
     async def revoke_token(token_id: uuid.UUID) -> dict:
         from memory_orchestrator_server.models import ApiToken
         async with maker() as s:
@@ -276,7 +303,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"ok": True}
 
-    @router.get("/timezone")
+    @router.get("/timezone", tags=["System"], summary="Server timezone")
     async def timezone() -> dict:
         import datetime
         tz = datetime.datetime.now().astimezone().tzname()
@@ -300,7 +327,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             "last_active_at": isoformat_utc(p.last_active_at) if p.last_active_at else None,
         }
 
-    @router.get("/projects")
+    @router.get("/projects", tags=["Projects"], summary="List projects")
     async def projects(hide_empty: bool = False) -> list[dict]:
         async with maker() as s:
             stmt = select(Project).order_by(Project.memory_count.desc())
@@ -309,7 +336,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             result = await s.execute(stmt)
             return [_project_dict(p) for p in result.scalars().all()]
 
-    @router.get("/projects/{project_id}")
+    @router.get("/projects/{project_id}", tags=["Projects"], summary="Get project")
     async def get_project(project_id: uuid.UUID) -> dict:
         async with maker() as s:
             p = await s.get(Project, project_id)
@@ -317,7 +344,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 raise HTTPException(status_code=404, detail="project not found")
             return _project_dict(p)
 
-    @router.get("/stats")
+    @router.get("/stats", tags=["System"], summary="Memory stats")
     async def stats(project_slug: str | None = None) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -331,7 +358,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             by_type = {row[0]: row[1] for row in result.all()}
             return {"total": sum(by_type.values()), "by_type": by_type}
 
-    @router.get("/memories")
+    @router.get("/memories", tags=["Memories"], summary="List / search memories")
     async def memories(project_slug: str | None = None, type: str | None = None, q: str | None = None, limit: int = 100, sort_by: str = "time", sort_desc: bool = True) -> list[dict]:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -357,7 +384,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 result.append(d)
             return result
 
-    @router.post("/memories", status_code=201)
+    @router.post("/memories", status_code=201, tags=["Memories"], summary="Create memory")
     async def create_memory(body: MemoryCreate = Body(...)) -> dict:
         from memory_orchestrator_server.embedder import embed_one
         if body.type not in ("user", "feedback", "project", "reference"):
@@ -380,7 +407,26 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"id": str(m.id), "action": "created"}
 
-    @router.delete("/memories/{memory_id}", status_code=204)
+    @router.get("/memories/{memory_id}", tags=["Memories"], summary="Get memory")
+    async def get_memory(memory_id: uuid.UUID) -> dict:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            m = await repo.get(memory_id)
+            if not m:
+                raise HTTPException(status_code=404, detail="not found")
+            return {
+                "id": str(m.id), "type": m.type, "name": m.name,
+                "description": m.description, "content": m.content,
+                "why": m.why, "how_to_apply": m.how_to_apply,
+                "importance": m.importance, "hit_count": m.hit_count,
+                "source_client": m.source_client,
+                "last_hit_at": isoformat_utc(m.last_hit_at) if m.last_hit_at else None,
+                "project_id": str(m.project_id),
+                "created_at": isoformat_utc(m.created_at),
+                "updated_at": isoformat_utc(m.updated_at),
+            }
+
+    @router.delete("/memories/{memory_id}", status_code=204, tags=["Memories"], summary="Soft-delete memory")
     async def delete_memory(memory_id: uuid.UUID, hard: bool = False) -> None:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -390,7 +436,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await repo.delete(memory_id, hard=hard)
             await s.commit()
 
-    @router.patch("/memories/{memory_id}", status_code=200)
+    @router.patch("/memories/{memory_id}", status_code=200, tags=["Memories"], summary="Update memory")
     async def patch_memory(memory_id: uuid.UUID, body: MemoryPatch = Body(...)) -> dict:
         from memory_orchestrator_server.embedder import embed_one
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -410,7 +456,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"saved": len(updates)}
 
-    @router.post("/memories/{memory_id}/clone", status_code=201)
+    @router.post("/memories/{memory_id}/clone", status_code=201, tags=["Memories"], summary="Clone memory to project")
     async def clone_memory(memory_id: uuid.UUID, project_slug: str) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -430,7 +476,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"id": str(new_m.id), "action": "cloned"}
 
-    @router.patch("/memories/{memory_id}/move", status_code=200)
+    @router.patch("/memories/{memory_id}/move", status_code=200, tags=["Memories"], summary="Move memory to project")
     async def move_memory(memory_id: uuid.UUID, project_slug: str) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -448,7 +494,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"moved": True, "project_slug": project_slug}
 
-    @router.get("/settings")
+    @router.get("/settings", tags=["Settings"], summary="Get settings")
     async def get_settings_endpoint() -> dict:
         s = get_settings()
         defaults = {
@@ -466,7 +512,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         merged["extraction_api_key"] = "***" if merged.get("extraction_api_key") else ""
         return merged
 
-    @router.patch("/settings", status_code=200)
+    @router.patch("/settings", status_code=200, tags=["Settings"], summary="Update settings")
     async def patch_settings(body: SettingsPatch = Body(...)) -> dict:
         updates = {k: v for k, v in body.model_dump().items() if v is not None and v != "***"}
         if not updates:
@@ -477,7 +523,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await session.commit()
         return {"saved": len(updates)}
 
-    @router.post("/memories/batch-delete", status_code=200)
+    @router.post("/memories/batch-delete", status_code=200, tags=["Memories"], summary="Batch soft-delete")
     async def batch_delete(body: BatchDeleteBody = Body(...)) -> dict:
         deleted = 0
         async with maker() as s:
@@ -490,7 +536,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"deleted": deleted}
 
-    @router.post("/memories/batch-move", status_code=200)
+    @router.post("/memories/batch-move", status_code=200, tags=["Memories"], summary="Batch move")
     async def batch_move(body: BatchMoveBody = Body(...)) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -512,7 +558,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"moved": moved, "project_slug": body.project_slug}
 
-    @router.get("/export")
+    @router.get("/export", tags=["Memories"], summary="Export / backup")
     async def export_memories(project_slug: str | None = None, type: str | None = None, q: str | None = None) -> list[dict]:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -539,7 +585,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 result.append(d)
             return result
 
-    @router.get("/models")
+    @router.get("/models", tags=["Settings"], summary="Discover available models")
     async def list_models(base_url: str, x_api_key: str | None = Header(default=None)) -> list[str]:
         api_key = x_api_key or ""
         if not api_key:
@@ -564,7 +610,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         models = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m]
         return sorted(models)
 
-    @router.get("/duplicates")
+    @router.get("/duplicates", tags=["Memories"], summary="Scan duplicates")
     async def find_duplicates(
         threshold: float | None = None,
         project_slug: str | None = None,
@@ -624,7 +670,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             })
         return pairs
 
-    @router.get("/conflicts")
+    @router.get("/conflicts", tags=["Memories"], summary="Scan conflicts")
     async def find_conflicts(
         min_sim: float = 0.50,
         project_slug: str | None = None,
@@ -699,7 +745,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         """
         import hashlib
         import secrets
-        from memory_orchestrator_server.auth_tokens import TOKEN_KIND_PROJECT
+        from memory_orchestrator_server.auth_tokens import TOKEN_KIND_PROJECT, encrypt_token
         from memory_orchestrator_server.models import ApiToken
         from sqlalchemy import select
 
@@ -731,19 +777,21 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
 
             raw = secrets.token_urlsafe(32)
             token_hash = hashlib.sha256(raw.encode()).hexdigest()
+            token_encrypted = encrypt_token(raw)
 
             if existing is not None:
                 existing.token_hash = token_hash
+                existing.token_encrypted = token_encrypted
             else:
                 s.add(ApiToken(name=name, kind=TOKEN_KIND_PROJECT, token_hash=token_hash,
-                               project_id=project_uuid))
+                               token_encrypted=token_encrypted, project_id=project_uuid))
             await s.commit()
 
         return {"token": raw, "name": name, "project_slug": project_slug, "already_registered": False}
 
     # ── Projects ─────────────────────────────────────────────────────────────
 
-    @router.post("/projects", status_code=201)
+    @router.post("/projects", status_code=201, tags=["Projects"], summary="Create project")
     async def create_project(body: ProjectCreate = Body(...)) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -756,34 +804,59 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             "memory_count": proj.memory_count,
         }
 
-    @router.delete("/projects/{project_id}", status_code=204)
-    async def delete_project(project_id: uuid.UUID) -> None:
+    @router.patch("/projects/{project_id}", status_code=200, tags=["Projects"], summary="Update project")
+    async def update_project(project_id: uuid.UUID, body: ProjectPatch = Body(...)) -> dict:
+        name = body.display_name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="display_name required")
         async with maker() as s:
             proj = await s.get(Project, project_id)
             if not proj:
                 raise HTTPException(status_code=404, detail="project not found")
+            proj.display_name = name
+            await s.commit()
+        return _project_dict(proj)
+
+    @router.delete("/projects/{project_id}", status_code=204, tags=["Projects"], summary="Delete project")
+    async def delete_project(project_id: uuid.UUID) -> None:
+        from memory_orchestrator_server.models import Session
+        from sqlalchemy import delete as sa_delete
+        async with maker() as s:
+            proj = await s.get(Project, project_id)
+            if not proj:
+                raise HTTPException(status_code=404, detail="project not found")
+            # Remove child rows that lack DB-level cascade before deleting the project.
+            # (skeleton nodes cascade via ondelete=CASCADE; sessions/memories do not.)
+            await s.execute(sa_delete(Session).where(Session.project_id == project_id))
+            await s.execute(sa_delete(Memory).where(Memory.project_id == project_id))
             await s.delete(proj)
             await s.commit()
 
     # ── Skeleton nodes ────────────────────────────────────────────────────────
 
-    @router.get("/projects/{project_id}/skeleton")
+    @router.get("/projects/{project_id}/skeleton", tags=["Skeleton"], summary="Get project skeleton tree")
     async def get_skeleton(project_id: uuid.UUID) -> list:
         async with maker() as s:
             repo = MemoryRepository(s)
             return await repo.get_skeleton_tree(project_id)
 
-    @router.patch("/skeleton-nodes/{node_id}", status_code=200)
+    @router.patch("/skeleton-nodes/{node_id}", status_code=200, tags=["Skeleton"], summary="Update node")
     async def patch_skeleton_node(node_id: uuid.UUID, body: SkeletonNodePatch = Body(...)) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
-            ok = await repo.patch_skeleton_node(node_id, name=body.name, prompt_hint=body.prompt_hint, tags=body.tags)
+            ok = await repo.patch_skeleton_node(
+                node_id,
+                name=body.name,
+                description=body.description,
+                prompt_hint=body.prompt_hint,
+                tags=body.tags,
+            )
             if not ok:
                 raise HTTPException(status_code=404, detail="node not found")
             await s.commit()
         return {"ok": True}
 
-    @router.post("/skeleton-nodes", status_code=201)
+    @router.post("/skeleton-nodes", status_code=201, tags=["Skeleton"], summary="Create node")
     async def create_skeleton_node(body: SkeletonNodeCreate = Body(...)) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -791,11 +864,14 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 project_id=body.project_id,
                 name=body.name,
                 parent_id=body.parent_id,
+                description=body.description or "",
+                prompt_hint=body.prompt_hint or "",
+                tags=body.tags or [],
             )
             await s.commit()
         return node
 
-    @router.post("/skeleton-nodes/reorder", status_code=200)
+    @router.post("/skeleton-nodes/reorder", status_code=200, tags=["Skeleton"], summary="Reorder sibling nodes")
     async def reorder_skeleton_nodes(body: SkeletonNodeReorder = Body(...)) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -803,7 +879,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"ok": True}
 
-    @router.delete("/skeleton-nodes/{node_id}", status_code=204)
+    @router.delete("/skeleton-nodes/{node_id}", status_code=204, tags=["Skeleton"], summary="Delete node")
     async def delete_skeleton_node(node_id: uuid.UUID) -> None:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -812,7 +888,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         if not ok:
             raise HTTPException(status_code=409, detail="cannot delete builtin node or node not found")
 
-    @router.post("/skeleton-nodes/{node_id}/memories", status_code=201)
+    @router.post("/skeleton-nodes/{node_id}/memories", status_code=201, tags=["Skeleton"], summary="Link memory to node")
     async def add_memory_to_node(node_id: uuid.UUID, body: NodeMemoryAdd = Body(...)) -> dict:
         async with maker() as s:
             repo = MemoryRepository(s)
@@ -820,22 +896,63 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
         return {"ok": True}
 
-    @router.get("/skeleton-nodes/{node_id}/memories")
+    @router.get("/skeleton-nodes/{node_id}/memories", tags=["Skeleton"], summary="List node memories (subtree)")
     async def get_node_memories(node_id: uuid.UUID) -> list:
         async with maker() as s:
             repo = MemoryRepository(s)
             mems = await repo.get_node_memories(node_id)
-        return [
-            {
+        result = []
+        for m in mems:
+            d = {
                 "id": str(m.id), "type": m.type, "name": m.name,
-                "description": m.description, "content": m.content,
-                "importance": m.importance,
+                "description": m.description,
+                "importance": m.importance, "hit_count": m.hit_count,
+                "source_client": m.source_client,
+                "last_hit_at": isoformat_utc(m.last_hit_at) if m.last_hit_at else None,
+                "project_id": str(m.project_id),
                 "created_at": isoformat_utc(m.created_at),
             }
-            for m in mems
+            if m.why:
+                d["why"] = m.why
+            if m.how_to_apply:
+                d["how_to_apply"] = m.how_to_apply
+            result.append(d)
+        return result
+
+    @router.get("/memories/{memory_id}/nodes", tags=["Skeleton"], summary="List nodes linked to a memory")
+    async def get_memory_nodes(memory_id: uuid.UUID) -> list:
+        async with maker() as s:
+            repo = MemoryRepository(s)
+            nodes = await repo.get_memory_nodes(memory_id)
+            # Build a name→path map per project so we can show the breadcrumb.
+            by_id: dict[uuid.UUID, ProjectSkeletonNode] = {}
+            for n in nodes:
+                if n.project_id not in {x.project_id for x in by_id.values()}:
+                    for fn in await repo.get_skeleton_flat(n.project_id):
+                        by_id[fn.id] = fn
+
+        def path_of(node: ProjectSkeletonNode) -> list[str]:
+            names: list[str] = []
+            cur: ProjectSkeletonNode | None = node
+            seen: set[uuid.UUID] = set()
+            while cur is not None and cur.id not in seen:
+                seen.add(cur.id)
+                names.append(cur.name)
+                cur = by_id.get(cur.parent_id) if cur.parent_id else None
+            return list(reversed(names))
+
+        return [
+            {
+                "id": str(n.id),
+                "name": n.name,
+                "parent_id": str(n.parent_id) if n.parent_id else None,
+                "project_id": str(n.project_id),
+                "path": path_of(n),
+            }
+            for n in nodes
         ]
 
-    @router.delete("/skeleton-nodes/{node_id}/memories/{memory_id}", status_code=204)
+    @router.delete("/skeleton-nodes/{node_id}/memories/{memory_id}", status_code=204, tags=["Skeleton"], summary="Unlink memory from node")
     async def remove_memory_from_node(node_id: uuid.UUID, memory_id: uuid.UUID) -> None:
         async with maker() as s:
             repo = MemoryRepository(s)

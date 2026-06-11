@@ -62,6 +62,7 @@ class ApiToken(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    token_encrypted: Mapped[str | None] = mapped_column(Text)
     owner_user: Mapped[str | None] = mapped_column(Text)
     scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list, nullable=False)
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")

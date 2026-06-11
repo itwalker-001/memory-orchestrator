@@ -1,30 +1,24 @@
 <!-- frontend/src/SkeletonPage.vue -->
 <template>
-  <div class="sk-app" :class="{ dark: isDark }">
+  <div class="sk-app" :style="cssVars">
     <!-- Login overlay -->
-    <div v-if="loginOpen" class="modal-overlay login-overlay">
-      <div class="login-modal">
-        <div class="login-title">Memory Orchestrator</div>
-        <input v-model="loginInput" class="login-input" type="password"
-          placeholder="Admin token…" @keydown.enter="submitLogin" />
-        <p v-if="loginError" class="login-error">{{ loginError }}</p>
-        <button class="btn-login" :disabled="loginLoading" @click="submitLogin">
-          {{ loginLoading ? 'Signing in…' : 'Sign in' }}
-        </button>
-        <button class="btn-skip" @click="skipLogin">Continue without token</button>
-      </div>
-    </div>
+    <BaseModal :show="loginOpen">
+      <n-card v-if="loginOpen" title="Memory Orchestrator" style="width:340px" :bordered="false">
+        <n-space vertical :size="12">
+          <n-input v-model:value="loginInput" type="password" show-password-on="click"
+            :placeholder="t('Admin token…')" @keydown.enter="submitLogin" />
+          <n-text v-if="loginError" type="error" style="font-size:12px">{{ loginError }}</n-text>
+          <n-button type="primary" block :loading="loginLoading" @click="submitLogin">{{ t('Sign in') }}</n-button>
+          <n-button text size="small" @click="skipLogin">{{ t('Continue without token') }}</n-button>
+        </n-space>
+      </n-card>
+    </BaseModal>
 
     <template v-if="!loginOpen">
       <AppHeader
         :loginOpen="loginOpen"
-        @open-settings="router.push('/settings')"
         @logout="logout"
-      >
-        <template #nav>
-          <router-link to="/memories">→ Memories</router-link>
-        </template>
-      </AppHeader>
+      />
 
       <div class="sk-body">
         <!-- Column 1: Icon strip -->
@@ -33,6 +27,7 @@
           :activeId="selectedProject?.id"
           @select="selectProject"
           @create="openNewProjectModal"
+          @context-menu="openProjectContextMenu"
         />
 
         <!-- Column 2: Tree panel -->
@@ -47,8 +42,9 @@
           @delete="onDelete"
           @context-menu="openContextMenu"
           @reorder="onReorder"
+          @add-root="onAddRoot"
         />
-        <div v-else class="tree-empty">{{ t('Select or create project') }}</div>
+        <n-empty v-else class="tree-empty" :description="t('Select or create project')" />
 
         <!-- Column 3: Detail panel -->
         <NodeDetailPanel
@@ -60,6 +56,8 @@
           @add-memory="addMemoryOpen = true"
           @unlink-memory="unlinkMemory"
           @open-detail="m => detailMemory = m"
+          @edit-memory="openEditMemory"
+          @edit-node="openEditNode"
         />
       </div>
     </template>
@@ -70,130 +68,211 @@
       :x="ctxX"
       :y="ctxY"
       :depth="ctxDepth"
+      :is-builtin="ctxNode?.is_builtin ?? false"
       @add-child="onAddChild"
-      @rename="onRenameNode"
-      @manage-tags="focusTags"
       @delete="onDeleteNode"
     />
 
+    <!-- Project context menu -->
+    <n-dropdown
+      trigger="manual"
+      placement="bottom-start"
+      :show="projCtxVisible"
+      :x="projCtxX"
+      :y="projCtxY"
+      :options="projCtxOptions"
+      @select="onProjectCtxSelect"
+      @clickoutside="closeProjectContextMenu"
+    />
+
     <!-- Memory detail modal -->
-    <MemoryDetailModal :memory="detailMemory" @close="detailMemory = null" @edit="detailMemory = null" />
+    <MemoryDetailModal :memory="detailMemory" @close="detailMemory = null" @edit="openEditMemory" />
 
     <!-- New project modal -->
-    <div v-if="newProjectOpen" class="modal-overlay" @click.self="newProjectOpen = false">
-      <div class="modal" style="max-width:380px">
-        <div class="modal-header">
-          <span class="modal-title">{{ t('New Project') }}</span>
-          <button class="modal-close" @click="newProjectOpen = false"><IconClose width="12" height="12" /></button>
-        </div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
-          <input class="sk-input" v-model="newProjectName" :placeholder="t('Project name…')"
+    <BaseModal :show="newProjectOpen" :mask-closable="true" @close="newProjectOpen = false">
+      <n-card v-if="newProjectOpen" :title="t('New Project')" closable style="width:380px" :bordered="false" @close="newProjectOpen = false">
+        <n-space vertical :size="12">
+          <n-input v-model:value="newProjectName" :placeholder="t('Project name…')"
             @keydown.enter="createProject" ref="newProjectInput" />
-          <button class="btn-save" :disabled="!newProjectName || isCreatingProject" @click="createProject">
-            {{ isCreatingProject ? t('Creating…') : t('Create') }}
-          </button>
-        </div>
-      </div>
-    </div>
+          <n-button type="primary" block :disabled="!newProjectName" :loading="isCreatingProject" @click="createProject">
+            {{ t('Create') }}
+          </n-button>
+        </n-space>
+      </n-card>
+    </BaseModal>
+
+    <!-- Edit project modal -->
+    <BaseModal :show="editProjectOpen" :mask-closable="true" @close="editProjectOpen = false">
+      <n-card v-if="editProjectOpen" :title="t('Edit project')" closable style="width:380px" :bordered="false" @close="editProjectOpen = false">
+        <n-space vertical :size="12">
+          <n-input v-model:value="editProjectName" :placeholder="t('Project name…')"
+            @keydown.enter="submitEditProject" ref="editProjectInput" />
+          <n-button type="primary" block :disabled="!editProjectName.trim()" :loading="isEditingProject" @click="submitEditProject">
+            {{ t('Save') }}
+          </n-button>
+        </n-space>
+      </n-card>
+    </BaseModal>
+
+    <!-- Delete project confirm modal -->
+    <BaseModal :show="!!deleteProjectTarget" :mask-closable="true" @close="deleteProjectTarget = null">
+      <n-card v-if="deleteProjectTarget" :title="t('Delete project')" closable style="width:420px" :bordered="false" @close="deleteProjectTarget = null">
+        <n-text strong style="display:block">{{ deleteProjectTarget.display_name || deleteProjectTarget.slug }}</n-text>
+        <n-text depth="3" tag="p" style="margin-top:8px;font-size:12px">
+          {{ t('Delete project "{name}" and all its memories and skeleton nodes? This cannot be undone.', { name: deleteProjectTarget.display_name || deleteProjectTarget.slug }) }}
+        </n-text>
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="deleteProjectTarget = null">{{ t('Cancel') }}</n-button>
+            <n-button type="error" :loading="isDeletingProject" @click="confirmDeleteProject">{{ t('Delete') }}</n-button>
+          </n-space>
+        </template>
+      </n-card>
+    </BaseModal>
+
+    <!-- Delete node confirm modal -->
+    <BaseModal :show="!!deleteNodeTarget" :mask-closable="true" @close="deleteNodeTarget = null">
+      <n-card v-if="deleteNodeTarget" :title="t('Delete node')" closable style="width:420px" :bordered="false" @close="deleteNodeTarget = null">
+        <n-text depth="3" tag="p" style="font-size:12px">
+          {{ t('Delete this node and unlink its memories?') }}
+        </n-text>
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="deleteNodeTarget = null">{{ t('Cancel') }}</n-button>
+            <n-button type="error" :loading="isDeletingNode" @click="confirmDeleteNode">{{ t('Delete') }}</n-button>
+          </n-space>
+        </template>
+      </n-card>
+    </BaseModal>
+
+    <!-- Node name modal (add top-level / add child / rename) -->
+    <BaseModal :show="nodeModalOpen" :mask-closable="true" @close="nodeModalOpen = false">
+      <n-card v-if="nodeModalOpen" :title="nodeModalTitle" closable style="width:460px" :bordered="false" @close="nodeModalOpen = false">
+        <n-space vertical :size="12">
+          <n-form-item :label="t('Name')" label-placement="top" :show-feedback="false">
+            <n-input
+              v-model:value="nodeModalName"
+              :disabled="nodeModalMode === 'rename' && !!nodeModalNode?.is_builtin"
+              :placeholder="t('Node name…')"
+              @keydown.enter="submitNodeModal"
+              ref="nodeModalInput"
+            />
+          </n-form-item>
+          <n-form-item :label="t('Tags')" label-placement="top" :show-feedback="false">
+            <TagPicker v-model="nodeModalTags" :all-tags="allTags" />
+          </n-form-item>
+          <n-form-item :label="t('Description')" label-placement="top" :show-feedback="false">
+            <n-input
+              v-model:value="nodeModalDescription"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              :placeholder="t('One-line summary…')"
+            />
+          </n-form-item>
+          <n-form-item :label="t('Prompt Hint')" label-placement="top" :show-feedback="false">
+            <n-input
+              v-model:value="nodeModalPromptHint"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 5 }"
+              :placeholder="t('Prompt hint…')"
+            />
+          </n-form-item>
+          <n-button type="primary" block :disabled="!nodeModalName.trim()" :loading="nodeModalSaving" @click="submitNodeModal">
+            {{ nodeModalMode === 'rename' ? t('Save') : t('Create') }}
+          </n-button>
+        </n-space>
+      </n-card>
+    </BaseModal>
 
     <!-- Add memory modal -->
-    <div v-if="addMemoryOpen" class="modal-overlay" @click.self="addMemoryOpen = false">
-      <div class="write-modal">
-        <div class="write-header">
-          <span class="write-title">{{ t('Add memory → {name}', { name: selectedNode?.name }) }}</span>
-          <button class="modal-close" @click="addMemoryOpen = false"><IconClose width="12" height="12" /></button>
-        </div>
+    <BaseModal :show="addMemoryOpen" :mask-closable="true" @close="addMemoryOpen = false">
+      <n-card v-if="addMemoryOpen" closable style="width:520px" :bordered="false"
+        :title="t('Add memory → {name}', { name: selectedNode?.name })"
+        @close="addMemoryOpen = false">
+        <n-tabs v-model:value="addMemoryTab" type="line" animated>
+          <n-tab-pane name="write" :tab="t('Write new')">
+            <n-space vertical :size="12">
+              <n-text v-if="selectedNode?.prompt_hint" depth="3" italic style="font-size:11px">{{ selectedNode.prompt_hint }}</n-text>
+              <n-radio-group v-model:value="memForm.type" size="small">
+                <n-radio-button v-for="tp in ['user','feedback','project','reference']" :key="tp" :value="tp">{{ t(tp) }}</n-radio-button>
+              </n-radio-group>
+              <n-form-item :label="t('Name')" label-placement="top" :show-feedback="false">
+                <n-input v-model:value="memForm.name" :placeholder="t('Short identifier…')" />
+              </n-form-item>
+              <n-form-item :label="t('Description')" label-placement="top" :show-feedback="false">
+                <n-input v-model:value="memForm.description" :placeholder="t('One-line summary…')" />
+              </n-form-item>
+              <n-form-item :label="t('Content')" label-placement="top" :show-feedback="false">
+                <MarkdownEditor v-model:value="memForm.content" min-height="160px" class="add-mem-editor" />
+              </n-form-item>
+              <n-text v-if="memError" type="error" style="font-size:12px">{{ memError }}</n-text>
+              <n-space justify="end">
+                <n-button @click="addMemoryOpen = false">{{ t('Cancel') }}</n-button>
+                <n-button type="primary" :loading="isMemSaving" :disabled="!memForm.name || !memForm.content" @click="submitAddMemory">{{ t('Write') }}</n-button>
+              </n-space>
+            </n-space>
+          </n-tab-pane>
 
-        <!-- Tab strip -->
-        <div class="modal-tabs">
-          <button :class="['modal-tab', addMemoryTab === 'write' ? 'active' : '']" @click="addMemoryTab = 'write'">
-            {{ t('Write new') }}
-          </button>
-          <button :class="['modal-tab', addMemoryTab === 'select' ? 'active' : '']" @click="addMemoryTab = 'select'">
-            {{ t('Select existing') }}
-          </button>
-        </div>
+          <n-tab-pane name="select" :tab="t('Select existing')">
+            <n-space vertical :size="12">
+              <n-input v-model:value="selectMemQuery" :placeholder="t('Search memories…')" clearable @input="onSelectMemSearch" />
+              <n-spin :show="selectMemLoading">
+                <n-empty v-if="selectMemResults.length === 0" :description="selectMemQuery ? t('No memories found') : t('Search to find existing memories')" style="padding:16px 0" />
+                <div v-else class="select-mem-list">
+                  <n-card v-for="m in selectMemResults" :key="m.id" size="small" hoverable
+                    :class="['select-mem-item', { chosen: selectMemChosen?.id === m.id }]"
+                    @click="selectMemChosen = m">
+                    <n-space align="center" :size="8" :wrap="false">
+                      <n-tag size="tiny" :type="typeTagType(m.type)" :bordered="false">{{ t(m.type) }}</n-tag>
+                      <n-text strong style="font-size:12px;white-space:nowrap">{{ m.name }}</n-text>
+                      <n-text depth="3" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.description }}</n-text>
+                    </n-space>
+                  </n-card>
+                </div>
+              </n-spin>
+              <n-text v-if="memError" type="error" style="font-size:12px">{{ memError }}</n-text>
+              <n-space justify="end">
+                <n-button @click="addMemoryOpen = false">{{ t('Cancel') }}</n-button>
+                <n-button type="primary" :loading="isMemSaving" :disabled="!selectMemChosen" @click="submitLinkMemory">{{ t('Link') }}</n-button>
+              </n-space>
+            </n-space>
+          </n-tab-pane>
+        </n-tabs>
+      </n-card>
+    </BaseModal>
 
-        <!-- Write new tab -->
-        <template v-if="addMemoryTab === 'write'">
-          <div class="write-body">
-            <p v-if="selectedNode?.prompt_hint" class="sk-prompt-hint-text">{{ selectedNode.prompt_hint }}</p>
-            <div class="write-type-tabs">
-              <button v-for="tp in ['user','feedback','project','reference']" :key="tp"
-                :class="['type-tab', 'type-tab-'+tp, memForm.type === tp ? 'active' : '']"
-                @click="memForm.type = tp">{{ tp }}</button>
-            </div>
-            <div class="write-section">
-              <label class="write-field-label">{{ t('Name') }}</label>
-              <input class="write-input" v-model="memForm.name" :placeholder="t('Short identifier…')" />
-            </div>
-            <div class="write-section">
-              <label class="write-field-label">{{ t('Description') }}</label>
-              <input class="write-input" v-model="memForm.description" :placeholder="t('One-line summary…')" />
-            </div>
-            <div class="write-section write-section-grow">
-              <label class="write-field-label">{{ t('Content') }}</label>
-              <textarea class="write-input write-textarea" v-model="memForm.content" rows="5" />
-            </div>
-            <p v-if="memError" class="save-hint err">{{ memError }}</p>
-          </div>
-          <div class="write-footer">
-            <button class="btn-cancel" @click="addMemoryOpen = false">{{ t('Cancel') }}</button>
-            <button class="btn-save" :disabled="isMemSaving || !memForm.name || !memForm.content" @click="submitAddMemory">
-              {{ isMemSaving ? t('Saving…') : t('Write') }}
-            </button>
-          </div>
-        </template>
-
-        <!-- Select existing tab -->
-        <template v-else>
-          <div class="write-body">
-            <input class="write-input" v-model="selectMemQuery"
-              :placeholder="t('Search memories…')"
-              @input="onSelectMemSearch" />
-            <div v-if="selectMemLoading" class="select-mem-hint">{{ t('Loading…') }}</div>
-            <div v-else-if="selectMemResults.length === 0 && selectMemQuery" class="select-mem-hint">
-              {{ t('No memories found') }}
-            </div>
-            <div v-else-if="selectMemResults.length === 0" class="select-mem-hint">
-              {{ t('Search to find existing memories') }}
-            </div>
-            <ul v-else class="select-mem-list">
-              <li v-for="m in selectMemResults" :key="m.id"
-                :class="['select-mem-item', selectMemChosen?.id === m.id ? 'chosen' : '']"
-                @click="selectMemChosen = m">
-                <span :class="['badge', m.type]">{{ m.type }}</span>
-                <span class="select-mem-name">{{ m.name }}</span>
-                <span v-if="m.description" class="select-mem-desc">{{ m.description }}</span>
-              </li>
-            </ul>
-            <p v-if="memError" class="save-hint err">{{ memError }}</p>
-          </div>
-          <div class="write-footer">
-            <button class="btn-cancel" @click="addMemoryOpen = false">{{ t('Cancel') }}</button>
-            <button class="btn-save" :disabled="isMemSaving || !selectMemChosen" @click="submitLinkMemory">
-              {{ isMemSaving ? t('Linking…') : t('Link') }}
-            </button>
-          </div>
-        </template>
-      </div>
-    </div>
+    <!-- Edit memory modal (shared component) -->
+    <MemoryEditModal
+      :show="editModalShow"
+      :memory="editModalMemory"
+      @close="editModalShow = false"
+      @saved="onEditSaved"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick, provide } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, provide, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { BASE, apiFetch, apiJSON } from './api.js'
+import { apiFetch, apiJSON, errText } from './api.js'
 import { useAppStore } from './stores/app.js'
 import AppHeader from './AppHeader.vue'
+import BaseModal from './BaseModal.vue'
+import MemoryEditModal from './MemoryEditModal.vue'
+import {
+  NCard, NInput, NButton, NSpace, NText, NTabs, NTabPane,
+  NRadioGroup, NRadioButton, NFormItem, NSpin, NTag, NEmpty, NIcon, NDropdown, useThemeVars,
+  useMessage,
+} from 'naive-ui'
 import ProjectIconStrip from './ProjectIconStrip.vue'
-import IconClose from './icons/IconClose.svg'
 import SkeletonTreePanel from './SkeletonTreePanel.vue'
 import NodeDetailPanel from './NodeDetailPanel.vue'
 import ContextMenu from './ContextMenu.vue'
+import { IconTrash, IconEdit } from './icons.js'
 import MemoryDetailModal from './MemoryDetailModal.vue'
+import TagPicker from './TagPicker.vue'
+import MarkdownEditor from './MarkdownEditor.vue'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -201,19 +280,31 @@ const { isDark, lang, loginOpen, loginInput, loginError, loginLoading } = storeT
 const { t, toggleTheme, toggleLang } = appStore
 provide('t', t)
 
+const message = useMessage()
+
+const vars = useThemeVars()
+const cssVars = computed(() => ({
+  '--app-bg': vars.value.bodyColor,
+  '--border': vars.value.borderColor,
+  '--accent': vars.value.primaryColor,
+}))
+
+const TYPE_TAG = { feedback: 'success', project: 'info', user: 'default', reference: 'warning' }
+function typeTagType(type) { return TYPE_TAG[type] || 'default' }
+
 // ── Auth (delegates to store) ─────────────────────────────────────────────────
 async function submitLogin() {
-  const ok = await appStore.submitLogin(BASE)
+  const ok = await appStore.submitLogin()
   if (ok) await loadProjects()
 }
 
 async function skipLogin() {
-  const ok = await appStore.skipLogin(BASE)
+  const ok = await appStore.skipLogin()
   if (ok) await loadProjects()
 }
 
 async function logout() {
-  await appStore.logout(BASE)
+  await appStore.logout()
 }
 
 const detailMemory = ref(null)
@@ -226,7 +317,7 @@ watch(selectedProject, p => { if (p) localStorage.setItem(LS_PROJECT_KEY, p.slug
 
 async function loadProjects() {
   try {
-    const r = await apiFetch(`${BASE}/projects`)
+    const r = await apiFetch('/projects')
     if (r.status === 401) { loginOpen.value = true; return }
     projects.value = await r.json()
   } catch { loginOpen.value = true }
@@ -237,6 +328,9 @@ async function selectProject(p) {
   selectedNode.value = null
   nodeMemories.value = []
   await loadSkeleton(p.id)
+  // Auto-select the first node so the detail panel isn't empty
+  const first = flatNodes.value[0]
+  if (first) await selectNode(first)
 }
 
 const newProjectOpen = ref(false)
@@ -255,15 +349,98 @@ async function createProject() {
   isCreatingProject.value = true
   try {
     const slug = newProjectName.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-    const p = await apiJSON(`${BASE}/projects`, {
+    const p = await apiJSON('/projects', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug, display_name: newProjectName.value }),
     })
     newProjectOpen.value = false
     await loadProjects()
     await selectProject(p)
-  } catch (e) { alert(e.message) }
-  finally { isCreatingProject.value = false }
+  } finally { isCreatingProject.value = false }
+}
+
+// ── Project context menu / delete ──────────────────────────────────────────────
+const projCtxVisible = ref(false)
+const projCtxX = ref(0)
+const projCtxY = ref(0)
+const projCtxProject = ref(null)
+function renderMenuIcon(icon) {
+  return () => h(NIcon, null, { default: () => h(icon) })
+}
+const projCtxOptions = computed(() => [
+  { label: t('Edit project'), key: 'edit', icon: renderMenuIcon(IconEdit) },
+  { label: t('Delete project'), key: 'delete', icon: renderMenuIcon(IconTrash) },
+])
+
+function openProjectContextMenu({ x, y, project }) {
+  projCtxX.value = x; projCtxY.value = y; projCtxProject.value = project
+  projCtxVisible.value = true
+}
+function closeProjectContextMenu() { projCtxVisible.value = false; projCtxProject.value = null }
+
+function onProjectCtxSelect(key) {
+  const project = projCtxProject.value
+  closeProjectContextMenu()
+  if (key === 'edit' && project) openEditProject(project)
+  else if (key === 'delete' && project) requestDeleteProject(project)
+}
+
+// ── Edit project (rename display_name) ─────────────────────────────────────────
+const editProjectOpen = ref(false)
+const editProjectName = ref('')
+const editProjectTarget = ref(null)
+const isEditingProject = ref(false)
+const editProjectInput = ref(null)
+
+function openEditProject(project) {
+  editProjectTarget.value = project
+  editProjectName.value = project.display_name || project.slug || ''
+  editProjectOpen.value = true
+  nextTick(() => editProjectInput.value?.focus())
+}
+
+async function submitEditProject() {
+  const project = editProjectTarget.value
+  const name = editProjectName.value.trim()
+  if (!project || !name) return
+  isEditingProject.value = true
+  try {
+    await apiJSON(`/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name: name }),
+    })
+    editProjectOpen.value = false
+    if (selectedProject.value?.id === project.id) selectedProject.value.display_name = name
+    await loadProjects()
+    message.success(t('Project updated'))
+  } finally { isEditingProject.value = false }
+}
+
+// ── Delete project (confirm modal) ─────────────────────────────────────────────
+const deleteProjectTarget = ref(null)
+const isDeletingProject = ref(false)
+
+function requestDeleteProject(project) {
+  deleteProjectTarget.value = project
+}
+
+async function confirmDeleteProject() {
+  const project = deleteProjectTarget.value
+  if (!project) return
+  isDeletingProject.value = true
+  try {
+    await apiJSON(`/projects/${project.id}`, { method: 'DELETE' })
+    message.success(t('Project deleted'))
+    if (selectedProject.value?.id === project.id) {
+      selectedProject.value = null
+      selectedNode.value = null
+      nodeMemories.value = []
+    }
+    await loadProjects()
+    if (!selectedProject.value && projects.value.length) await selectProject(projects.value[0])
+    deleteProjectTarget.value = null
+  } finally { isDeletingProject.value = false }
 }
 
 // ── Skeleton tree ─────────────────────────────────────────────────────────────
@@ -281,18 +458,18 @@ const allTags = computed(() => [...new Set(flatNodes.value.flatMap(n => n.tags |
 const memoryCountMap = ref({})
 
 async function loadSkeleton(projectId) {
-  skeletonTree.value = await apiJSON(`${BASE}/projects/${projectId}/skeleton`)
+  skeletonTree.value = await apiJSON(`/projects/${projectId}/skeleton`)
 }
 
 async function selectNode(node) {
   selectedNode.value = node
-  nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${node.id}/memories`)
+  nodeMemories.value = await apiJSON(`/skeleton-nodes/${node.id}/memories`)
   memoryCountMap.value = { ...memoryCountMap.value, [node.id]: nodeMemories.value.length }
 }
 
 // ── Patch / delete ────────────────────────────────────────────────────────────
 async function onPatch({ id, patch }) {
-  await apiFetch(`${BASE}/skeleton-nodes/${id}`, {
+  await apiFetch(`/skeleton-nodes/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   })
@@ -303,12 +480,26 @@ async function onPatch({ id, patch }) {
   }
 }
 
-async function onDelete(nodeId) {
-  if (!confirm(t('Delete this node and unlink its memories?'))) return
-  const r = await apiFetch(`${BASE}/skeleton-nodes/${nodeId}`, { method: 'DELETE' })
-  if (r.status === 409) { alert(t('Built-in nodes cannot be deleted.')); return }
-  if (selectedNode.value?.id === nodeId) { selectedNode.value = null; nodeMemories.value = [] }
-  await loadSkeleton(selectedProject.value.id)
+// ── Delete node (confirm modal) ────────────────────────────────────────────────
+const deleteNodeTarget = ref(null)
+const isDeletingNode = ref(false)
+
+function onDelete(nodeId) {
+  deleteNodeTarget.value = nodeId
+}
+
+async function confirmDeleteNode() {
+  const nodeId = deleteNodeTarget.value
+  if (!nodeId) return
+  isDeletingNode.value = true
+  try {
+    const r = await apiFetch(`/skeleton-nodes/${nodeId}`, { method: 'DELETE' })
+    if (r.status === 409) { message.warning(t('Built-in nodes cannot be deleted.')); return }
+    if (selectedNode.value?.id === nodeId) { selectedNode.value = null; nodeMemories.value = [] }
+    await loadSkeleton(selectedProject.value.id)
+    deleteNodeTarget.value = null
+  } catch (e) { message.error(e.message) }
+  finally { isDeletingNode.value = false }
 }
 
 async function onSaveHint(hint) {
@@ -321,7 +512,7 @@ async function onUpdateTags(tags) {
 }
 
 async function onReorder(orderedIds) {
-  await apiFetch(`${BASE}/skeleton-nodes/reorder`, {
+  await apiFetch('/skeleton-nodes/reorder', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ project_id: selectedProject.value.id, ordered_ids: orderedIds }),
   })
@@ -329,7 +520,7 @@ async function onReorder(orderedIds) {
 }
 
 async function unlinkMemory(memoryId) {
-  await apiFetch(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories/${memoryId}`, { method: 'DELETE' })
+  await apiFetch(`/skeleton-nodes/${selectedNode.value.id}/memories/${memoryId}`, { method: 'DELETE' })
   nodeMemories.value = nodeMemories.value.filter(m => m.id !== memoryId)
   memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
 }
@@ -352,36 +543,116 @@ onMounted(() => {
   document.addEventListener('click', closeContextMenu)
 })
 
-async function onAddChild() {
+function onAddChild() {
+  const node = ctxNode.value
   closeContextMenu()
-  if (!ctxNode.value) return
-  const name = prompt(t('Child node name:'))
-  if (!name?.trim()) return
-  await apiJSON(`${BASE}/skeleton-nodes`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project_id: selectedProject.value.id, parent_id: ctxNode.value.id, name: name.trim() }),
-  })
-  await loadSkeleton(selectedProject.value.id)
+  if (!node) return
+  openNodeModal({ mode: 'add-child', parentId: node.id })
 }
 
-function onRenameNode() {
-  closeContextMenu()
-  if (!ctxNode.value) return
-  const name = prompt(t('New name:'), ctxNode.value.name)
-  if (name?.trim() && name !== ctxNode.value.name) {
-    onPatch({ id: ctxNode.value.id, patch: { name: name.trim() } })
+function onAddRoot() {
+  if (!selectedProject.value) return
+  openNodeModal({ mode: 'add-root', parentId: null })
+}
+
+function openEditNode(node) {
+  if (!node) return
+  openNodeModal({ mode: 'rename', node })
+}
+
+// ── Node name modal (add top-level / add child / rename) ──────────────────────
+const nodeModalOpen = ref(false)
+const nodeModalMode = ref('add-root')   // 'add-root' | 'add-child' | 'rename'
+const nodeModalName = ref('')
+const nodeModalDescription = ref('')
+const nodeModalPromptHint = ref('')
+const nodeModalTags = ref([])
+const nodeModalParentId = ref(null)
+const nodeModalNode = ref(null)
+const nodeModalSaving = ref(false)
+const nodeModalInput = ref(null)
+
+const nodeModalTitle = computed(() => ({
+  'add-root': t('New top-level node'),
+  'add-child': t('New child node'),
+  'rename': t('Rename node'),
+}[nodeModalMode.value]))
+
+function openNodeModal({ mode, parentId = null, node = null }) {
+  nodeModalMode.value = mode
+  nodeModalParentId.value = parentId
+  nodeModalNode.value = node
+  nodeModalName.value = mode === 'rename' ? (node?.name ?? '') : ''
+  nodeModalDescription.value = mode === 'rename' ? (node?.description ?? '') : ''
+  nodeModalPromptHint.value = mode === 'rename' ? (node?.prompt_hint ?? '') : ''
+  nodeModalTags.value = mode === 'rename' ? [...(node?.tags || [])] : []
+  nodeModalOpen.value = true
+  nextTick(() => nodeModalInput.value?.focus())
+}
+
+async function submitNodeModal() {
+  const name = nodeModalName.value.trim()
+  if (!name) return
+  nodeModalSaving.value = true
+  try {
+    if (nodeModalMode.value === 'rename') {
+      await onPatch({
+        id: nodeModalNode.value.id,
+        patch: {
+          name,
+          description: nodeModalDescription.value,
+          prompt_hint: nodeModalPromptHint.value,
+          tags: nodeModalTags.value,
+        },
+      })
+    } else {
+      await apiJSON('/skeleton-nodes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: selectedProject.value.id,
+          parent_id: nodeModalParentId.value,
+          name,
+          description: nodeModalDescription.value,
+          prompt_hint: nodeModalPromptHint.value,
+          tags: nodeModalTags.value,
+        }),
+      })
+      await loadSkeleton(selectedProject.value.id)
+    }
+    nodeModalOpen.value = false
+  } finally {
+    nodeModalSaving.value = false
   }
-}
-
-function focusTags() {
-  closeContextMenu()
-  if (ctxNode.value) selectNode(ctxNode.value)
 }
 
 async function onDeleteNode() {
   const node = ctxNode.value
   closeContextMenu()
   if (node) await onDelete(node.id)
+}
+
+// ── Edit memory (shared modal) ───────────────────────────────────────────────
+const editModalShow = ref(false)
+const editModalMemory = ref(null)
+
+async function openEditMemory(m) {
+  detailMemory.value = null
+  // The node-memories list omits heavy fields (content); fetch the full record
+  // so the edit form echoes the existing content instead of opening blank.
+  let full = m
+  if (m && m.content === undefined) {
+    try { full = { ...m, ...(await apiJSON(`/memories/${m.id}`)) } } catch { full = m }
+  }
+  editModalMemory.value = full
+  editModalShow.value = true
+}
+
+async function onEditSaved() {
+  editModalShow.value = false
+  if (selectedNode.value) {
+    nodeMemories.value = await apiJSON(`/skeleton-nodes/${selectedNode.value.id}/memories`)
+    memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
+  }
 }
 
 // ── Add memory ────────────────────────────────────────────────────────────────
@@ -407,7 +678,7 @@ function onSelectMemSearch() {
     try {
       const slug = selectedProject.value?.slug
       const q = encodeURIComponent(selectMemQuery.value)
-      selectMemResults.value = await apiJSON(`${BASE}/memories?project_slug=${slug}&q=${q}&limit=30`)
+      selectMemResults.value = await apiJSON(`/memories?project_slug=${slug}&q=${q}&limit=30`)
     } catch { selectMemResults.value = [] }
     finally { selectMemLoading.value = false }
   }, 300)
@@ -428,18 +699,22 @@ async function submitAddMemory() {
   if (!memForm.value.name || !memForm.value.content) return
   isMemSaving.value = true; memError.value = ''
   try {
-    const mem = await apiJSON(`${BASE}/memories`, {
+    const mem = await apiJSON('/memories', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...memForm.value, project_id: selectedProject.value.id }),
+      skipErrorToast: true,
     })
-    await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`, {
+    await apiJSON(`/skeleton-nodes/${selectedNode.value.id}/memories`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memory_id: mem.id }),
+      skipErrorToast: true,
     })
     addMemoryOpen.value = false
-    nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`)
-    memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
-  } catch (e) { memError.value = e.message }
+    if (selectedNode.value) {
+      nodeMemories.value = await apiJSON(`/skeleton-nodes/${selectedNode.value.id}/memories`)
+      memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
+    }
+  } catch (e) { memError.value = errText(e) }
   finally { isMemSaving.value = false }
 }
 
@@ -447,20 +722,21 @@ async function submitLinkMemory() {
   if (!selectMemChosen.value) return
   isMemSaving.value = true; memError.value = ''
   try {
-    await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`, {
+    await apiJSON(`/skeleton-nodes/${selectedNode.value.id}/memories`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ memory_id: selectMemChosen.value.id }),
+      skipErrorToast: true,
     })
     addMemoryOpen.value = false
-    nodeMemories.value = await apiJSON(`${BASE}/skeleton-nodes/${selectedNode.value.id}/memories`)
+    nodeMemories.value = await apiJSON(`/skeleton-nodes/${selectedNode.value.id}/memories`)
     memoryCountMap.value = { ...memoryCountMap.value, [selectedNode.value.id]: nodeMemories.value.length }
-  } catch (e) { memError.value = e.message }
+  } catch (e) { memError.value = errText(e) }
   finally { isMemSaving.value = false }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 onMounted(async () => {
-  const r = await apiFetch(`${BASE}/projects`)
+  const r = await apiFetch('/projects')
   if (r.status === 401) { loginOpen.value = true; return }
   projects.value = await r.json()
   if (projects.value.length > 0) {
@@ -472,139 +748,35 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.sk-app { width: 100%; min-height: 100vh; background: var(--bg, #fff); color: var(--fg, #1a1a1a); font-family: 'JetBrains Mono', monospace; box-sizing: border-box; text-align: left; }
-.sk-app.dark {
-  background:
-    repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,212,138,0.009) 2px, rgba(0,212,138,0.009) 3px),
-    #010205;
+.add-mem-editor {
+  border: 1px solid var(--n-border-color, #e0e0e6);
+  border-radius: 6px;
+  overflow: hidden;
 }
-.sk-body { display: flex; height: calc(100vh - 41px); overflow: hidden; }
-.dark .sk-body { border-top: 1px solid rgba(0,212,138,0.14); }
-.tree-empty { width: 220px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--fg-muted, #6e7681); font-size: 12px; border-right: 1px solid var(--border, #30363d); }
-/* Login */
-.login-overlay { display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
-.login-modal { background: var(--bg, #fff); border-radius: 8px; padding: 24px; min-width: 300px; display: flex; flex-direction: column; gap: 12px; }
-.login-title { font-size: 16px; font-weight: 700; }
-.login-input { border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 8px; font-size: 13px; font-family: inherit; }
-.login-error { color: #dc2626; font-size: 12px; margin: 0; }
-.btn-login { background: var(--accent, #2563eb); color: #fff; border: none; border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
-.btn-skip { background: none; border: none; color: var(--fg-muted, #888); cursor: pointer; font-size: 12px; text-decoration: underline; }
-/* Modals */
-.modal-overlay { display: flex; align-items: center; justify-content: center; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 50; }
-.modal { background: var(--bg, #fff); border-radius: 8px; border: 1px solid var(--border, #ddd); }
-.modal-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border, #ddd); }
-.modal-title { font-size: 13px; font-weight: 700; flex: 1; }
-.modal-close { background: none; border: none; cursor: pointer; font-size: 14px; color: var(--fg-muted, #888); padding: 2px 4px; }
-.sk-input { width: 100%; border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 6px 8px; font-size: 13px; font-family: inherit; background: var(--input-bg, #fff); color: var(--fg, #1a1a1a); }
-.btn-save { background: var(--accent, #2563eb); color: #fff; border: none; border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
-.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-cancel { background: none; border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 8px 16px; cursor: pointer; font-size: 13px; }
-/* Write modal */
-.write-modal { background: var(--bg, #fff); border-radius: 8px; border: 1px solid var(--border, #ddd); width: 500px; max-height: 80vh; display: flex; flex-direction: column; }
-.write-header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border, #ddd); }
-.write-title { font-size: 13px; font-weight: 700; flex: 1; }
-.write-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
-.write-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border, #ddd); }
-.write-section { display: flex; flex-direction: column; gap: 4px; }
-.write-section-grow { flex: 1; }
-.write-field-label { font-size: 10px; font-weight: 700; color: var(--fg-muted, #6e7681); text-transform: uppercase; }
-.write-input { border: 1px solid var(--border, #ddd); border-radius: 5px; padding: 6px 8px; font-size: 12px; font-family: inherit; background: var(--input-bg, #fff); color: var(--fg, #1a1a1a); }
-.write-textarea { resize: vertical; min-height: 80px; }
-.write-type-tabs { display: flex; gap: 4px; }
-.type-tab { padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border, #ddd); font-size: 11px; cursor: pointer; background: none; color: var(--fg-muted, #888); }
-.type-tab.active { background: var(--accent, #2563eb); color: #fff; border-color: transparent; }
-.sk-prompt-hint-text { font-size: 11px; color: var(--fg-muted, #888); background: var(--hint-bg, #f8f9fa); padding: 6px 10px; border-radius: 4px; font-style: italic; }
-.save-hint.err { color: #dc2626; font-size: 11px; }
-/* Modal tabs */
-.modal-tabs { display: flex; border-bottom: 1px solid var(--border, #ddd); padding: 0 12px; flex-shrink: 0; }
-.modal-tab { background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 14px; font-size: 12px; cursor: pointer; color: var(--fg-muted, #888); margin-bottom: -1px; }
-.modal-tab.active { color: var(--accent, #2563eb); border-bottom-color: var(--accent, #2563eb); font-weight: 700; }
-/* Select existing */
-.select-mem-hint { font-size: 12px; color: var(--fg-muted, #888); padding: 16px 0; text-align: center; }
-.select-mem-list { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; }
-.select-mem-item { display: flex; align-items: baseline; gap: 8px; padding: 7px 10px; border-radius: 5px; border: 1px solid transparent; cursor: pointer; }
-.select-mem-item:hover { background: var(--hover, #f5f5f5); }
-.select-mem-item.chosen { background: var(--active-bg, #e8f0fe); border-color: var(--accent, #2563eb); }
-.select-mem-name { font-size: 12px; font-weight: 600; color: var(--fg, #1a1a1a); flex-shrink: 0; }
-.select-mem-desc { font-size: 11px; color: var(--fg-muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Dark theme vars — aligned with global [data-theme=dark] sci-fi palette */
-.dark {
-  --bg: #080d17; --fg: #C8E8F2; --fg-muted: #3E6878;
-  --border: rgba(0,212,138,0.20);
-  --hover: rgba(0,212,138,0.06); --active-bg: rgba(0,212,138,0.13);
-  --input-bg: #030608; --btn-bg: rgba(0,212,138,0.08);
-  --hint-bg: #030608; --accent: #00D48A;
-  --tag-bg: rgba(0,212,138,0.10); --accent-dim: rgba(0,212,138,0.14);
-  --tooltip-bg: #090e1a;
+.add-mem-editor :deep(.cm-editor) { max-height: 240px; }
+.sk-app {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 8px 16px 12px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--app-bg);
+  box-sizing: border-box;
+  text-align: left;
 }
-
-/* ── Dark sci-fi modal surfaces ── */
-[data-theme=dark] .modal,
-[data-theme=dark] .write-modal {
-  background: var(--surface-2, #050910);
-  border-color: rgba(0,212,138,0.18);
-  box-shadow: 0 16px 48px rgba(0,0,0,0.80), 0 0 0 1px rgba(0,212,138,0.08);
+.sk-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
 }
-[data-theme=dark] .modal-header,
-[data-theme=dark] .write-header,
-[data-theme=dark] .modal-tabs,
-[data-theme=dark] .write-footer {
-  border-color: rgba(0,212,138,0.10);
-}
-[data-theme=dark] .write-input {
-  background: var(--surface-1, #030608);
-  border-color: rgba(0,212,138,0.14);
-  color: var(--fg, #C8E8F2);
-}
-[data-theme=dark] .write-input:focus {
-  border-color: rgba(0,212,138,0.45);
-  box-shadow: 0 0 0 2px rgba(0,212,138,0.10);
-  outline: none;
-}
-[data-theme=dark] .modal-tab.active {
-  color: var(--accent, #00D48A);
-  border-bottom-color: var(--accent, #00D48A);
-}
-[data-theme=dark] .select-mem-item:hover {
-  background: rgba(0,212,138,0.06);
-}
-[data-theme=dark] .select-mem-item.chosen {
-  background: rgba(0,212,138,0.10);
-  border-color: rgba(0,212,138,0.35);
-}
-[data-theme=dark] .btn-save {
-  background: rgba(0,212,138,0.16);
-  color: var(--accent, #00D48A);
-  border: 1px solid rgba(0,212,138,0.35);
-}
-[data-theme=dark] .btn-save:hover:not(:disabled) {
-  background: rgba(0,212,138,0.24);
-  border-color: rgba(0,212,138,0.55);
-}
-[data-theme=dark] .btn-cancel {
-  background: transparent;
-  border-color: rgba(0,212,138,0.14);
-  color: var(--fg-muted, #3E6878);
-}
-[data-theme=dark] .btn-cancel:hover {
-  border-color: rgba(0,212,138,0.30);
-  color: var(--fg, #C8E8F2);
-}
-[data-theme=dark] .type-tab.active {
-  background: rgba(0,212,138,0.16);
-  color: var(--accent, #00D48A);
-  border-color: rgba(0,212,138,0.35);
-}
-[data-theme=dark] .sk-prompt-hint-text {
-  background: var(--surface-1, #030608);
-  border-left: 2px solid rgba(0,212,138,0.30);
-  color: var(--fg-muted, #3E6878);
-  border-radius: 0 4px 4px 0;
-  padding: 6px 10px;
-}
-[data-theme=dark] .login-modal {
-  background: var(--surface-2, #050910);
-  border: 1px solid rgba(0,212,138,0.18);
-  box-shadow: 0 16px 48px rgba(0,0,0,0.80);
-}
+.tree-empty { width: 220px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--border); }
+.select-mem-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+.select-mem-item { cursor: pointer; }
+.select-mem-item.chosen { outline: 1.5px solid var(--accent); }
 </style>

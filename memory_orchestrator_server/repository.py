@@ -496,14 +496,16 @@ class MemoryRepository:
         return _build(None)
 
     async def patch_skeleton_node(
-        self, node_id: uuid.UUID, *, name: str | None = None, prompt_hint: str | None = None,
-        tags: list[str] | None = None
+        self, node_id: uuid.UUID, *, name: str | None = None, description: str | None = None,
+        prompt_hint: str | None = None, tags: list[str] | None = None
     ) -> bool:
         node = await self.session.get(ProjectSkeletonNode, node_id)
         if node is None:
             return False
         if name is not None and not node.is_builtin:
             node.name = name
+        if description is not None:
+            node.description = description
         if prompt_hint is not None:
             node.prompt_hint = prompt_hint
         if tags is not None:
@@ -515,6 +517,9 @@ class MemoryRepository:
         project_id: uuid.UUID,
         name: str,
         parent_id: uuid.UUID | None = None,
+        description: str = "",
+        prompt_hint: str = "",
+        tags: list[str] | None = None,
     ) -> dict:
         result = await self.session.execute(
             select(func.max(ProjectSkeletonNode.sort_order))
@@ -528,19 +533,23 @@ class MemoryRepository:
             project_id=project_id,
             parent_id=parent_id,
             name=name,
+            description=description,
+            prompt_hint=prompt_hint,
             is_builtin=False,
             sort_order=max_order + 10,
-            tags=[],
+            tags=tags or [],
         )
         self.session.add(node)
         await self.session.flush()
         return {
             "id": str(node.id),
             "name": node.name,
+            "description": node.description,
+            "prompt_hint": node.prompt_hint,
             "parent_id": str(node.parent_id) if node.parent_id else None,
             "is_builtin": False,
             "sort_order": node.sort_order,
-            "tags": [],
+            "tags": list(node.tags or []),
             "children": [],
         }
 
@@ -583,11 +592,48 @@ class MemoryRepository:
         )
 
     async def get_node_memories(self, node_id: uuid.UUID) -> list[Memory]:
+        node_ids = await self._descendant_node_ids(node_id)
         result = await self.session.execute(
             select(Memory)
             .join(SkeletonNodeMemory, SkeletonNodeMemory.memory_id == Memory.id)
-            .where(SkeletonNodeMemory.skeleton_node_id == node_id, Memory.superseded_by.is_(None))
+            .where(
+                SkeletonNodeMemory.skeleton_node_id.in_(node_ids),
+                Memory.superseded_by.is_(None),
+            )
             .order_by(Memory.created_at.desc())
+            .distinct()
+        )
+        return list(result.scalars().all())
+
+    async def _descendant_node_ids(self, node_id: uuid.UUID) -> list[uuid.UUID]:
+        """Return node_id plus all descendant node ids (whole sub-tree)."""
+        r = await self.session.execute(
+            select(ProjectSkeletonNode.project_id).where(ProjectSkeletonNode.id == node_id)
+        )
+        project_id = r.scalar_one_or_none()
+        if project_id is None:
+            return [node_id]
+        children: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for n in await self.get_skeleton_flat(project_id):
+            children.setdefault(n.parent_id, []).append(n.id)
+        collected: list[uuid.UUID] = []
+        stack = [node_id]
+        seen: set[uuid.UUID] = set()
+        while stack:
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            collected.append(cur)
+            stack.extend(children.get(cur, []))
+        return collected
+
+    async def get_memory_nodes(self, memory_id: uuid.UUID) -> list[ProjectSkeletonNode]:
+        result = await self.session.execute(
+            select(ProjectSkeletonNode)
+            .join(SkeletonNodeMemory, SkeletonNodeMemory.skeleton_node_id == ProjectSkeletonNode.id)
+            .where(SkeletonNodeMemory.memory_id == memory_id)
+            .order_by(ProjectSkeletonNode.sort_order, ProjectSkeletonNode.created_at)
         )
         return list(result.scalars().all())
 
@@ -600,7 +646,8 @@ class MemoryRepository:
         return list(result.scalars().all())
 
     async def get_or_create_skeleton_node(
-        self, project_id: uuid.UUID, name: str, parent_name: str | None
+        self, project_id: uuid.UUID, name: str, parent_name: str | None,
+        description: str = "", prompt_hint: str = "",
     ) -> uuid.UUID:
         parent_id: uuid.UUID | None = None
         if parent_name:
@@ -614,7 +661,7 @@ class MemoryRepository:
             parent_id = r.scalar_one_or_none()
 
         r = await self.session.execute(
-            select(ProjectSkeletonNode.id).where(
+            select(ProjectSkeletonNode).where(
                 ProjectSkeletonNode.project_id == project_id,
                 ProjectSkeletonNode.name == name,
                 (ProjectSkeletonNode.parent_id == parent_id) if parent_id else ProjectSkeletonNode.parent_id.is_(None),
@@ -622,10 +669,15 @@ class MemoryRepository:
         )
         existing = r.scalar_one_or_none()
         if existing:
-            return existing
+            # Backfill hint/description if the caller now provides one and it was blank.
+            if prompt_hint and not existing.prompt_hint:
+                existing.prompt_hint = prompt_hint
+            if description and not existing.description:
+                existing.description = description
+            return existing.id
         node = ProjectSkeletonNode(
             project_id=project_id, parent_id=parent_id, name=name,
-            description="", prompt_hint="", is_builtin=False,
+            description=description, prompt_hint=prompt_hint, is_builtin=False,
         )
         self.session.add(node)
         await self.session.flush()

@@ -19,6 +19,7 @@ dependencies = [
     "torch>=2.0",
     "modelscope>=1.36.3",
     "python-multipart>=0.0.28",
+    "cryptography>=43",
 ]
 
 [project.scripts]

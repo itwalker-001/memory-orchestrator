@@ -1,13 +1,11 @@
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia } from 'pinia'
-import '@fontsource/orbitron/700.css'
-import '@fontsource/orbitron/900.css'
-import '@fontsource/jetbrains-mono/400.css'
-import '@fontsource/jetbrains-mono/500.css'
-import '@fontsource/jetbrains-mono/600.css'
+import 'vfonts/Lato.css'
+import 'vfonts/FiraCode.css'
 import './style.css'
 import App from './App.vue'
+import { initMarkdown } from './markdown.js'
 import MemoriesPage from './MemoriesPage.vue'
 import SkeletonPage from './SkeletonPage.vue'
 import SettingsPage from './SettingsPage.vue'
@@ -22,6 +20,9 @@ const router = createRouter({
     { path: '/tokens', component: TokensPage },
   ],
 })
+
+// Preload the Shiki highlighter before mount so renderMarkdown stays synchronous.
+await initMarkdown()
 
 createApp(App)
   .use(createPinia())

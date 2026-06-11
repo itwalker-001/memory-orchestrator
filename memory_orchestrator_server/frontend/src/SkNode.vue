@@ -2,6 +2,7 @@
 <template>
   <li
     class="sk-node"
+    :style="cssVars"
     :draggable="true"
     @dragstart.stop="onDragStart"
     @dragover.stop.prevent="onDragOver"
@@ -22,7 +23,7 @@
         <span v-else style="opacity:0">▶</span>
       </span>
       <span class="sk-icon">
-        <component :is="nodeIcon" width="13" height="13" />
+        <n-icon :size="14" :component="nodeIcon" />
       </span>
       <div class="sk-node-body">
         <div class="sk-node-name-row">
@@ -43,9 +44,9 @@
 
     <!-- Tooltip via Teleport -->
     <Teleport to="body">
-      <div v-if="showTooltip" class="sk-tooltip" :style="tooltipStyle">
+      <div v-if="showTooltip" class="sk-tooltip" :style="[tooltipStyle, cssVars]">
         <div class="sk-tooltip-name">
-          <component :is="nodeIcon" width="12" height="12" class="sk-tooltip-icon" />
+          <n-icon :size="13" :component="nodeIcon" class="sk-tooltip-icon" />
           {{ node.name }}
         </div>
         <div v-if="node.prompt_hint" class="sk-tooltip-hint">{{ node.prompt_hint.slice(0, 80) }}</div>
@@ -79,6 +80,7 @@
 
 <script setup>
 import { ref, computed, nextTick, inject } from 'vue'
+import { NIcon, useThemeVars } from 'naive-ui'
 import { NODE_ICON_MAP, DEFAULT_NODE_ICON } from './icons/nodeIcons.js'
 
 const props = defineProps({
@@ -86,6 +88,19 @@ const props = defineProps({
   selectedId: { type: String, default: null },
   depth: { type: Number, default: 0 },
 })
+
+const vars = useThemeVars()
+const cssVars = computed(() => ({
+  '--fg': vars.value.textColor1,
+  '--fg-muted': vars.value.textColor3,
+  '--border': vars.value.borderColor,
+  '--hover': vars.value.hoverColor,
+  '--active-bg': vars.value.primaryColorSuppl,
+  '--accent': vars.value.primaryColor,
+  '--badge-bg': vars.value.actionColor,
+  '--tooltip-bg': vars.value.popoverColor,
+  '--input-bg': vars.value.inputColor,
+}))
 
 const emit = defineEmits(['select', 'patch', 'delete', 'context-menu', 'reorder'])
 
@@ -192,51 +207,32 @@ function onDragEnd() {
   cursor: pointer; font-size: 12px; gap: 3px; user-select: none;
   border-top: 2px solid transparent; border-bottom: 2px solid transparent;
 }
-.sk-node-row:hover { background: var(--hover, #161b22); }
-.sk-node-row.active { background: var(--active-bg, #1d2d3e); }
-.sk-node-row.active .sk-node-name { color: var(--accent, #58a6ff); }
+.sk-node-row:hover { background: var(--hover); }
+.sk-node-row.active { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.sk-node-row.active .sk-node-name { color: var(--accent); font-weight: 600; }
 .sk-node-row.dragging { opacity: 0.4; }
-.sk-node-row.drop-above { border-top-color: var(--accent, #58a6ff); }
-.sk-node-row.drop-below { border-bottom-color: var(--accent, #58a6ff); }
-.sk-drag-handle { color: var(--fg-muted, #6e7681); font-size: 10px; cursor: grab; flex-shrink: 0; }
-.sk-chevron { font-size: 8px; color: var(--fg-muted, #6e7681); width: 12px; text-align: center; flex-shrink: 0; }
-.sk-icon { flex-shrink: 0; width: 16px; display: flex; align-items: center; justify-content: center; color: var(--fg-muted, #6e7681); }
-.sk-node-row.active .sk-icon { color: var(--accent, #58a6ff); }
+.sk-node-row.drop-above { border-top-color: var(--accent); }
+.sk-node-row.drop-below { border-bottom-color: var(--accent); }
+.sk-drag-handle { color: var(--fg-muted); font-size: 10px; cursor: grab; flex-shrink: 0; }
+.sk-chevron { font-size: 8px; color: var(--fg-muted); width: 12px; text-align: center; flex-shrink: 0; }
+.sk-icon { flex-shrink: 0; width: 16px; display: flex; align-items: center; justify-content: center; color: var(--fg-muted); }
+.sk-node-row.active .sk-icon { color: var(--accent); }
 .sk-node-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .sk-node-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.sk-node-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg, #c9d1d9); }
-.sk-node-edit-input { flex: 1; border: 1px solid var(--accent, #58a6ff); border-radius: 3px; padding: 1px 4px; font-size: 12px; background: var(--input-bg, #161b22); color: var(--fg, #e6edf3); }
-.sk-node-badge { font-size: 9px; color: var(--fg-muted, #6e7681); background: var(--btn-bg, #21262d); border-radius: 8px; padding: 1px 5px; flex-shrink: 0; }
+.sk-node-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+.sk-node-edit-input { flex: 1; border: 1px solid var(--accent); border-radius: 3px; padding: 1px 4px; font-size: 12px; background: var(--input-bg); color: var(--fg); }
+.sk-node-badge { font-size: 9px; color: var(--fg-muted); background: var(--badge-bg); border-radius: 8px; padding: 1px 5px; flex-shrink: 0; }
 .sk-tree { list-style: none; padding: 0; margin: 0; }
 .sk-subtree { padding-left: 16px; }
 .sk-tooltip {
-  background: var(--tooltip-bg, #1c2128); border: 1px solid var(--border, #30363d);
+  background: var(--tooltip-bg); border: 1px solid var(--border);
   border-radius: 8px; padding: 10px 12px; max-width: 240px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5); pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25); pointer-events: none;
 }
-.sk-tooltip-name { font-size: 12px; font-weight: 700; color: var(--fg, #e6edf3); margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
-.sk-tooltip-icon { color: var(--accent, #58a6ff); flex-shrink: 0; }
-.sk-tooltip-hint { font-size: 10px; color: var(--fg-muted, #8b949e); margin-bottom: 6px; font-style: italic; line-height: 1.5; }
-.sk-tooltip-stats { display: flex; gap: 12px; font-size: 10px; color: var(--fg-muted, #6e7681); margin-bottom: 4px; }
+.sk-tooltip-name { font-size: 12px; font-weight: 700; color: var(--fg); margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+.sk-tooltip-icon { color: var(--accent); flex-shrink: 0; }
+.sk-tooltip-hint { font-size: 10px; color: var(--fg-muted); margin-bottom: 6px; font-style: italic; line-height: 1.5; }
+.sk-tooltip-stats { display: flex; gap: 12px; font-size: 10px; color: var(--fg-muted); margin-bottom: 4px; }
 .sk-tooltip-tags { display: flex; gap: 4px; flex-wrap: wrap; }
-.sk-tooltip-tag { font-size: 9px; background: var(--tag-bg, #1a3a52); color: var(--accent, #58a6ff); border-radius: 3px; padding: 1px 4px; }
-
-/* Dark sci-fi enhancements */
-[data-theme=dark] .sk-node-row.active {
-  box-shadow: inset 2px 0 0 var(--accent, #00D48A), inset 0 0 16px -8px rgba(0,212,138,0.15);
-}
-[data-theme=dark] .sk-node-row.active .sk-node-name {
-  text-shadow: 0 0 8px rgba(0,212,138,0.40);
-}
-[data-theme=dark] .sk-node-row.active .sk-icon { color: var(--accent, #00D48A); }
-[data-theme=dark] .sk-node-row:hover { box-shadow: inset 2px 0 0 rgba(0,212,138,0.35); }
-[data-theme=dark] .sk-tooltip {
-  border-color: rgba(0,212,138,0.24);
-  background: rgba(6,10,20,0.96);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,212,138,0.10);
-}
-[data-theme=dark] .sk-node-edit-input {
-  border-color: rgba(0,212,138,0.50);
-  box-shadow: 0 0 0 2px rgba(0,212,138,0.12);
-}
+.sk-tooltip-tag { font-size: 9px; background: var(--active-bg); color: var(--accent); border-radius: 3px; padding: 1px 4px; }
 </style>

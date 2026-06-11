@@ -37,7 +37,29 @@ def create_app(*, engine_override: AsyncEngine | None = None, skip_embedder: boo
     engine = engine_override or create_async_engine(settings.db_dsn)
     maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-    app = FastAPI(title="Memory Orchestrator")
+    app = FastAPI(
+        title="Memory Orchestrator",
+        version="0.1.0",
+        description=(
+            "Memory Orchestrator HTTP API — context injection hooks, the MCP bridge "
+            "(search/save/skeleton), and the admin UI/API for managing memories, "
+            "projects, the knowledge skeleton, tokens and runtime settings."
+        ),
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        openapi_tags=[
+            {"name": "Hooks", "description": "Claude Code / Codex hook endpoints: health, context injection, ingestion."},
+            {"name": "MCP", "description": "MCP stdio-bridge endpoints: tool calls, resource reads, skeleton access."},
+            {"name": "Auth", "description": "UI session login / logout."},
+            {"name": "Tokens", "description": "API token administration (ui_admin & project_token)."},
+            {"name": "Memories", "description": "CRUD, clone/move, batch ops, import/export, duplicate & conflict scans."},
+            {"name": "Projects", "description": "Project listing and management."},
+            {"name": "Skeleton", "description": "Knowledge-tree nodes and node↔memory links."},
+            {"name": "Settings", "description": "Runtime configuration (system_settings) and model discovery."},
+            {"name": "System", "description": "Miscellaneous: stats, timezone."},
+        ],
+    )
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
     @app.on_event("startup")
