@@ -59,6 +59,12 @@ try {
     $sizeMB = [math]::Round((Get-Item $tmpTar).Length / 1MB, 2)
     Write-Host "  Uploading ${sizeMB} MB..."
 
+    # Clear stale wheels on the remote before extracting: tar is additive, so an
+    # older mo-mcp wheel left from a prior deploy would otherwise survive and get
+    # listed alongside the current one on the Help page.
+    & $PLINK -pw $Password -batch "${User}@${Server}" `
+        "rm -f $Remote/memory_orchestrator_server/downloads/*.whl"
+
     $bat = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "mo-push-$(Get-Random).bat")
     "@echo off`n`"$PLINK`" -batch -pw $Password ${User}@${Server} `"tar -xf - -C $Remote`" < `"$tmpTar`"" |
         Out-File $bat -Encoding ASCII
