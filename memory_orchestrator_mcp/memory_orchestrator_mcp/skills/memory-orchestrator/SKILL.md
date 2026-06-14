@@ -183,6 +183,21 @@ parent_node  optional — parent node name, e.g. "后端" (disambiguates node_na
 
 > **范围由 token 决定，不可覆盖。** `save_memory` 始终写入 token 绑定的项目；不接受 `project_id` 参数。唯一例外是 `user` 类型，自动写入全局（`*`）范围以跨项目共享。
 
+### Content 格式约定（Markdown）
+
+`content` / `why` / `how_to_apply` 会被 UI 按 **GFM Markdown 渲染**。写入时务必遵守，否则前端显示为原始文本：
+
+- **表格必须带分隔行。** 表头行下方紧跟 `|---|---|`（每列一个），否则整段表格不会被识别、原样显示为纯文本。这是最常见的渲染失败原因。
+  ```
+  | 字段 | 类型 | 说明 |
+  |------|------|------|
+  | port | int  | 默认 9100 |
+  ```
+- **简单两列数据优先用无序列表**，比表格更稳、移动端更易读：`- port (int)：默认 9100`。
+- **代码 / 目录树 / 配置** 用围栏代码块并标注语言：` ```python ` / ` ```bash ` / ` ```json `（支持的语言见服务端 highlighter 配置）。
+- **用真实换行**，不要写字面量 `\n`（渲染层虽会兜底替换，但仍以真实换行为准）。
+- 标题用 `##` / `###`；列表项之间不要插入多余空行，避免被拆成多个段落。
+
 ## Skeleton Nodes — Organizing Memories into a Project Tree
 
 Each project has its own skeleton tree (categories). Before saving any `project`, `feedback`, or
@@ -395,6 +410,7 @@ Valid range: **1–5 only** (integers). Values outside this range are rejected b
 | Ignoring `conflict` response | Always check `action` field; use `replace_id` to merge |
 | Hard-deleting by default | Use soft delete; hard delete only for wrong/sensitive content |
 | Putting ephemeral task state in memory | Memory is cross-session; use tasks/plans for current-session state |
+| Markdown 表格缺少 `|---|` 分隔行 | GFM 要求表头下紧跟分隔行，否则 UI 原样显示为纯文本；简单两列改用无序列表 |
 
 ## project_id Scoping
 
