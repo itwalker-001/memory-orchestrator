@@ -110,11 +110,17 @@ const wheelName = computed(() => {
 const cmdInstall = computed(() =>
   `uv tool install --force <path-to-wheel>/${wheelName.value}`)
 
+// Display form is multi-line for readability; the copied form is single-line so it
+// runs as-is in any shell. Bash backslash continuations break in Win cmd/PowerShell.
 const cmdSetup = computed(() =>
   `mo-mcp setup \\\n  --client claude \\\n  --base-url ${baseUrl.value} \\\n  --project-token ${activeToken.value}`)
+const cmdSetupCopy = computed(() =>
+  `mo-mcp setup --client claude --base-url ${baseUrl.value} --project-token ${activeToken.value}`)
 
 const cmdSetupCodex = computed(() =>
   `mo-mcp setup \\\n  --client codex \\\n  --base-url ${baseUrl.value} \\\n  --project-token ${activeToken.value}`)
+const cmdSetupCodexCopy = computed(() =>
+  `mo-mcp setup --client codex --base-url ${baseUrl.value} --project-token ${activeToken.value}`)
 
 const cmdDoctor = computed(() =>
   `mo-mcp doctor --base-url ${baseUrl.value}`)
@@ -304,7 +310,7 @@ onMounted(() => { load() })
 
 {{ cmdSetup }}</pre>
               <n-button class="hp-copy" size="tiny" :type="copiedKey === 'setup' ? 'success' : 'default'"
-                @click="copySnippet('setup', cmdSetup)">
+                @click="copySnippet('setup', cmdSetupCopy)">
                 <template #icon><n-icon><IconCheck v-if="copiedKey === 'setup'" /><IconClone v-else /></n-icon></template>
                 {{ copiedKey === 'setup' ? t('Copied') : t('Copy') }}
               </n-button>
@@ -313,7 +319,7 @@ onMounted(() => { load() })
             <div class="hp-code">
               <pre>{{ cmdSetupCodex }}</pre>
               <n-button class="hp-copy" size="tiny" :type="copiedKey === 'setup-codex' ? 'success' : 'default'"
-                @click="copySnippet('setup-codex', cmdSetupCodex)">
+                @click="copySnippet('setup-codex', cmdSetupCodexCopy)">
                 <template #icon><n-icon><IconCheck v-if="copiedKey === 'setup-codex'" /><IconClone v-else /></n-icon></template>
                 {{ copiedKey === 'setup-codex' ? t('Copied') : t('Copy') }}
               </n-button>
