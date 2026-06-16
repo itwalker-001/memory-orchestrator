@@ -689,3 +689,16 @@ class Hit:
     memory: Memory
     score: float
     cosine_sim: float
+
+
+def _minmax_norm(scores: dict) -> dict:
+    """把一组分数 min-max 归一化到 [0,1]。空 → 空；max==min（含单元素）→ 全 1.0。
+    用于把 BM25 原始分（无固定上界）拉到与 cosine 同量纲再加权融合。"""
+    if not scores:
+        return {}
+    vals = list(scores.values())
+    lo, hi = min(vals), max(vals)
+    if hi == lo:
+        return {k: 1.0 for k in scores}
+    span = hi - lo
+    return {k: (v - lo) / span for k, v in scores.items()}
