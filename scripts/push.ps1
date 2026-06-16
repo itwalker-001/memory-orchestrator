@@ -55,7 +55,8 @@ try {
         'memory_orchestrator_server' `
         'memory_orchestrator_mcp' `
         'scripts/build.sh' `
-        'docker-compose.yml'
+        'docker-compose.yml' `
+        'Dockerfile.db'
     if ($LASTEXITCODE -ne 0) { throw "tar failed (exit $LASTEXITCODE)" }
 
     $sizeMB = [math]::Round((Get-Item $tmpTar).Length / 1MB, 2)
