@@ -97,7 +97,6 @@
   "Optional fields": "Optional fields",
   "Reason or motivation…": "Reason or motivation…",
   "When / how to use this…": "When / how to use this…",
-  "Global (*)": "Global (*)",
   "Write": "Write",
   "Delete memory": "Delete memory",
   "This memory will be soft-deleted and removed from context injection.": "This memory will be soft-deleted and removed from context injection.",

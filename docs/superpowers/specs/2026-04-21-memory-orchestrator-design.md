@@ -242,11 +242,11 @@ Orchestrator 通过 MCP stdio 暴露以下工具:
 
 软删置 `superseded_by = id`(自引),retrieval 自动过滤。
 
-### `promote_memory` — 提升重要度/作用域
+### `promote_memory` — 提升重要度
 
 ```json
 {
-  "inputs": { "id": "uuid", "importance?": 1-5, "make_global?": "bool" }
+  "inputs": { "id": "uuid", "importance?": 1-5 }
 }
 ```
 

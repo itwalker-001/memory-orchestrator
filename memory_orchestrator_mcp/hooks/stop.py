@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """Stop hook: trigger incremental session ingestion."""
 from __future__ import annotations
-import hashlib
 import json
 import os
-import re
-import subprocess
 import sys
 import time
 import urllib.error
@@ -110,40 +107,25 @@ def _count_user_turns(transcript_path: str) -> int:
     return count
 
 
-def _normalize_remote(remote: str) -> str | None:
-    if not remote:
-        return None
-    remote = remote.strip()
-    ssh = re.match(r"^git@([^:]+):(.+?)(?:\.git)?/?$", remote)
-    if ssh:
-        return f"{ssh.group(1).lower()}/{ssh.group(2).lower()}"
-    http = re.match(r"^https?://(?:[^@]+@)?([^/]+)/(.+?)(?:\.git)?/?$", remote)
-    if http:
-        return f"{http.group(1).lower()}/{http.group(2).lower()}"
-    return None
+def _read_token(cwd: str) -> str:
+    """Read the project_token from <cwd>/.mcp.json (written by `mo-mcp setup`).
 
-
-def _detect_project_id(cwd: str) -> str:
-    p = Path(cwd).resolve()
+    The project is resolved server-side from this bearer token, so the hook no longer
+    derives a slug from the git remote.
+    """
     try:
-        out = subprocess.run(
-            ["git", "-C", cwd, "config", "--get", "remote.origin.url"],
-            capture_output=True, text=True, timeout=1,
-        )
-        if out.returncode == 0:
-            n = _normalize_remote(out.stdout.strip())
-            if n:
-                return n
-        root_out = subprocess.run(
-            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=1,
-        )
-        if root_out.returncode == 0:
-            p = Path(root_out.stdout.strip())
+        p = Path(cwd) / ".mcp.json"
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            tok = (data.get("mcpServers", {})
+                       .get("memory-orchestrator", {})
+                       .get("env", {})
+                       .get("MO_MCP_TOKEN", ""))
+            if tok:
+                return tok.strip()
     except Exception:
         pass
-    short = hashlib.sha256(str(p).encode()).hexdigest()[:8]
-    return f"local:{p.name}-{short}"
+    return os.environ.get("MO_MCP_TOKEN", "").strip()
 
 
 def main() -> int:
@@ -155,7 +137,7 @@ def main() -> int:
     session_id = event.get("session_id") or "unknown"
     transcript_path = event.get("transcript_path") or ""
     cwd = _event_cwd(event)
-    project_id = _detect_project_id(cwd)
+    token = _read_token(cwd)
 
     state = _read_state(session_id)
     now = time.time()
@@ -168,14 +150,16 @@ def main() -> int:
 
     body = json.dumps({
         "session_id": session_id,
-        "project_slug": project_id,
         "transcript_path": transcript_path,
         "client": _client_name(),
     }).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
         f"{_base_url()}/ingest",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:

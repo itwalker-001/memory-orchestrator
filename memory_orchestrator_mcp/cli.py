@@ -292,13 +292,12 @@ def setup(base_url: str, project_token: str, client: str) -> None:
     proj_settings.write_text(json.dumps(proj_data, indent=2, ensure_ascii=False), encoding="utf-8")
     click.echo(f"[2/3] hooks written to {proj_settings}")
 
-    # 3. Install SKILL.md to project .claude/skills/
-    skill_src = Path(mcp_dir) / "skills" / "memory-orchestrator" / "SKILL.md"
-    skill_dst = Path(cwd) / ".claude" / "skills" / "memory-orchestrator" / "SKILL.md"
+    # 3. Install the skill (SKILL.md + reference files + scripts) to project .claude/skills/
+    skill_src = Path(mcp_dir) / "skills" / "memory-orchestrator"
+    skill_dst = Path(cwd) / ".claude" / "skills" / "memory-orchestrator"
     if skill_src.exists():
-        skill_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(skill_src, skill_dst)
-        click.echo(f"[3/3] SKILL.md installed → {skill_dst}")
+        shutil.copytree(skill_src, skill_dst, dirs_exist_ok=True)
+        click.echo(f"[3/3] skill installed → {skill_dst}")
 
     click.echo("")
     click.echo("Done. Open a NEW terminal / restart Claude Code for changes to take effect.")
@@ -465,7 +464,6 @@ async def _run_stdio_server() -> None:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
     from mcp.types import Resource, ResourceTemplate, TextContent, Tool
-    from memory_orchestrator_mcp.project_id import detect_project_id
 
     token_from_file = _read_token_from_settings()
     token_from_env = (os.environ.get("MO_MCP_TOKEN") or "").strip()
@@ -509,10 +507,9 @@ async def _run_stdio_server() -> None:
              inputSchema={"type": "object", "properties": {
                  "id": {"type": "string"}, "hard": {"type": "boolean"},
              }, "required": ["id"]}),
-        Tool(name="promote_memory", description="Change importance or scope.",
+        Tool(name="promote_memory", description="Change a memory's importance.",
              inputSchema={"type": "object", "properties": {
                  "id": {"type": "string"}, "importance": {"type": "integer"},
-                 "make_global": {"type": "boolean"},
              }, "required": ["id"]}),
         Tool(name="ingest_session", description="Ingest transcript for auto extraction.",
              inputSchema={"type": "object", "properties": {
@@ -544,10 +541,10 @@ async def _run_stdio_server() -> None:
     @app.read_resource()
     async def _read_resource(uri) -> str:
         cwd = _cwd()
-        slug = detect_project_id(cwd)
+        # Project is resolved server-side from the bearer token; no slug needed.
         async with httpx.AsyncClient(base_url=base_url, headers=_http_headers(), timeout=30.0, trust_env=False) as client:
             resp = await client.post("/mcp/resources/read", json={
-                "uri": str(uri), "project_slug": slug, "cwd": cwd,
+                "uri": str(uri), "cwd": cwd,
                 "client": _client_name(),
             })
             resp.raise_for_status()
@@ -561,14 +558,13 @@ async def _run_stdio_server() -> None:
         _flog(f"[{call_id}] START tool={name} args={args_log}")
         try:
             cwd = _cwd()
-            slug = detect_project_id(cwd)
-            _flog(f"[{call_id}] slug={slug}")
+            # Project is resolved server-side from the bearer token; no slug needed.
             async with httpx.AsyncClient(
                 base_url=base_url, headers=_http_headers(), timeout=30.0, trust_env=False
             ) as client:
                 resp = await client.post("/mcp/tools/call", json={
                     "name": name, "arguments": arguments,
-                    "project_slug": slug, "cwd": cwd,
+                    "cwd": cwd,
                     "client": _client_name(),
                 })
                 resp.raise_for_status()

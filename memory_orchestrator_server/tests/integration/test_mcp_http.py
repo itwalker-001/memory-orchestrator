@@ -4,7 +4,6 @@ from httpx import AsyncClient, ASGITransport
 
 from memory_orchestrator_server.http_app import create_app
 from memory_orchestrator_server.repository import MemoryRepository
-from memory_orchestrator_server.models import GLOBAL_PROJECT_ID
 
 FAKE_EMB = [1.0] + [0.0] * 511
 EMB_PATCH = "memory_orchestrator_server.mcp_core.embed_one"
@@ -48,7 +47,7 @@ async def test_mcp_save_memory_via_http(engine):
 
 
 @pytest.mark.asyncio
-async def test_mcp_save_user_type_goes_to_global(engine, session):
+async def test_mcp_save_user_type_goes_to_current_project(engine, session):
     with patch(EMB_PATCH, new=AsyncMock(return_value=FAKE_EMB)):
         async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
             r = await c.post("/mcp/tools/call", json={
@@ -57,8 +56,8 @@ async def test_mcp_save_user_type_goes_to_global(engine, session):
                 "arguments": {
                     "type": "user",
                     "name": "user-via-http",
-                    "description": "user memory routed to global",
-                    "content": "user type always global",
+                    "description": "user memory stored in current project",
+                    "content": "user type stored in the token-bound project",
                 },
             })
     assert r.status_code == 200
@@ -66,8 +65,9 @@ async def test_mcp_save_user_type_goes_to_global(engine, session):
 
     from sqlalchemy import select
     from memory_orchestrator_server.models import Memory
+    expected_pid = await MemoryRepository(session).slug_to_id("github.com/a/b")
     row = (await session.execute(select(Memory).where(Memory.id == mem_id))).scalar_one()
-    assert row.project_id == GLOBAL_PROJECT_ID
+    assert row.project_id == expected_pid
 
 
 @pytest.mark.asyncio

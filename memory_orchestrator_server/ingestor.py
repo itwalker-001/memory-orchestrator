@@ -49,7 +49,7 @@ Return a JSON array. Each item is an object with fields:
 - importance: integer 1-5, default 3
 
 Rules:
-- "user" = facts about the user (role, knowledge, preferences). Scope: global.
+- "user" = facts about the user (role, knowledge, preferences). Scope: current project.
 - "feedback" = corrections or validated approaches from user. Scope: project unless universal.
 - "project" = ongoing work, deadlines, stakeholders specific to this project.
 - "reference" = pointers to external systems (dashboards, trackers, URLs).

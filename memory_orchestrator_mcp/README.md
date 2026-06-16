@@ -104,7 +104,7 @@ Claude Code and Codex can call MCP tools directly:
 | `save_memory` | Persist a new memory entry (supports `node_name`/`parent_node` for skeleton) |
 | `list_memories` | Browse memories for a project |
 | `delete_memory` | Remove a memory |
-| `promote_memory` | Increase a memory's importance or make it global |
+| `promote_memory` | Increase a memory's importance |
 | `ingest_session` | Trigger extraction from a specific transcript |
 
 ## Token

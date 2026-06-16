@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """UserPromptSubmit hook: pre-inject memories into the active coding agent."""
 from __future__ import annotations
-import hashlib
 import json
 import os
-import re
-import subprocess
 import sys
 import urllib.error
-import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -88,50 +84,35 @@ def _event_cwd(event: dict) -> str:
     )
 
 
-def _normalize_remote(remote: str) -> str | None:
-    if not remote:
-        return None
-    remote = remote.strip()
-    ssh = re.match(r"^git@([^:]+):(.+?)(?:\.git)?/?$", remote)
-    if ssh:
-        return f"{ssh.group(1).lower()}/{ssh.group(2).lower()}"
-    http = re.match(r"^https?://(?:[^@]+@)?([^/]+)/(.+?)(?:\.git)?/?$", remote)
-    if http:
-        return f"{http.group(1).lower()}/{http.group(2).lower()}"
-    return None
+def _read_token(cwd: str) -> str:
+    """Read the project_token from <cwd>/.mcp.json (written by `mo-mcp setup`).
 
-
-def _detect_project_id(cwd: str) -> str:
-    p = Path(cwd).resolve()
+    The project is resolved server-side from this bearer token, so the hook no longer
+    derives a slug from the git remote.
+    """
     try:
-        out = subprocess.run(
-            ["git", "-C", cwd, "config", "--get", "remote.origin.url"],
-            capture_output=True, text=True, timeout=1,
-        )
-        if out.returncode == 0:
-            norm = _normalize_remote(out.stdout.strip())
-            if norm:
-                return norm
-        # git repo but no remote — find git root for stable name
-        root_out = subprocess.run(
-            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=1,
-        )
-        if root_out.returncode == 0:
-            p = Path(root_out.stdout.strip())
+        p = Path(cwd) / ".mcp.json"
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            tok = (data.get("mcpServers", {})
+                       .get("memory-orchestrator", {})
+                       .get("env", {})
+                       .get("MO_MCP_TOKEN", ""))
+            if tok:
+                return tok.strip()
     except Exception:
         pass
-    short = hashlib.sha256(str(p).encode()).hexdigest()[:8]
-    return f"local:{p.name}-{short}"
+    return os.environ.get("MO_MCP_TOKEN", "").strip()
 
 
 def main() -> int:
     event = _read_event()
     cwd = _event_cwd(event)
-    project_id = _detect_project_id(cwd)
-    url = f"{_base_url()}/context?project_slug={urllib.parse.quote(project_id)}&client={_client_name()}"
+    token = _read_token(cwd)
+    url = f"{_base_url()}/context?client={_client_name()}"
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        req = urllib.request.Request(url)
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
             body = resp.read().decode("utf-8", errors="replace")
     except (urllib.error.URLError, TimeoutError, ConnectionError) as e:

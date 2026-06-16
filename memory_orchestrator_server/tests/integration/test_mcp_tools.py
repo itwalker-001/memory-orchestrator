@@ -60,16 +60,16 @@ async def test_save_conflict_returns_conflicts(session):
 
 
 @pytest.mark.asyncio
-async def test_save_user_type_goes_to_global_project(session):
+async def test_save_user_type_goes_to_current_project(session):
     repo = MemoryRepository(session)
-    project_uuid = await repo.ensure_project("github.com/a/user-global")
+    project_uuid = await repo.ensure_project("github.com/a/user-current")
     with patch(PATCH, new=AsyncMock(return_value=FAKE_EMB)):
         saved = await handle_save_memory(
             session=session, project_uuid=project_uuid,
             args={"type": "user", "name": "user-mem", "description": "d", "content": "c"},
         )
     row = await session.execute(select(Memory).where(Memory.id == _uuid.UUID(saved["id"])))
-    assert row.scalar_one().project_id == GLOBAL_PROJECT_ID
+    assert row.scalar_one().project_id == project_uuid
 
 
 @pytest.mark.asyncio

@@ -50,9 +50,7 @@ def make_mcp_http_router(*, maker: async_sessionmaker) -> APIRouter:
             _, project_uuid = await resolve_project_token(session=s, authorization=authorization)
             repo = MemoryRepository(s)
             if project_uuid is None:
-                if not body.project_slug:
-                    raise HTTPException(status_code=400, detail="project_slug required")
-                project_uuid = await repo.ensure_project(body.project_slug, body.cwd)
+                raise HTTPException(status_code=401, detail="project token required; project is resolved from the bearer token")
             result = await handler(
                 session=s,
                 project_uuid=project_uuid,
@@ -74,9 +72,7 @@ def make_mcp_http_router(*, maker: async_sessionmaker) -> APIRouter:
             _, project_uuid = await resolve_project_token(session=s, authorization=authorization)
             repo = MemoryRepository(s)
             if project_uuid is None:
-                if not project_slug:
-                    raise HTTPException(status_code=400, detail="project_slug required")
-                project_uuid = await repo.ensure_project(project_slug, cwd)
+                raise HTTPException(status_code=401, detail="project token required; project is resolved from the bearer token")
             tree = await repo.get_skeleton_tree(project_uuid)
             await s.commit()
         return {"project_id": str(project_uuid), "skeleton": tree}
@@ -97,9 +93,7 @@ def make_mcp_http_router(*, maker: async_sessionmaker) -> APIRouter:
             _, project_uuid = await resolve_project_token(session=s, authorization=authorization)
             repo = MemoryRepository(s)
             if project_uuid is None:
-                if not body.project_slug:
-                    raise HTTPException(status_code=400, detail="project_slug required")
-                project_uuid = await repo.ensure_project(body.project_slug, body.cwd)
+                raise HTTPException(status_code=401, detail="project token required; project is resolved from the bearer token")
             node_id = await repo.get_or_create_skeleton_node(
                 project_id=project_uuid,
                 name=body.name,
@@ -119,9 +113,7 @@ def make_mcp_http_router(*, maker: async_sessionmaker) -> APIRouter:
             _, project_uuid = await resolve_project_token(session=s, authorization=authorization)
             repo = MemoryRepository(s)
             if project_uuid is None:
-                if not body.project_slug:
-                    raise HTTPException(status_code=400, detail="project_slug required")
-                project_uuid = await repo.ensure_project(body.project_slug, body.cwd)
+                raise HTTPException(status_code=401, detail="project token required; project is resolved from the bearer token")
             try:
                 result = await handle_read_memory_resource(
                     session=s,

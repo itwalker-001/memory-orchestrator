@@ -59,7 +59,6 @@ HTTP request
 | `mcp_core.py` | MCP tool implementations: search, save, list, delete, promote, ingest |
 | `mcp_contract.py` | Tool/resource schema definitions (MCP protocol contracts) |
 | `graph.py` | Apache AGE vertex/edge ops + LLM relation extraction |
-| `project_id.py` | Project slug/UUID resolution from cwd |
 | `db_check.py` | DB connectivity preflight; auto-create DB if missing |
 
 ## Data model

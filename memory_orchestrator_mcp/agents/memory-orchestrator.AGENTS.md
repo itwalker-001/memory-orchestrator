@@ -7,8 +7,8 @@ memories across Codex sessions.
 
 | Type | When to Save | Scope |
 |------|-------------|-------|
-| `user` | Role, expertise, communication preferences | Always global |
-| `feedback` | AI corrected / bug fixed / confirmed good approach | Project or global |
+| `user` | Role, expertise, communication preferences | Current project |
+| `feedback` | AI corrected / bug fixed / confirmed good approach | Current project |
 | `project` | Tech stack, architecture decisions, requirements, design | Current project |
 | `reference` | Pointers to external resources, dashboards, trackers | Current project |
 
@@ -43,7 +43,7 @@ Do NOT save: ephemeral task state, facts already in codebase, content already in
 query        (required) semantic search string
 top_k        default 3
 type         array filter, e.g. ["feedback","project"]
-project_id   omit = current + global; "all" = every project
+project_id   omit = current project; "all" = every project
 ```
 
 ### save_memory
@@ -56,7 +56,7 @@ why          reason behind rule/decision (feedback/project)
 how_to_apply when this memory kicks in
 importance   integer 1–5 only, default 3 (out-of-range rejected)
 replace_id   UUID of memory to supersede
-project_id   omit = auto; "global" = 00000000-...
+project_id   ignored — save always uses the token-bound current project
 node_name    optional — skeleton leaf node name, e.g. "功能实现"
 parent_node  optional — parent node, e.g. "后端" (disambiguates node_name)
 ```
@@ -87,7 +87,7 @@ Each project has a hierarchical skeleton. Use `node_name` + `parent_node` to fil
 | Architecture overview | 架构概览 | 项目概况 |
 | Deployment gotcha | 常见坑 | 经验库 |
 
-Omit `node_name` for `user` type memories (global, no tree).
+Omit `node_name` for `user` type memories (no skeleton tree).
 
 Save workflow: call `save_memory` → check `action` field.
 - `"created"` → done
@@ -95,7 +95,7 @@ Save workflow: call `save_memory` → check `action` field.
 
 ### list_memories
 ```
-project_id   omit = current + global; "all" = every project
+project_id   omit = current project; "all" = every project
 type         single type string
 limit        default 50
 ```
@@ -110,7 +110,6 @@ hard         false = soft-delete (default); true = permanent
 ```
 id           (required) UUID
 importance   1–5
-make_global  true = moves to global project
 ```
 
 ### ingest_session
@@ -133,12 +132,12 @@ Valid range: **1–5 only** (integers outside this range are rejected).
 ## project_id Scoping
 
 ```
-omit           → current project + global  ← default for most saves
-"all"          → every project (read-only)
-specific slug  → pin to exact project
+omit           → current project  ← default for most saves and reads
+"all"          → every project (read-only, for broad lookup)
+specific slug  → pin to exact project (cross-project reference)
 ```
 
-`user` type auto-routes to global — omit `project_id` when saving user memories.
+`save_memory` always writes to the token-bound current project; a passed `project_id` is ignored.
 
 ## Common Mistakes
 

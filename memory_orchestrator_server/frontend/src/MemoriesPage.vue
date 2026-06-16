@@ -172,7 +172,7 @@
         <n-card size="small" :bordered="true" style="margin-bottom:14px">
           <n-space align="center" :size="8" style="margin-bottom:6px">
             <n-tag size="small" :type="typeTagType(cloneSource.type)">{{ t(cloneSource.type) }}</n-tag>
-            <n-text depth="3" style="font-size:12px">{{ projectDisplayName(cloneSource.project_id) || t('Global (*)') }}</n-text>
+            <n-text depth="3" style="font-size:12px">{{ projectDisplayName(cloneSource.project_id) || cloneSource.project_id }}</n-text>
           </n-space>
           <n-text strong style="display:block">{{ cloneSource.name }}</n-text>
           <n-text v-if="cloneSource.description" depth="2" style="display:block;font-size:12px;margin-top:4px">{{ cloneSource.description }}</n-text>
@@ -374,10 +374,9 @@ const projectOptions = computed(() => [
   ...projects.value.map(p => ({ label: p.display_name || p.slug, value: p.slug })),
 ])
 // project select inside write/clone forms uses slug as the value
-const writeProjectOptions = computed(() => [
-  { label: t('Global (*)'), value: '' },
-  ...projects.value.map(p => ({ label: p.display_name || p.slug, value: p.slug })),
-])
+const writeProjectOptions = computed(() =>
+  projects.value.map(p => ({ label: p.display_name || p.slug, value: p.slug })),
+)
 const moveOptions = computed(() => projects.value.map(p => ({ label: p.display_name || p.slug, value: p.slug })))
 
 

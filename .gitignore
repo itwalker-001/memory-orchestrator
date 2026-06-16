@@ -21,6 +21,7 @@ tmp_pytest/
 
 # Python build artifacts
 *.egg-info/
+build/
 
 # Environment secrets
 .env
@@ -33,6 +34,9 @@ memory_orchestrator_server/models/
 
 # Runtime logs
 memory_orchestrator_server/logs/
+deploy123.log
+mo-server.err.log
+mo-server.out.log
 
 # Vite cache
 memory_orchestrator_server/frontend/.vite/

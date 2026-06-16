@@ -72,7 +72,7 @@ def memory_resource_guide() -> str:
         "- `search_memory` to retrieve relevant memories.",
         "- `list_memories` to inspect memory summaries.",
         "- `save_memory` to write memories.",
-        "- `promote_memory` to change importance or scope.",
+        "- `promote_memory` to change importance.",
         "- `delete_memory` to remove memories.", "",
         "Call the `save_memory` tool from this `memory-orchestrator` MCP server.",
         "Resources are read-only discovery/context surfaces.",

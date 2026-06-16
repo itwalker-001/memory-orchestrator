@@ -30,6 +30,7 @@ $ErrorActionPreference = "Stop"
 
 $TAR   = "$env:SystemRoot\System32\tar.exe"
 $PLINK = "C:\Program Files\PuTTY\plink.exe"
+$PSCP  = "C:\Program Files\PuTTY\pscp.exe"
 $LOCAL = Split-Path $PSScriptRoot -Parent
 
 Write-Host "=== Syncing source to ${User}@${Server}:${Remote} ==="
@@ -49,6 +50,7 @@ try {
         '--exclude=memory_orchestrator_server/frontend/dist' `
         '--exclude=memory_orchestrator_server/models' `
         '--exclude=memory_orchestrator_server/logs' `
+        '--exclude=memory_orchestrator_server/downloads' `
         '--exclude=*.pyc' `
         'memory_orchestrator_server' `
         'memory_orchestrator_mcp' `
@@ -81,6 +83,22 @@ try {
 
 Write-Host ""
 Write-Host "=== Sync complete ==="
+
+# Stage the locally-built mo-mcp wheel as the pre-staged wheel on the remote.
+# build.sh rebuilds it with `uv build` when uv is present; this copy is the
+# fallback the else-branch picks up when the server host has no uv toolchain.
+$wheel = Get-ChildItem "$LOCAL\memory_orchestrator_mcp\dist\*.whl" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($wheel) {
+    Write-Host "  Uploading built wheel: $($wheel.Name)"
+    & $PLINK -pw $Password -batch "${User}@${Server}" `
+        "mkdir -p $Remote/memory_orchestrator_server/downloads"
+    & $PSCP -pw $Password -batch $wheel.FullName `
+        "${User}@${Server}:$Remote/memory_orchestrator_server/downloads/"
+    if ($LASTEXITCODE -ne 0) { throw "pscp wheel upload failed (exit $LASTEXITCODE)" }
+} else {
+    Write-Host "  No local wheel in memory_orchestrator_mcp/dist/ — skipping (build.sh will build it if uv is present)."
+}
 
 # Fix CRLF on all uploaded .sh files
 Write-Host "  Fixing line endings on remote .sh files..."

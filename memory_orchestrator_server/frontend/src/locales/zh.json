@@ -96,7 +96,6 @@
   "Optional fields": "可选字段",
   "Reason or motivation…": "原因或动机…",
   "When / how to use this…": "何时/如何使用…",
-  "Global (*)": "全局 (*)",
   "Write": "写入",
   "Delete memory": "删除记忆",
   "This memory will be soft-deleted and removed from context injection.": "该记忆将被软删除并从上下文注入中移除。",

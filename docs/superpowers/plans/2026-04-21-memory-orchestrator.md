@@ -1908,8 +1908,6 @@ async def handle_promote_memory(*, session: AsyncSession, current_project_id: st
     values: dict = {}
     if "importance" in args:
         values["importance"] = int(args["importance"])
-    if args.get("make_global"):
-        values["project_id"] = "*"
     if values:
         await session.execute(update(Memory).where(Memory.id == uuid.UUID(args["id"])).values(**values))
         await session.commit()
@@ -1996,12 +1994,11 @@ _TOOLS: list[Tool] = [
         "properties": {"id": {"type": "string"}, "hard": {"type": "boolean", "default": False}},
         "required": ["id"],
     }),
-    Tool(name="promote_memory", description="Change importance or scope of a memory.", inputSchema={
+    Tool(name="promote_memory", description="Change importance of a memory.", inputSchema={
         "type": "object",
         "properties": {
             "id": {"type": "string"},
             "importance": {"type": "integer", "minimum": 1, "maximum": 5},
-            "make_global": {"type": "boolean"},
         },
         "required": ["id"],
     }),

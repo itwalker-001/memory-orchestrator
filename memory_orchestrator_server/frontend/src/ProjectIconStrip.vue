@@ -51,7 +51,11 @@ const cssVars = computed(() => ({
 }))
 
 function initials(name) {
-  return name.split(/[\s\-_\/]/).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?'
+  const words = name.split(/[\s\-_\/]/).filter(Boolean)
+  const raw = words.length > 1
+    ? words.map(w => w[0]).join('')
+    : (words[0] || '').slice(0, 2)
+  return raw.toUpperCase().slice(0, 2) || '?'
 }
 </script>
 

@@ -112,10 +112,9 @@ watch(() => props.show, open => {
 
 onBeforeUnmount(() => { unbindSyncScroll(); window.removeEventListener('keydown', onKey, true) })
 
-const projectOptions = computed(() => [
-  { label: t('Global (*)'), value: '' },
-  ...props.projects.map(p => ({ label: p.display_name || p.slug, value: p.slug || p.id })),
-])
+const projectOptions = computed(() =>
+  props.projects.map(p => ({ label: p.display_name || p.slug, value: p.slug || p.id })),
+)
 
 async function save() {
   if (!form.value.name || !form.value.content) return

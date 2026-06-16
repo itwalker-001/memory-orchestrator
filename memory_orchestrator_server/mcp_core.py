@@ -79,12 +79,8 @@ async def handle_save_memory(
     node_name: str | None = args.get("node_name") or None
     parent_node: str | None = args.get("parent_node") or None
     # The token-bound project is authoritative — callers cannot redirect a save to
-    # another project. `user`-type memories are the one exception: they live in the
-    # global "*" scope so they apply across every project.
-    if mtype == "user":
-        scope_uuid = await repo.ensure_project("*")
-    else:
-        scope_uuid = project_uuid
+    # another project. Every memory (including `user`) is stored in this project.
+    scope_uuid = project_uuid
     embedding = await embed_one(args["content"])
     replace_id = args.get("replace_id")
     if replace_id:
@@ -214,7 +210,7 @@ async def handle_read_memory_resource(
         return format_memory_resource(
             title="Recent Memories",
             mems=mems,
-            empty="No recent memories found for the current project/global scope.",
+            empty="No recent memories found for the current project.",
         )
     if uri_text.startswith(RESOURCE_PROJECT_PREFIX):
         slug = unquote(uri_text.removeprefix(RESOURCE_PROJECT_PREFIX))

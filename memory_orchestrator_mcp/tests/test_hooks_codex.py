@@ -1,7 +1,6 @@
 import json
 import runpy
 import sys
-from pathlib import Path
 from unittest.mock import patch
 
 
@@ -14,14 +13,16 @@ def test_user_prompt_submit_reads_codex_cwd_from_stdin(monkeypatch, tmp_path, ca
     monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
     monkeypatch.setattr(sys, "argv", ["user_prompt_submit.py", "--client", "codex"])
     monkeypatch.setattr(sys, "stdin", _FakeStdin(json.dumps({"cwd": str(tmp_path)})))
-    module["main"].__globals__["_detect_project_id"] = lambda cwd: f"pid:{Path(cwd).name}"
+    module["main"].__globals__["_read_token"] = lambda cwd: "tok-123"
 
     with patch.object(module["urllib"].request, "urlopen") as urlopen:
         urlopen.return_value.__enter__.return_value.read.return_value = "remember 中文".encode()
         assert module["main"]() == 0
 
-    requested = urlopen.call_args.args[0].full_url
-    assert "project_slug=pid%3A" in requested
+    request = urlopen.call_args.args[0]
+    assert "client=codex" in request.full_url
+    assert "project_slug" not in request.full_url
+    assert request.get_header("Authorization") == "Bearer tok-123"
     assert json.loads(capsys.readouterr().out) == {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
@@ -36,7 +37,7 @@ def test_user_prompt_submit_keeps_claude_plain_stdout(monkeypatch, tmp_path, cap
     monkeypatch.delenv("MO_CLIENT", raising=False)
     monkeypatch.setattr(sys, "argv", ["user_prompt_submit.py"])
     monkeypatch.setattr(sys, "stdin", _FakeStdin(""))
-    module["main"].__globals__["_detect_project_id"] = lambda cwd: "github.com/a/b"
+    module["main"].__globals__["_read_token"] = lambda cwd: "tok-xyz"
 
     with patch.object(module["urllib"].request, "urlopen") as urlopen:
         urlopen.return_value.__enter__.return_value.read.return_value = "plain 中文".encode()
@@ -68,15 +69,17 @@ def test_stop_reads_codex_cwd_and_state_dir(monkeypatch, tmp_path):
             )
         ),
     )
-    module["main"].__globals__["_detect_project_id"] = lambda cwd: f"pid:{Path(cwd).name}"
+    module["main"].__globals__["_read_token"] = lambda cwd: "tok-123"
 
     with patch.object(module["urllib"].request, "urlopen") as urlopen:
         urlopen.return_value.__enter__.return_value.read.return_value = b"{}"
         assert module["main"]() == 0
 
-    body = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+    request = urlopen.call_args.args[0]
+    body = json.loads(request.data.decode("utf-8"))
     assert body["session_id"] == "codex-session"
-    assert body["project_slug"] == "pid:repo"
+    assert "project_slug" not in body
+    assert request.get_header("Authorization") == "Bearer tok-123"
     assert (codex_home / "memory-orchestrator" / "stop-codex-session.json").exists()
 
 

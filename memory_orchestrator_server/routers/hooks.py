@@ -1,10 +1,12 @@
 from __future__ import annotations
 import logging
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Response
+import uuid
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from memory_orchestrator_server.auth_tokens import resolve_project_token
 from memory_orchestrator_server.ingestor import ingest_session
 from memory_orchestrator_server.models import Memory
 from memory_orchestrator_server.repository import MemoryRepository
@@ -14,9 +16,34 @@ log = logging.getLogger(__name__)
 
 class IngestRequest(BaseModel):
     session_id: str
-    project_slug: str
+    project_slug: str = ""
     transcript_path: str
     client: str | None = None
+
+
+async def _resolve_project_for_hook(
+    repo: MemoryRepository,
+    session: AsyncSession,
+    authorization: str | None,
+    slug: str | None,
+) -> uuid.UUID | None:
+    """Resolve the project for an (unauthenticated) hook endpoint.
+
+    Token-first: a valid ``project_token`` binds the project directly. Falls back to a
+    **read-only** slug lookup for backward compatibility. Never creates a project, so
+    hooks no longer lazily register unknown repositories.
+    """
+    if authorization:
+        try:
+            _, project_uuid = await resolve_project_token(session=session, authorization=authorization)
+        except HTTPException:
+            project_uuid = None
+        if project_uuid is not None:
+            return project_uuid
+    if slug:
+        return await repo.slug_to_id(slug)
+    return None
+
 
 
 def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_embedder: bool = False) -> APIRouter:
@@ -33,23 +60,24 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             db_ok = f"err:{e}"
         return {"db": db_ok, "embedder": "skipped" if skip_embedder else "ok", "version": read_version()}
 
-    @router.get("/context", summary="Build injected context", description="Returns markdown memory context for a project, truncated to the token budget. Called by the UserPromptSubmit hook.")
+    @router.get("/context", summary="Build injected context", description="Returns markdown memory context for a project, truncated to the token budget. Called by the UserPromptSubmit hook. Project resolved from the bearer token; falls back to a read-only project_slug lookup.")
     async def context(
         project_slug: str | None = None,
         project_id: str | None = None,
         budget_tokens: int | None = None,
         client: str | None = None,
+        authorization: str | None = Header(default=None),
     ) -> Response:
         slug = project_slug or project_id
-        if not slug:
-            raise HTTPException(status_code=422, detail="project_slug or project_id is required")
-        log.info("context client=%s project=%s", client or "unknown", slug)
+        log.info("context client=%s project=%s", client or "unknown", slug or "<token>")
         async with maker() as s:
             repo = MemoryRepository(s)
             cfg = await repo.get_settings()
             effective_budget = budget_tokens or int(cfg.get("hook_budget_tokens") or 1500)
-            project_uuid = await repo.ensure_project(slug)
+            project_uuid = await _resolve_project_for_hook(repo, s, authorization, slug)
             await s.commit()
+            if project_uuid is None:
+                return Response(content="", media_type="text/markdown; charset=utf-8")
             md = await repo.build_context(project_id=project_uuid, budget_tokens=effective_budget)
         return Response(content=md, media_type="text/markdown; charset=utf-8")
 
@@ -70,14 +98,17 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             by_type = {row[0]: row[1] for row in result.all()}
             return {"total": sum(by_type.values()), "by_type": by_type}
 
-    @router.post("/ingest", status_code=202, summary="Trigger ingestion", description="Queues background LLM extraction of memories from a session transcript. Called by the Stop hook. Returns immediately (202).")
-    async def ingest(req: IngestRequest, background: BackgroundTasks) -> dict:
-        log.info("ingest client=%s session=%s project=%s", req.client or "unknown", req.session_id, req.project_slug)
+    @router.post("/ingest", status_code=202, summary="Trigger ingestion", description="Queues background LLM extraction of memories from a session transcript. Called by the Stop hook. Returns immediately (202). Project resolved from the bearer token; falls back to a read-only project_slug lookup. Unknown projects are skipped (never created).")
+    async def ingest(req: IngestRequest, background: BackgroundTasks, authorization: str | None = Header(default=None)) -> dict:
+        log.info("ingest client=%s session=%s project=%s", req.client or "unknown", req.session_id, req.project_slug or "<token>")
         async def _run() -> None:
             async with maker() as s:
                 try:
                     repo = MemoryRepository(s)
-                    project_uuid = await repo.ensure_project(req.project_slug)
+                    project_uuid = await _resolve_project_for_hook(repo, s, authorization, req.project_slug or None)
+                    if project_uuid is None:
+                        log.info("ingest skipped: unresolved project (session=%s)", req.session_id)
+                        return
                     await s.commit()
                     await ingest_session(
                         db=s,
