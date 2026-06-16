@@ -303,6 +303,30 @@ class MemoryRepository:
             hits.append(Hit(memory=mem, score=score, cosine_sim=sim))
         hits.sort(key=lambda h: -h.score)
 
+        # --- BM25 融合：在向量候选基础上叠加关键词分数 ---
+        if query and cfg.get("bm25_enabled", "true").lower() == "true":
+            from memory_orchestrator_server.bm25_search import bm25_scores
+
+            bm25_w = float(cfg.get("score_bm25_weight", "0.5"))
+            raw_bm25 = await bm25_scores(
+                self.session, query=query,
+                project_ids=resolved_project_ids, limit=top_k * 3,
+            )
+            if raw_bm25:
+                norm_bm25 = _minmax_norm(raw_bm25)
+                # 把 BM25 命中的记忆并入候选：向量已召回的叠加分数，
+                # 纯 BM25 命中（向量没召回）的补成新 Hit。
+                by_id = {h.memory.id: h for h in hits}
+                for mem_id, nb in norm_bm25.items():
+                    if mem_id in by_id:
+                        h = by_id[mem_id]
+                        h.score = h.score + bm25_w * nb
+                    else:
+                        extra = await self.session.get(Memory, mem_id)
+                        if extra is not None and extra.superseded_by is None:
+                            hits.append(Hit(memory=extra, score=bm25_w * nb, cosine_sim=0.0))
+                hits.sort(key=lambda h: -h.score)
+
         if query and cfg.get("rerank_enabled", "false").lower() == "true":
             texts = [
                 f"{h.memory.name} {h.memory.description} {h.memory.content}"
