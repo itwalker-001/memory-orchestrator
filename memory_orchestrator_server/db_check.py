@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-REQUIRED_EXTENSIONS = {"pgcrypto", "vector"}
+REQUIRED_EXTENSIONS = {"pgcrypto", "vector", "pg_search"}
 REQUIRED_COLUMNS: Mapping[str, set[str]] = {
     "projects": {"id", "slug", "display_name"},
     "memories": {"id", "project_id", "type", "name", "embedding"},
@@ -98,7 +98,7 @@ async def check_database_ready(engine: AsyncEngine) -> None:
         extension_rows = await conn.execute(
             text(
                 "SELECT extname FROM pg_extension "
-                "WHERE extname IN ('pgcrypto', 'vector')"
+                "WHERE extname IN ('pgcrypto', 'vector', 'pg_search')"
             )
         )
         extensions = set(extension_rows.scalars().all())
@@ -107,7 +107,7 @@ async def check_database_ready(engine: AsyncEngine) -> None:
             raise DatabaseCheckError(
                 "Missing PostgreSQL extensions: "
                 + ", ".join(missing_extensions)
-                + ". Install pgvector, then run: uv run alembic upgrade head."
+                + ". Install pgvector + pg_search (use the ParadeDB image), then run: uv run alembic upgrade head."
             )
 
         column_rows = await conn.execute(

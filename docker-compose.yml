@@ -16,7 +16,7 @@ services:
       - "${MO_DB_HOST_PORT}:${MO_DB_PORT}"
     command: >
       postgres
-      -c shared_preload_libraries=vector
+      -c shared_preload_libraries=vector,pg_search
     volumes:
       - ${MO_PGDATA}:/var/lib/postgresql/data
     healthcheck:
