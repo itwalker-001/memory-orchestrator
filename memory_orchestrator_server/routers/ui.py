@@ -24,6 +24,7 @@ SETTINGS_KEYS = [
     "rerank_enabled", "rerank_model",
     "score_cosine_weight", "score_importance_weight", "score_recency_weight",
     "score_recency_half_life", "score_rerank_blend",
+    "bm25_enabled", "score_bm25_weight",
     "score_type_feedback", "score_type_project", "score_type_user", "score_type_reference",
 ]
 
@@ -69,6 +70,8 @@ class SettingsPatch(BaseModel):
     score_recency_weight: str | None = None
     score_recency_half_life: str | None = None
     score_rerank_blend: str | None = None
+    bm25_enabled: str | None = None
+    score_bm25_weight: str | None = None
     score_type_feedback: str | None = None
     score_type_project: str | None = None
     score_type_user: str | None = None
@@ -377,6 +380,50 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             result = await s.execute(stmt)
             by_type = {row[0]: row[1] for row in result.all()}
             return {"total": sum(by_type.values()), "by_type": by_type}
+
+    @router.get("/recall-test", tags=["Memories"], summary="Recall test (semantic search dry-run)")
+    async def recall_test(
+        query: str,
+        project_slug: str | None = None,
+        type: str | None = None,
+        top_k: int | None = None,
+    ) -> dict:
+        """Simulate the MCP ``search_memory`` recall path for a query, without side
+        effects. Delegates to the same ``mcp_core.search_memories`` the live tool
+        uses (identical scope resolution + vector + hybrid scoring), but passes
+        ``record_hits=False`` so testing does not bump hit counts. Returns ranked
+        hits with score + cosine similarity so recall quality can be inspected from
+        the UI. ``top_k`` defaults to the ``search_top_k`` setting to match the live
+        tool; ``project_slug="all"`` searches every project."""
+        from memory_orchestrator_server.mcp_core import search_memories
+
+        q = (query or "").strip()
+        if not q:
+            raise HTTPException(status_code=422, detail="query required")
+        if top_k is not None:
+            top_k = max(1, min(50, top_k))
+        types = [type] if type else None
+        async with maker() as s:
+            hits = await search_memories(
+                session=s, query=q, scope_slug=project_slug,
+                types=types, top_k=top_k, record_hits=False,
+            )
+            return {
+                "query": q,
+                "project_slug": project_slug,
+                "top_k": top_k,
+                "hits": [
+                    {
+                        "id": str(h.memory.id), "type": h.memory.type, "name": h.memory.name,
+                        "description": h.memory.description, "content": h.memory.content,
+                        "importance": h.memory.importance, "hit_count": h.memory.hit_count,
+                        "source_client": h.memory.source_client,
+                        "project_id": str(h.memory.project_id),
+                        "score": round(h.score, 4), "cosine_sim": round(h.cosine_sim, 4),
+                    }
+                    for h in hits
+                ],
+            }
 
     @router.get("/memories", tags=["Memories"], summary="List / search memories")
     async def memories(project_slug: str | None = None, type: str | None = None, q: str | None = None, limit: int = 100, sort_by: str = "time", sort_desc: bool = True) -> list[dict]:
