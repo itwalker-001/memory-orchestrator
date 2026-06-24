@@ -279,7 +279,7 @@
   "Click “Show & use” above to embed the real token into the commands below.": "点击上方「显示并使用」以将真实令牌填入下方命令。",
   "1. Install / upgrade the CLI": "1. 安装 / 升级 CLI",
   "Install the mo-mcp wheel as a global command. --force overwrites an older version.": "将 mo-mcp wheel 安装为全局命令。--force 会覆盖旧版本。",
-  "Replace <path-to-wheel> with the directory holding the .whl file.": "将 <path-to-wheel> 替换为存放 .whl 文件的目录。",
+  "Run this in the directory holding the downloaded .whl file. Click a wheel above to match the command.": "请在下载好的 .whl 所在目录执行。点击上方某个 wheel，下面命令会切换到对应版本。",
   "Download": "下载",
   "No downloadable wheel on the server — build one and place it in the downloads directory.": "服务器上没有可下载的 wheel——请构建一个并放入 downloads 目录。",
   "2. Wire up the project": "2. 接入项目",

@@ -279,7 +279,7 @@
   "Click “Show & use” above to embed the real token into the commands below.": "Click “Show & use” above to embed the real token into the commands below.",
   "1. Install / upgrade the CLI": "1. Install / upgrade the CLI",
   "Install the mo-mcp wheel as a global command. --force overwrites an older version.": "Install the mo-mcp wheel as a global command. --force overwrites an older version.",
-  "Replace <path-to-wheel> with the directory holding the .whl file.": "Replace <path-to-wheel> with the directory holding the .whl file.",
+  "Run this in the directory holding the downloaded .whl file. Click a wheel above to match the command.": "Run this in the directory holding the downloaded .whl file. Click a wheel above to match the command.",
   "Download": "Download",
   "No downloadable wheel on the server — build one and place it in the downloads directory.": "No downloadable wheel on the server — build one and place it in the downloads directory.",
   "2. Wire up the project": "2. Wire up the project",

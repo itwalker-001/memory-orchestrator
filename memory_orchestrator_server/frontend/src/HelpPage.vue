@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NCard, NSelect, NButton, NIcon, NText, NTag, NSpace, NEmpty, NInput,
@@ -88,6 +88,7 @@ function maskToken(tk) {
 
 // ── Downloadable artifacts (mo-mcp wheels served by the server) ─────────────────
 const downloads = ref([])
+const selectedWheelName = ref('')
 
 function fmtSize(bytes) {
   if (bytes < 1024) return `${bytes} B`
@@ -99,16 +100,66 @@ function downloadUrl(name) {
   return `${baseUrl.value}/api/downloads/${encodeURIComponent(name)}`
 }
 
+function parseWheelVersion(name) {
+  const match = name.match(/^memory_orchestrator_mcp-(.+)-py3-none-any\.whl$/)
+  if (!match) return []
+  return match[1].split(/[.-]/).map(part => {
+    const n = Number.parseInt(part, 10)
+    return Number.isNaN(n) ? part : n
+  })
+}
+
+function compareWheelNames(a, b) {
+  const av = parseWheelVersion(a)
+  const bv = parseWheelVersion(b)
+  const len = Math.max(av.length, bv.length)
+  for (let i = 0; i < len; i += 1) {
+    const ai = av[i]
+    const bi = bv[i]
+    if (ai === undefined) return -1
+    if (bi === undefined) return 1
+    if (typeof ai === 'number' && typeof bi === 'number') {
+      if (ai !== bi) return ai - bi
+      continue
+    }
+    const as = String(ai)
+    const bs = String(bi)
+    if (as !== bs) return as.localeCompare(bs)
+  }
+  return a.localeCompare(b)
+}
+
+const wheelDownloads = computed(() =>
+  downloads.value
+    .filter(f => f.name.endsWith('.whl'))
+    .slice()
+    .sort((a, b) => compareWheelNames(b.name, a.name)))
+
 // ── Command snippets ────────────────────────────────────────────────────────────
-// Prefer the wheel the server actually serves; fall back to a version-derived name.
 const wheelName = computed(() => {
-  const whl = downloads.value.find(f => f.name.endsWith('.whl'))
-  if (whl) return whl.name
+  const selected = wheelDownloads.value.find(f => f.name === selectedWheelName.value)
+  if (selected) return selected.name
+  const latest = wheelDownloads.value[0]
+  if (latest) return latest.name
   return `memory_orchestrator_mcp-${app.version || '<version>'}-py3-none-any.whl`
 })
 
 const cmdInstall = computed(() =>
-  `uv tool install --force <path-to-wheel>/${wheelName.value}`)
+  `uv tool install --force ${wheelName.value}`)
+
+function selectWheel(name) {
+  selectedWheelName.value = name
+}
+
+watch(wheelDownloads, (items) => {
+  if (!items.length) {
+    selectedWheelName.value = ''
+    return
+  }
+  if (!items.some(item => item.name === selectedWheelName.value)) {
+    selectedWheelName.value = items[0].name
+  }
+}, { immediate: true })
 
 // Display form is multi-line for readability; the copied form is single-line so it
 // runs as-is in any shell. Bash backslash continuations break in Win cmd/PowerShell.
@@ -271,13 +322,26 @@ onMounted(() => { load() })
             </n-text>
 
             <!-- Downloadable artifacts -->
-            <div v-if="downloads.length" class="hp-dl-list">
-              <div v-for="f in downloads" :key="f.name" class="hp-dl-row">
+            <div v-if="wheelDownloads.length" class="hp-dl-list">
+              <div
+                v-for="f in wheelDownloads"
+                :key="f.name"
+                class="hp-dl-row"
+                :class="{ 'is-selected': f.name === wheelName }"
+                role="button"
+                tabindex="0"
+                @click="selectWheel(f.name)"
+                @keydown.enter.prevent="selectWheel(f.name)"
+                @keydown.space.prevent="selectWheel(f.name)"
+              >
                 <n-icon :size="16" class="hp-dl-icon"><IconDownload /></n-icon>
                 <n-text code class="hp-dl-name">{{ f.name }}</n-text>
                 <n-text depth="3" style="font-size:11px">{{ fmtSize(f.size) }}</n-text>
                 <div class="hp-dl-spacer" />
-                <n-button size="tiny" tag="a" :href="downloadUrl(f.name)" :download="f.name">
+                <n-tag v-if="f.name === wheelName" size="small" type="success" :bordered="false">
+                  {{ t('selected') }}
+                </n-tag>
+                <n-button size="tiny" tag="a" :href="downloadUrl(f.name)" :download="f.name" @click.stop>
                   <template #icon><n-icon><IconDownload /></n-icon></template>
                   {{ t('Download') }}
                 </n-button>
@@ -296,7 +360,7 @@ onMounted(() => { load() })
               </n-button>
             </div>
             <n-text depth="3" tag="p" class="hp-hint">
-              {{ t('Replace <path-to-wheel> with the directory holding the .whl file.') }}
+              {{ t('Run this in the directory holding the downloaded .whl file. Click a wheel above to match the command.') }}
             </n-text>
           </n-card>
 
@@ -424,6 +488,19 @@ onMounted(() => { load() })
   padding: 6px 10px;
   border: 1px solid var(--n-border-color, rgba(0,0,0,0.08));
   border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+.hp-dl-row:hover {
+  background: var(--n-action-color, #f6f8fa);
+}
+.hp-dl-row:focus-visible {
+  box-shadow: 0 0 0 2px var(--n-primary-color-suppl, rgba(24,160,88,0.18));
+}
+.hp-dl-row.is-selected {
+  border-color: var(--n-primary-color, #63e2b7);
+  background: var(--n-action-color, #f6f8fa);
 }
 .hp-dl-icon { color: var(--n-primary-color, #63e2b7); }
 .hp-dl-name { font-size: 12px; word-break: break-all; }
