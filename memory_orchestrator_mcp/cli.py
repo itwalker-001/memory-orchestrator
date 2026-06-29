@@ -101,10 +101,10 @@ def main() -> None:
     """Memory Orchestrator MCP client CLI."""
 
 
-def _hook_cmd(mcp_dir: str, name: str, client: str, base_url: str) -> str:
+def _hook_cmd(mcp_dir: str, name: str, client: str) -> str:
     return (
         f"uv run --no-sync --project {mcp_dir} "
-        f"python {mcp_dir}/hooks/{name}.py --client {client} --base-url {base_url}"
+        f"python {mcp_dir}/hooks/{name}.py --client {client}"
     )
 
 
@@ -203,8 +203,8 @@ def _setup_codex(base_url: str, mcp_dir: str, project_token: str) -> None:
     # --- 2. Write hooks.json ---
     hooks_data = {
         "hooks": {
-            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", "codex", base_url)}]}],
-            "Stop": [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", "codex", base_url)}]}],
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", "codex")}]}],
+            "Stop": [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", "codex")}]}],
         }
     }
     hooks_path.write_text(json.dumps(hooks_data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -229,11 +229,18 @@ def _setup_codex(base_url: str, mcp_dir: str, project_token: str) -> None:
 
 
 @main.command(name="setup")
-@click.option("--base-url", prompt="Memory Orchestrator server URL", help="e.g. http://172.16.10.124:8765")
-@click.option("--project-token", prompt="Project token (create via UI or mo-server token create)", help="Bearer token bound to this project")
+@click.option("--base-url", default=None, help="e.g. http://172.16.10.124:8765")
+@click.option("--project-token", default=None, help="Bearer token bound to this project")
 @click.option("--client", type=click.Choice(["claude", "codex"]), default="claude", show_default=True)
-def setup(base_url: str, project_token: str, client: str) -> None:
-    """Configure MCP for this project: write .claude/settings.json + store project token.
+@click.option("--skill-only", is_flag=True, default=False, help="Only install/sync the skill; skip MCP registration and hooks.")
+@click.option("--global-only", is_flag=True, default=False, help="Install global hooks + skill only; skip project .mcp.json registration.")
+def setup(base_url: str | None, project_token: str | None, client: str, skill_only: bool, global_only: bool) -> None:
+    """Configure MCP hooks + skill (and optionally project .mcp.json).
+
+    Modes:
+      (default)      Full setup: global hooks + skill + project .mcp.json
+      --global-only  Global hooks + skill only; no project .mcp.json (no token needed)
+      --skill-only   Skill install only; no hooks, no .mcp.json
 
     The project token must be created in advance via the server UI or:
       mo-server token create --kind project_token --project-slug <slug> --name <label>
@@ -241,20 +248,67 @@ def setup(base_url: str, project_token: str, client: str) -> None:
     import json
     import shutil
 
+    mcp_dir = str(Path(__file__).parent.resolve()).replace("\\", "/")
+
+    # --skill-only: just sync skill files
+    if skill_only:
+        skill_src = Path(mcp_dir) / "skills" / "memory-orchestrator"
+        skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator"
+        if not skill_src.exists():
+            click.echo("ERROR: skill source not found.", err=True)
+            sys.exit(1)
+        shutil.copytree(skill_src, skill_dst, dirs_exist_ok=True)
+        click.echo(f"skill installed → {skill_dst}")
+        return
+
+    # --global-only: hooks + skill, no project .mcp.json
+    if global_only:
+        if client != "claude":
+            click.echo("ERROR: --global-only is only supported for --client claude.", err=True)
+            sys.exit(1)
+
+        # 1. Write hooks to global ~/.claude/settings.json
+        global_settings = _settings_path()
+        global_data = json.loads(global_settings.read_text(encoding="utf-8")) if global_settings.exists() else {}
+        global_data.pop("mcpServers", None)
+        global_data.setdefault("hooks", {})
+        global_data["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", client)}]}]
+        global_data["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", client)}]}]
+        global_settings.parent.mkdir(parents=True, exist_ok=True)
+        global_settings.write_text(json.dumps(global_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        click.echo(f"[1/2] hooks written to {global_settings}")
+
+        # 2. Install skill
+        skill_src = Path(mcp_dir) / "skills" / "memory-orchestrator"
+        skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator"
+        if skill_src.exists():
+            shutil.copytree(skill_src, skill_dst, dirs_exist_ok=True)
+            click.echo(f"[2/2] skill installed → {skill_dst}")
+
+        click.echo("")
+        click.echo("Done. Open a NEW terminal / restart Claude Code for changes to take effect.")
+        click.echo("Run mo-mcp setup --base-url <url> --project-token <token> in each project to register .mcp.json.")
+        return
+
+    # Full setup — prompt for required args if not supplied
+    if not base_url:
+        base_url = click.prompt("Memory Orchestrator server URL")
+    if not project_token:
+        project_token = click.prompt("Project token (create via UI or mo-server token create)")
+
     base_url = base_url.rstrip("/")
     project_token = project_token.strip()
     if not project_token:
         click.echo("ERROR: --project-token is required.", err=True)
         sys.exit(1)
 
-    mcp_dir = str(Path(__file__).parent.resolve()).replace("\\", "/")
     cwd = os.getcwd()
 
     if client == "codex":
         _setup_codex(base_url, mcp_dir, project_token=project_token)
         return
 
-    # --- Claude project-level setup ---
+    # --- Claude full setup ---
     import platform
     import subprocess
     _shell = platform.system() == "Windows"
@@ -281,20 +335,20 @@ def setup(base_url: str, project_token: str, client: str) -> None:
         sys.exit(1)
     click.echo("[1/3] claude mcp add --scope project: ok (.mcp.json updated)")
 
-    # 2. Write hooks to project .claude/settings.json
-    proj_settings = _project_settings_path(cwd)
-    proj_data = json.loads(proj_settings.read_text(encoding="utf-8")) if proj_settings.exists() else {}
-    proj_data.pop("mcpServers", None)
-    proj_data.setdefault("hooks", {})
-    proj_data["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", client, base_url)}]}]
-    proj_data["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", client, base_url)}]}]
-    proj_settings.parent.mkdir(parents=True, exist_ok=True)
-    proj_settings.write_text(json.dumps(proj_data, indent=2, ensure_ascii=False), encoding="utf-8")
-    click.echo(f"[2/3] hooks written to {proj_settings}")
+    # 2. Write hooks to global ~/.claude/settings.json
+    global_settings = _settings_path()
+    global_data = json.loads(global_settings.read_text(encoding="utf-8")) if global_settings.exists() else {}
+    global_data.pop("mcpServers", None)
+    global_data.setdefault("hooks", {})
+    global_data["hooks"]["UserPromptSubmit"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "user_prompt_submit", client)}]}]
+    global_data["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": _hook_cmd(mcp_dir, "stop", client)}]}]
+    global_settings.parent.mkdir(parents=True, exist_ok=True)
+    global_settings.write_text(json.dumps(global_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    click.echo(f"[2/3] hooks written to {global_settings}")
 
-    # 3. Install the skill (SKILL.md + reference files + scripts) to project .claude/skills/
+    # 3. Install the skill to global ~/.claude/skills/
     skill_src = Path(mcp_dir) / "skills" / "memory-orchestrator"
-    skill_dst = Path(cwd) / ".claude" / "skills" / "memory-orchestrator"
+    skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator"
     if skill_src.exists():
         shutil.copytree(skill_src, skill_dst, dirs_exist_ok=True)
         click.echo(f"[3/3] skill installed → {skill_dst}")
@@ -303,6 +357,95 @@ def setup(base_url: str, project_token: str, client: str) -> None:
     click.echo("Done. Open a NEW terminal / restart Claude Code for changes to take effect.")
     click.echo("Add .mcp.json to .gitignore to keep the token private.")
 
+
+
+@main.command(name="update")
+@click.option("--client", type=click.Choice(["claude", "codex"]), default="claude", show_default=True)
+def update(client: str) -> None:
+    """Download and install the latest MCP package from the MO server, then sync skill files.
+
+    Reads MO_HTTP_BASE_URL from the environment (set by mo-mcp setup).
+    Does not touch hooks, tokens, or MCP server config.
+    """
+    import importlib.metadata
+    import json as _json
+    import shutil
+    import subprocess
+    import tempfile
+    import urllib.request
+    import zipfile
+
+    base_url = os.environ.get("MO_HTTP_BASE_URL", "http://localhost:8765").rstrip("/")
+
+    # 1. Fetch server version (public endpoint, no token required)
+    try:
+        with urllib.request.urlopen(f"{base_url}/api/mcp-package", timeout=10) as r:
+            info = _json.loads(r.read())
+    except Exception as e:
+        click.echo(f"ERROR: could not reach server at {base_url}: {e}", err=True)
+        sys.exit(1)
+
+    server_version = info["version"]
+    filename = info["filename"]
+
+    # 2. Compare with local installed version
+    try:
+        local_version = importlib.metadata.version("memory-orchestrator-mcp")
+    except importlib.metadata.PackageNotFoundError:
+        local_version = None
+
+    click.echo(f"local:  {local_version or '(not installed)'}")
+    click.echo(f"server: {server_version}")
+
+    if local_version == server_version:
+        click.echo("Already up to date.")
+        return
+
+    # 3. Download wheel to a temp dir
+    wheel_url = f"{base_url}/api/mcp-package/wheel"
+    click.echo(f"Downloading {filename} ...")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        wheel_path = Path(tmpdir) / filename
+        try:
+            urllib.request.urlretrieve(wheel_url, str(wheel_path))
+        except Exception as e:
+            click.echo(f"ERROR: download failed: {e}", err=True)
+            sys.exit(1)
+
+        # 4. Extract skill files from wheel (wheel = zip) before installing
+        extract_dir = Path(tmpdir) / "extracted"
+        extract_dir.mkdir()
+        with zipfile.ZipFile(wheel_path) as zf:
+            zf.extractall(extract_dir)
+        extracted_mcp = extract_dir / "memory_orchestrator_mcp"
+
+        # 5. Install via uv tool
+        click.echo("Installing ...")
+        result = subprocess.run(
+            ["uv", "tool", "install", "--reinstall", str(wheel_path)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            click.echo(f"ERROR: install failed:\n{result.stderr.strip()}", err=True)
+            sys.exit(1)
+        click.echo(f"Installed {server_version}")
+
+        # 6. Sync skill/agent files from the extracted package
+        cwd = os.getcwd()
+        if client == "codex":
+            codex_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+            _install_agents_md(extracted_mcp, codex_home)
+            click.echo(f"AGENTS.md synced → {codex_home / 'AGENTS.md'}")
+        else:
+            skill_src = extracted_mcp / "skills" / "memory-orchestrator"
+            skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator"
+            if skill_src.exists():
+                skill_dst.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(skill_src, skill_dst, dirs_exist_ok=True)
+                click.echo(f"skill synced → {skill_dst}")
+
+    click.echo("")
+    click.echo("Done. Open a new session for changes to take effect.")
 
 
 @main.command(name="teardown")
@@ -367,7 +510,7 @@ def teardown(client: str) -> None:
         click.echo("Done.")
         return
 
-    # --- Claude teardown (project scope) ---
+    # --- Claude teardown ---
     import platform
     import subprocess
     cwd = os.getcwd()
@@ -379,23 +522,21 @@ def teardown(client: str) -> None:
     )
     click.echo("mcp remove: ok")
 
-    proj_settings = _project_settings_path(cwd)
-    if proj_settings.exists():
-        data = json.loads(proj_settings.read_text(encoding="utf-8"))
+    # Remove hooks from global ~/.claude/settings.json
+    global_settings = _settings_path()
+    if global_settings.exists():
+        data = json.loads(global_settings.read_text(encoding="utf-8"))
         changed = False
         for key in ["UserPromptSubmit", "Stop"]:
             if key in data.get("hooks", {}):
                 del data["hooks"][key]
                 changed = True
-        if "memory-orchestrator" in data.get("mcpServers", {}):
-            del data["mcpServers"]["memory-orchestrator"]
-            changed = True
         if changed:
-            proj_settings.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-            click.echo(f"cleaned {proj_settings}")
+            global_settings.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            click.echo(f"cleaned {global_settings}")
 
-    # Remove SKILL.md
-    skill_dst = Path(cwd) / ".claude" / "skills" / "memory-orchestrator"
+    # Remove skill from global ~/.claude/skills/
+    skill_dst = Path.home() / ".claude" / "skills" / "memory-orchestrator"
     if skill_dst.exists():
         shutil.rmtree(skill_dst)
         click.echo(f"removed {skill_dst}")
@@ -559,6 +700,7 @@ async def _run_stdio_server() -> None:
         try:
             cwd = _cwd()
             # Project is resolved server-side from the bearer token; no slug needed.
+            _flog(f"[{call_id}] HTTP request begin base_url={base_url} cwd={cwd}")
             async with httpx.AsyncClient(
                 base_url=base_url, headers=_http_headers(), timeout=30.0, trust_env=False
             ) as client:
@@ -567,6 +709,7 @@ async def _run_stdio_server() -> None:
                     "cwd": cwd,
                     "client": _client_name(),
                 })
+                _flog(f"[{call_id}] HTTP response status={resp.status_code}")
                 resp.raise_for_status()
                 result = resp.json()["result"]
                 _flog(f"[{call_id}] OK result={type(result).__name__}")
@@ -575,8 +718,21 @@ async def _run_stdio_server() -> None:
             raise
         return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False))]
 
-    async with stdio_server() as (read, write):
-        await app.run(read, write, app.create_initialization_options())
+    _flog("serve-mcp: entering stdio_server context")
+    try:
+        async with stdio_server() as (read, write):
+            _flog("serve-mcp: stdio_server connected")
+            try:
+                await app.run(read, write, app.create_initialization_options())
+                _flog("serve-mcp: app.run returned normally")
+            except Exception as e:
+                _flog(f"serve-mcp: app.run ERROR {type(e).__name__}: {e!r}")
+                raise
+    except Exception as e:
+        _flog(f"serve-mcp: stdio_server ERROR {type(e).__name__}: {e!r}")
+        raise
+    finally:
+        _flog("serve-mcp: exit")
 
 
 if __name__ == "__main__":

@@ -18,14 +18,32 @@ _DEFAULTS_FILE = Path(__file__).parent.parent / "settings_defaults.json"
 SETTINGS_SEED: dict[str, str] = json.loads(_DEFAULTS_FILE.read_text())
 
 SETTINGS_KEYS = [
-    "extraction_base_url", "extraction_model", "extraction_api_key", "embed_model", "embed_dim",
-    "hook_cooldown_sec", "hook_min_turns", "hook_budget_tokens",
-    "search_top_k", "dup_threshold", "db_dsn", "http_port",
-    "rerank_enabled", "rerank_model",
-    "score_cosine_weight", "score_importance_weight", "score_recency_weight",
-    "score_recency_half_life", "score_rerank_blend",
-    "bm25_enabled", "score_bm25_weight",
-    "score_type_feedback", "score_type_project", "score_type_user", "score_type_reference",
+    "extraction_base_url",
+    "extraction_model",
+    "extraction_api_key",
+    "embed_model",
+    "embed_dim",
+    "hook_cooldown_sec",
+    "hook_min_turns",
+    "hook_budget_tokens",
+    "search_top_k",
+    "search_min_score",
+    "dup_threshold",
+    "db_dsn",
+    "http_port",
+    "rerank_enabled",
+    "rerank_model",
+    "score_cosine_weight",
+    "score_importance_weight",
+    "score_recency_weight",
+    "score_recency_half_life",
+    "score_rerank_blend",
+    "bm25_enabled",
+    "score_bm25_weight",
+    "score_type_feedback",
+    "score_type_project",
+    "score_type_user",
+    "score_type_reference",
 ]
 
 
@@ -60,6 +78,7 @@ class SettingsPatch(BaseModel):
     hook_min_turns: str | None = None
     hook_budget_tokens: str | None = None
     search_top_k: str | None = None
+    search_min_score: str | None = None
     dup_threshold: str | None = None
     db_dsn: str | None = None
     http_port: str | None = None
@@ -132,6 +151,21 @@ class NodeMemoryAdd(BaseModel):
     memory_id: uuid.UUID
 
 
+def _latest_mcp_wheel(downloads_dir: Path) -> Path | None:
+    """Return the wheel with the highest version in downloads_dir, or None."""
+    wheels = [p for p in downloads_dir.glob("memory_orchestrator_mcp-*.whl") if p.is_file()]
+    if not wheels:
+        return None
+
+    def _ver(p: Path) -> tuple:
+        try:
+            return tuple(int(x) for x in p.stem.split("-")[1].split("."))
+        except Exception:
+            return (0,)
+
+    return max(wheels, key=_ver)
+
+
 def _new_token_pair() -> tuple[str, str, str | None]:
     import secrets
     from memory_orchestrator_server.auth_tokens import hash_token, encrypt_token
@@ -142,7 +176,12 @@ def _new_token_pair() -> tuple[str, str, str | None]:
 
 def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     from memory_orchestrator_server.auth_tokens import (
-        TOKEN_KIND_UI, UI_SESSION_TTL, auth_dependency, check_token_valid, _db_has_tokens, env_token_for_kind,
+        TOKEN_KIND_UI,
+        UI_SESSION_TTL,
+        auth_dependency,
+        check_token_valid,
+        _db_has_tokens,
+        env_token_for_kind,
     )
 
     outer = APIRouter()
@@ -182,15 +221,31 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         response.delete_cookie(key="mo_ui_session", path="/", samesite="strict")
         return response
 
+    @public.get("/mcp-package", tags=["Downloads"], summary="Latest MCP client package version")
+    async def mcp_package_info() -> dict:
+        d = Path(get_settings().downloads_dir)
+        latest = _latest_mcp_wheel(d)
+        if not latest:
+            raise HTTPException(status_code=404, detail="no MCP package available on this server")
+        version = latest.stem.split("-")[1]
+        return {"version": version, "filename": latest.name, "size": latest.stat().st_size}
+
+    @public.get("/mcp-package/wheel", tags=["Downloads"], summary="Download latest MCP client wheel")
+    async def download_mcp_wheel() -> FileResponse:
+        d = Path(get_settings().downloads_dir).resolve()
+        latest = _latest_mcp_wheel(d)
+        if not latest:
+            raise HTTPException(status_code=404, detail="no MCP package available on this server")
+        return FileResponse(latest.resolve(), filename=latest.name, media_type="application/octet-stream")
+
     # ── Token management (protected) ─────────────────────────────────────────
 
     @router.get("/tokens", tags=["Tokens"], summary="List tokens")
     async def list_tokens() -> list[dict]:
         from memory_orchestrator_server.models import ApiToken
+
         async with maker() as s:
-            result = await s.execute(
-                select(ApiToken).where(ApiToken.revoked_at.is_(None)).order_by(ApiToken.created_at)
-            )
+            result = await s.execute(select(ApiToken).where(ApiToken.revoked_at.is_(None)).order_by(ApiToken.created_at))
             rows = result.scalars().all()
         return [
             {
@@ -219,7 +274,9 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         raw, token_hash, token_encrypted = _new_token_pair()
         async with maker() as s:
             t = ApiToken(
-                name=body.name, kind=body.kind, token_hash=token_hash,
+                name=body.name,
+                kind=body.kind,
+                token_hash=token_hash,
                 token_encrypted=token_encrypted,
                 project_id=body.project_id,
             )
@@ -227,7 +284,9 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
             await s.refresh(t)
         return {
-            "id": str(t.id), "name": t.name, "kind": t.kind,
+            "id": str(t.id),
+            "name": t.name,
+            "kind": t.kind,
             "token": raw,
             "project_id": str(t.project_id) if t.project_id else None,
             "created_at": isoformat_utc(t.created_at),
@@ -269,6 +328,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     async def reveal_token(token_id: uuid.UUID) -> dict:
         from memory_orchestrator_server.auth_tokens import decrypt_token
         from memory_orchestrator_server.models import ApiToken
+
         async with maker() as s:
             tok = await s.get(ApiToken, token_id)
             if not tok or tok.revoked_at is not None:
@@ -284,6 +344,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     @router.patch("/tokens/{token_id}", status_code=200, tags=["Tokens"], summary="Enable/disable token")
     async def patch_token(token_id: uuid.UUID, body: TokenPatch = Body(...)) -> dict:
         from memory_orchestrator_server.models import ApiToken
+
         async with maker() as s:
             tok = await s.get(ApiToken, token_id)
             if not tok or tok.revoked_at is not None:
@@ -298,6 +359,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     @router.delete("/tokens/{token_id}", status_code=200, tags=["Tokens"], summary="Revoke token")
     async def revoke_token(token_id: uuid.UUID) -> dict:
         from memory_orchestrator_server.models import ApiToken
+
         async with maker() as s:
             tok = await s.get(ApiToken, token_id)
             if not tok or tok.revoked_at is not None:
@@ -309,6 +371,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     @router.get("/timezone", tags=["System"], summary="Server timezone")
     async def timezone() -> dict:
         import datetime
+
         tz = datetime.datetime.now().astimezone().tzname()
         offset = datetime.datetime.now().astimezone().utcoffset()
         total_seconds = int(offset.total_seconds())
@@ -316,8 +379,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         minutes = remainder // 60
         sign = "+" if total_seconds >= 0 else "-"
         iana = str(datetime.datetime.now().astimezone().tzinfo)
-        return {"name": tz, "iana": iana, "offset_minutes": total_seconds // 60,
-                "label": f"UTC{sign}{hours:02d}:{minutes:02d}"}
+        return {"name": tz, "iana": iana, "offset_minutes": total_seconds // 60, "label": f"UTC{sign}{hours:02d}:{minutes:02d}"}
 
     def _project_dict(p: Project) -> dict:
         return {
@@ -405,8 +467,12 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         types = [type] if type else None
         async with maker() as s:
             hits = await search_memories(
-                session=s, query=q, scope_slug=project_slug,
-                types=types, top_k=top_k, record_hits=False,
+                session=s,
+                query=q,
+                scope_slug=project_slug,
+                types=types,
+                top_k=top_k,
+                record_hits=False,
             )
             return {
                 "query": q,
@@ -414,12 +480,17 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 "top_k": top_k,
                 "hits": [
                     {
-                        "id": str(h.memory.id), "type": h.memory.type, "name": h.memory.name,
-                        "description": h.memory.description, "content": h.memory.content,
-                        "importance": h.memory.importance, "hit_count": h.memory.hit_count,
+                        "id": str(h.memory.id),
+                        "type": h.memory.type,
+                        "name": h.memory.name,
+                        "description": h.memory.description,
+                        "content": h.memory.content,
+                        "importance": h.memory.importance,
+                        "hit_count": h.memory.hit_count,
                         "source_client": h.memory.source_client,
                         "project_id": str(h.memory.project_id),
-                        "score": round(h.score, 4), "cosine_sim": round(h.cosine_sim, 4),
+                        "score": round(h.score, 4),
+                        "cosine_sim": round(h.cosine_sim, 4),
                     }
                     for h in hits
                 ],
@@ -437,12 +508,17 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             result = []
             for m in mems:
                 d = {
-                    "id": str(m.id), "type": m.type, "name": m.name,
-                    "description": m.description, "content": m.content,
-                    "importance": m.importance, "hit_count": m.hit_count,
+                    "id": str(m.id),
+                    "type": m.type,
+                    "name": m.name,
+                    "description": m.description,
+                    "content": m.content,
+                    "importance": m.importance,
+                    "hit_count": m.hit_count,
                     "source_client": m.source_client,
                     "last_hit_at": isoformat_utc(m.last_hit_at) if m.last_hit_at else None,
-                    "project_id": str(m.project_id), "updated_at": isoformat_utc(m.updated_at),
+                    "project_id": str(m.project_id),
+                    "updated_at": isoformat_utc(m.updated_at),
                 }
                 if m.why:
                     d["why"] = m.why
@@ -454,6 +530,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     @router.post("/memories", status_code=201, tags=["Memories"], summary="Create memory")
     async def create_memory(body: MemoryCreate = Body(...)) -> dict:
         from memory_orchestrator_server.embedder import embed_one
+
         if body.type not in ("user", "feedback", "project", "reference"):
             raise HTTPException(status_code=422, detail=f"invalid type: {body.type}")
         async with maker() as s:
@@ -465,10 +542,16 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 raise HTTPException(status_code=404, detail=f"project not found: {body.project_id}")
             embedding = await embed_one(body.content)
             m = await repo.save(
-                type=body.type, name=body.name, description=body.description,
-                content=body.content, why=body.why or None, how_to_apply=body.how_to_apply or None,
+                type=body.type,
+                name=body.name,
+                description=body.description,
+                content=body.content,
+                why=body.why or None,
+                how_to_apply=body.how_to_apply or None,
                 importance=max(1, min(5, body.importance)),
-                project_id=pid, source="ui", embedding=embedding,
+                project_id=pid,
+                source="ui",
+                embedding=embedding,
                 source_client=body.source_client if body.source_client in {"claude", "codex"} else "claude",
             )
             await s.commit()
@@ -482,10 +565,15 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             if not m:
                 raise HTTPException(status_code=404, detail="not found")
             return {
-                "id": str(m.id), "type": m.type, "name": m.name,
-                "description": m.description, "content": m.content,
-                "why": m.why, "how_to_apply": m.how_to_apply,
-                "importance": m.importance, "hit_count": m.hit_count,
+                "id": str(m.id),
+                "type": m.type,
+                "name": m.name,
+                "description": m.description,
+                "content": m.content,
+                "why": m.why,
+                "how_to_apply": m.how_to_apply,
+                "importance": m.importance,
+                "hit_count": m.hit_count,
                 "source_client": m.source_client,
                 "last_hit_at": isoformat_utc(m.last_hit_at) if m.last_hit_at else None,
                 "project_id": str(m.project_id),
@@ -506,6 +594,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     @router.patch("/memories/{memory_id}", status_code=200, tags=["Memories"], summary="Update memory")
     async def patch_memory(memory_id: uuid.UUID, body: MemoryPatch = Body(...)) -> dict:
         from memory_orchestrator_server.embedder import embed_one
+
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         if not updates:
             return {"saved": 0}
@@ -534,10 +623,16 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             if not target_uuid:
                 raise HTTPException(status_code=404, detail=f"project not found: {project_slug}")
             new_m = await repo.save(
-                type=src.type, name=src.name, description=src.description,
-                content=src.content, why=src.why, how_to_apply=src.how_to_apply,
-                importance=src.importance, project_id=target_uuid,
-                source="ui", source_client=src.source_client or "claude",
+                type=src.type,
+                name=src.name,
+                description=src.description,
+                content=src.content,
+                why=src.why,
+                how_to_apply=src.how_to_apply,
+                importance=src.importance,
+                project_id=target_uuid,
+                source="ui",
+                source_client=src.source_client or "claude",
                 embedding=src.embedding,
             )
             await s.commit()
@@ -639,8 +734,10 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             result = []
             for m in mems:
                 d = {
-                    "type": m.type, "name": m.name,
-                    "description": m.description, "content": m.content,
+                    "type": m.type,
+                    "name": m.name,
+                    "description": m.description,
+                    "content": m.content,
                     "importance": m.importance,
                     "source_client": m.source_client,
                     "project_slug": slug_map.get(m.project_id, "*"),
@@ -685,6 +782,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         limit: int = 200,
     ) -> list[dict]:
         from sqlalchemy import text
+
         async with maker() as s:
             repo = MemoryRepository(s)
             cfg = await repo.get_settings()
@@ -703,7 +801,8 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 filters.append("m1.type = :type AND m2.type = :type")
                 params["type"] = type
             where_extra = f" AND {' AND '.join(filters)}" if filters else ""
-            result = await s.execute(text(f"""
+            result = await s.execute(
+                text(f"""
                 SELECT
                     m1.id AS id1, m1.type AS type1, m1.name AS name1,
                     m1.description AS desc1, m1.content AS content1, m1.project_id AS pid1,
@@ -720,21 +819,31 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                   AND 1 - (m1.embedding <=> m2.embedding) >= :threshold
                 ORDER BY similarity DESC
                 LIMIT :limit
-            """), params)
+            """),
+                params,
+            )
             rows = result.fetchall()
             proj_result = await s.execute(select(Project))
             slug_map = {p.id: p.slug for p in proj_result.scalars().all()}
         pairs = []
         for row in rows:
-            pairs.append({
-                "id1": str(row.id1), "type1": row.type1, "name1": row.name1,
-                "description1": row.desc1, "content1": row.content1,
-                "project_slug1": slug_map.get(row.pid1, "*"),
-                "id2": str(row.id2), "type2": row.type2, "name2": row.name2,
-                "description2": row.desc2, "content2": row.content2,
-                "project_slug2": slug_map.get(row.pid2, "*"),
-                "similarity": round(float(row.similarity), 3),
-            })
+            pairs.append(
+                {
+                    "id1": str(row.id1),
+                    "type1": row.type1,
+                    "name1": row.name1,
+                    "description1": row.desc1,
+                    "content1": row.content1,
+                    "project_slug1": slug_map.get(row.pid1, "*"),
+                    "id2": str(row.id2),
+                    "type2": row.type2,
+                    "name2": row.name2,
+                    "description2": row.desc2,
+                    "content2": row.content2,
+                    "project_slug2": slug_map.get(row.pid2, "*"),
+                    "similarity": round(float(row.similarity), 3),
+                }
+            )
         return pairs
 
     @router.get("/conflicts", tags=["Memories"], summary="Scan conflicts")
@@ -745,6 +854,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         limit: int = 200,
     ) -> list[dict]:
         from sqlalchemy import text
+
         async with maker() as s:
             repo = MemoryRepository(s)
             cfg = await repo.get_settings()
@@ -762,7 +872,8 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 filters.append("m1.type = :type AND m2.type = :type")
                 params["type"] = type
             where_extra = f" AND {' AND '.join(filters)}" if filters else ""
-            result = await s.execute(text(f"""
+            result = await s.execute(
+                text(f"""
                 SELECT
                     m1.id AS id1, m1.type AS type1, m1.name AS name1,
                     m1.description AS desc1, m1.content AS content1, m1.project_id AS pid1,
@@ -780,21 +891,31 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                   AND 1 - (m1.embedding <=> m2.embedding) < :max_sim
                 ORDER BY similarity DESC
                 LIMIT :limit
-            """), params)
+            """),
+                params,
+            )
             rows = result.fetchall()
             proj_result = await s.execute(select(Project))
             slug_map = {p.id: p.slug for p in proj_result.scalars().all()}
         pairs = []
         for row in rows:
-            pairs.append({
-                "id1": str(row.id1), "type1": row.type1, "name1": row.name1,
-                "description1": row.desc1, "content1": row.content1,
-                "project_slug1": slug_map.get(row.pid1, "*"),
-                "id2": str(row.id2), "type2": row.type2, "name2": row.name2,
-                "description2": row.desc2, "content2": row.content2,
-                "project_slug2": slug_map.get(row.pid2, "*"),
-                "similarity": round(float(row.similarity), 3),
-            })
+            pairs.append(
+                {
+                    "id1": str(row.id1),
+                    "type1": row.type1,
+                    "name1": row.name1,
+                    "description1": row.desc1,
+                    "content1": row.content1,
+                    "project_slug1": slug_map.get(row.pid1, "*"),
+                    "id2": str(row.id2),
+                    "type2": row.type2,
+                    "name2": row.name2,
+                    "description2": row.desc2,
+                    "content2": row.content2,
+                    "project_slug2": slug_map.get(row.pid2, "*"),
+                    "similarity": round(float(row.similarity), 3),
+                }
+            )
         return pairs
 
     @public.post("/register", status_code=201)
@@ -829,15 +950,17 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             repo = MemoryRepository(s)
             project_uuid = await repo.ensure_project(project_slug)
 
-            existing = (await s.execute(
-                select(ApiToken).where(
-                    ApiToken.name == name,
-                    ApiToken.kind == TOKEN_KIND_PROJECT,
-                    ApiToken.project_id == project_uuid,
-                    ApiToken.revoked_at.is_(None),
-                    ApiToken.enabled.is_(True),
+            existing = (
+                await s.execute(
+                    select(ApiToken).where(
+                        ApiToken.name == name,
+                        ApiToken.kind == TOKEN_KIND_PROJECT,
+                        ApiToken.project_id == project_uuid,
+                        ApiToken.revoked_at.is_(None),
+                        ApiToken.enabled.is_(True),
+                    )
                 )
-            )).scalar_one_or_none()
+            ).scalar_one_or_none()
 
             if existing is not None and not force:
                 return {"token": "", "name": name, "project_slug": project_slug, "already_registered": True}
@@ -850,8 +973,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
                 existing.token_hash = token_hash
                 existing.token_encrypted = token_encrypted
             else:
-                s.add(ApiToken(name=name, kind=TOKEN_KIND_PROJECT, token_hash=token_hash,
-                               token_encrypted=token_encrypted, project_id=project_uuid))
+                s.add(ApiToken(name=name, kind=TOKEN_KIND_PROJECT, token_hash=token_hash, token_encrypted=token_encrypted, project_id=project_uuid))
             await s.commit()
 
         return {"token": raw, "name": name, "project_slug": project_slug, "already_registered": False}
@@ -866,7 +988,8 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
             await s.commit()
             proj = await s.get(Project, project_id)
         return {
-            "id": str(proj.id), "slug": proj.slug,
+            "id": str(proj.id),
+            "slug": proj.slug,
             "display_name": proj.display_name,
             "memory_count": proj.memory_count,
         }
@@ -888,6 +1011,7 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
     async def delete_project(project_id: uuid.UUID) -> None:
         from memory_orchestrator_server.models import Session
         from sqlalchemy import delete as sa_delete
+
         async with maker() as s:
             proj = await s.get(Project, project_id)
             if not proj:
@@ -971,9 +1095,12 @@ def make_ui_router(*, maker: async_sessionmaker) -> APIRouter:
         result = []
         for m in mems:
             d = {
-                "id": str(m.id), "type": m.type, "name": m.name,
+                "id": str(m.id),
+                "type": m.type,
+                "name": m.name,
                 "description": m.description,
-                "importance": m.importance, "hit_count": m.hit_count,
+                "importance": m.importance,
+                "hit_count": m.hit_count,
                 "source_client": m.source_client,
                 "last_hit_at": isoformat_utc(m.last_hit_at) if m.last_hit_at else None,
                 "project_id": str(m.project_id),

@@ -1,9 +1,31 @@
 ---
 name: memory-orchestrator
-description: Use when saving, searching, or managing persistent memories across Claude Code sessions via the mcp__memory-orchestrator__ tools. Use when recalling prior context, storing user preferences, project decisions, feedback, or reference pointers.
+description: >
+  Use when saving, searching, or managing persistent memories across Claude Code sessions via the
+  mcp__memory-orchestrator__ tools. Triggers: user asks to remember something ("记住这个", "帮我记一下",
+  "保存这个", "记下来"), recall prior context ("之前说过什么", "上次的决定是什么", "还记得吗", "之前怎么做的"),
+  store user preferences / project decisions / feedback / reference pointers, correct AI behavior that
+  should persist ("不要这样", "下次别", "记住以后"), or at the start of a session when prior project
+  context should be loaded. Also use proactively after any significant decision, correction, or new
+  preference is expressed.
 ---
 
 # Memory Orchestrator MCP
+
+## Invocation Triggers
+
+Load this skill automatically when the user says any of:
+
+| Language | Phrases |
+|----------|---------|
+| 中文 | 记住 / 帮我记 / 记下来 / 保存这个 / 之前说过什么 / 上次的决定 / 还记得吗 / 之前怎么做的 / 不要这样（需跨会话持久化）/ 下次别忘了 / 记忆 |
+| English | remember / recall / save this / what did we decide / prior context / persist / don't forget / last time / previous decision |
+
+Also load at the **start of a session** for returning users to pre-load `project` and `feedback` memories before starting work.
+
+Explicit invocation (always works): `/memory-orchestrator <query or instruction>`
+
+---
 
 ## Overview
 
@@ -49,6 +71,22 @@ server-side from the `project_token` in `.mcp.json`). Six tools handle the full 
 3. If `action == "conflict"`, inspect conflicts and use `replace_id` to supersede if same topic
 4. For `project` / `feedback` / `reference`, route into the skeleton tree first — see **skeleton-nodes.md**
 
+### Save parameter constraints
+
+- `content` is the full memory body, not a title or one-line summary.
+- For structured memories such as tech stacks, architecture notes, workflows, conventions, incident notes,
+  and decision records, write `content` in Markdown by default.
+- Prefer Markdown headings and flat lists for `project`, `reference`, and long-form `feedback` memories.
+- If the memory belongs to the skeleton tree, pass `node_name` and `parent_node` when needed to disambiguate.
+- Do not pass `project_id` to redirect a save; the token-bound project is authoritative.
+
+Recommended default:
+
+```text
+project / reference / structured feedback -> content uses Markdown
+user / short feedback -> plain text is acceptable unless structure helps
+```
+
 ## Proactive Search — When to Call search_memory Without Being Asked
 
 **Rule: call `search_memory` first before responding whenever any trigger below applies.**
@@ -81,6 +119,46 @@ Each project has its own skeleton tree of categories. Before saving any `project
 `user` memories have no tree.
 
 → Full fetch / match / create-node / save workflow: see **skeleton-nodes.md**
+
+## Hook parameter constraints
+
+For hook-driven context injection, the current project must be resolved from the Bearer token, not from
+`project_slug` or `project_id` query parameters.
+
+- `UserPromptSubmit` -> `GET /context`
+- Required auth -> `Authorization: Bearer {MO_MCP_TOKEN}`
+- Project identity -> token-bound only
+- Context shaping params may include:
+  - `budget_tokens`
+  - `top_k`
+  - `node_id`
+  - `node_name`
+  - `parent_node`
+  - `include_descendants`
+  - `client`
+
+Default guidance:
+
+- Use `budget_tokens` to cap total injected context size.
+- Use `top_k` to cap the number of injected memories.
+- Use `node_id` when the active skeleton node is known exactly.
+- Otherwise use `node_name` plus `parent_node` for disambiguation.
+- Do not rely on URL project selectors for hooks.
+
+## Update
+
+When user says `/memory-orchestrator update` or asks to "update the MCP client" / "升级 MCP":
+
+Run in terminal:
+```bash
+mo-mcp update                      # Claude Code
+mo-mcp update --client codex       # Codex
+```
+
+This downloads the latest `memory-orchestrator-mcp` wheel from the MO server, installs it via
+`uv tool install`, and syncs skill files — without touching hooks, tokens, or server config.
+
+---
 
 ## Common Mistakes
 
