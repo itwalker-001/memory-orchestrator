@@ -9,7 +9,7 @@ Each package has its own focused docs — start there when working inside a sing
 | Package | Developer guide | User guide |
 |---|---|---|
 | `memory_orchestrator_server/` | [`memory_orchestrator_server/CLAUDE.md`](memory_orchestrator_server/CLAUDE.md) | [`memory_orchestrator_server/README.md`](memory_orchestrator_server/README.md) |
-| `memory_orchestrator_mcp/` | [`memory_orchestrator_mcp/CLAUDE.md`](memory_orchestrator_mcp/CLAUDE.md) | [`memory_orchestrator_mcp/README.md`](memory_orchestrator_mcp/README.md) |
+| `memory_orchestrator_mcp/` | — | [`memory_orchestrator_mcp/README.md`](memory_orchestrator_mcp/README.md) |
 
 This file covers cross-package concerns: end-to-end request flow, shared data model, Docker
 deployment, and the commands needed to operate the full system from the repository root.
@@ -48,7 +48,7 @@ DOCKER_BUILDKIT=1 BUILDKIT_PROGRESS=plain ./scripts/build.sh
 ```
 
 → Full command reference: [`memory_orchestrator_server/CLAUDE.md`](memory_orchestrator_server/CLAUDE.md)
-→ Hook CLI reference: [`memory_orchestrator_mcp/CLAUDE.md`](memory_orchestrator_mcp/CLAUDE.md)
+
 
 ## Architecture
 
@@ -83,7 +83,7 @@ Claude/Codex MCP call  →  stdio MCP (mo-mcp)  →  POST /mcp/tools/call  →  
 ```
 
 → Module detail: [`memory_orchestrator_server/CLAUDE.md § Key modules`](memory_orchestrator_server/CLAUDE.md)
-→ Hook internals: [`memory_orchestrator_mcp/CLAUDE.md § Hook behavior`](memory_orchestrator_mcp/CLAUDE.md)
+
 
 ## Data model
 
@@ -149,7 +149,7 @@ uv run pytest
 Override test DB: `MO_TEST_DB_DSN=postgresql+asyncpg://...`
 
 → Full test file listing: [`memory_orchestrator_server/CLAUDE.md § Tests`](memory_orchestrator_server/CLAUDE.md)
-→ Hook test patterns: [`memory_orchestrator_mcp/CLAUDE.md § Tests`](memory_orchestrator_mcp/CLAUDE.md)
+
 
 ## Database
 
