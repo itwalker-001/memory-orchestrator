@@ -33,13 +33,13 @@ cd frontend && npm run build                     # Rebuild SPA
 ```
 HTTP request
     │
-    ├── /healthz, /context, /hooks/ingest  →  routers/hooks.py
+    ├── /healthz, /context, /stats, /ingest  →  routers/hooks.py
     ├── /mcp/tools/*, /mcp/resources/*     →  routers/mcp.py  →  mcp_core.py
     └── /ui/*, /api/*                      →  routers/ui.py
                                                      │
                                                repository.py
                                                      │
-                                       PostgreSQL + pgvector + Apache AGE
+                                       PostgreSQL + pgvector + pg_search (BM25)
 ```
 
 ## Key modules
@@ -56,9 +56,9 @@ HTTP request
 | `embedder.py` | BGE-M3 via `transformers.AutoModel`; CLS token + L2 norm; lazy-loaded |
 | `reranker.py` | BGE-reranker-v2-m3 cross-encoder; sigmoid scores |
 | `scoring.py` | `hybrid_score()` = cosine + importance + recency decay; `truncate_by_budget()` |
+| `bm25_search.py` | BM25 keyword recall via ParadeDB pg_search + jieba; returns `{memory_id: score}` |
 | `mcp_core.py` | MCP tool implementations: search, save, list, delete, promote, ingest |
 | `mcp_contract.py` | Tool/resource schema definitions (MCP protocol contracts) |
-| `graph.py` | Apache AGE vertex/edge ops + LLM relation extraction |
 | `db_check.py` | DB connectivity preflight; auto-create DB if missing |
 
 ## Data model
@@ -95,8 +95,12 @@ Editable via UI → Settings or direct DB. No restart needed.
 | `embed_dim` | Embedding vector dimension (default: 1024) |
 | `rerank_enabled` | Enable BGE reranker after vector search |
 | `rerank_model` | HuggingFace reranker model path |
-| `graph_enabled` | Enable Apache AGE graph reasoning |
-| `graph_hop_depth` | Max hops in graph traversal |
+| `score_rerank_blend` | Blend weight between rerank score and hybrid score |
+| `bm25_enabled` | Enable BM25 (pg_search + jieba) keyword recall, fused into hybrid score |
+| `score_bm25_weight` | Weight of the min-max-normalized BM25 score in fusion |
+| `score_cosine_weight` / `score_importance_weight` / `score_recency_weight` | Hybrid score weights (cosine + importance + recency) |
+| `score_recency_half_life` | Recency decay half-life in days (default: 60) |
+| `score_type_feedback` / `score_type_project` / `score_type_user` / `score_type_reference` | Per-type score multipliers |
 
 ## Tests
 
@@ -127,7 +131,7 @@ Override test DB with `MO_TEST_DB_DSN` (default port 5433, DB `memory_orchestrat
 
 ## Database
 
-PostgreSQL 16 + pgvector + Apache AGE on port 5433 (5432 in local dev without Docker override).
+PostgreSQL 16 + pgvector + pg_search (BM25) on port 5433 (5432 in local dev without Docker override).
 
 ```bash
 # Local dev — create DB and enable extensions manually, then:

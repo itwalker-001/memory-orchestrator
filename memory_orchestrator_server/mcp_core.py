@@ -33,14 +33,32 @@ def current_client(client: str | None = None) -> str:
     return "claude"
 
 
-async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID, args: dict, **_) -> list[dict]:
+async def search_memories(
+    *,
+    session: AsyncSession,
+    query: str,
+    project_uuid: uuid.UUID | None = None,
+    scope_slug: str | None = None,
+    types: list[str] | str | None = None,
+    top_k: int | None = None,
+    record_hits: bool = True,
+):
+    """Shared semantic-recall path used by both the MCP ``search_memory`` tool and
+    the UI ``/api/recall-test`` endpoint. Resolves the project scope, embeds the
+    query, and runs the vector + hybrid scoring search. Returns the raw ``Hit``
+    list so callers can format the result however they need.
+
+    Scope resolution: ``scope_slug == "all"`` searches every project; a non-empty
+    ``scope_slug`` resolves that single project; otherwise falls back to the
+    token-bound ``project_uuid``. If none resolves, returns an empty list.
+
+    ``record_hits`` is ``True`` for the live tool (bumps hit counts) and ``False``
+    for the recall-test dry-run.
+    """
     repo = MemoryRepository(session)
-    query = args["query"]
-    cfg = await repo.get_settings()
-    default_top_k = int(cfg.get("search_top_k") or 3)
-    top_k = int(args.get("top_k", default_top_k))
-    types = args.get("type")
-    scope_slug = args.get("project_id")
+    if top_k is None:
+        cfg = await repo.get_settings()
+        top_k = int(cfg.get("search_top_k") or 3)
     if scope_slug == "all":
         from sqlalchemy import select
         from memory_orchestrator_server.models import Project
@@ -50,12 +68,29 @@ async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID
     elif scope_slug:
         pid = await repo.slug_to_id(scope_slug)
         project_ids = [pid] if pid else []
-    else:
+    elif project_uuid is not None:
         project_ids = [project_uuid]
+    else:
+        project_ids = []
+    if not project_ids:
+        return []
     qvec = await embed_one(query)
-    hits = await repo.search(
+    return await repo.search(
         query_embedding=qvec, project_ids=project_ids, types=types,
-        top_k=top_k, record_hits=True, query=query,
+        top_k=top_k, record_hits=record_hits, query=query,
+    )
+
+
+async def handle_search_memory(*, session: AsyncSession, project_uuid: uuid.UUID, args: dict, **_) -> list[dict]:
+    top_k = int(args["top_k"]) if args.get("top_k") is not None else None
+    hits = await search_memories(
+        session=session,
+        query=args["query"],
+        project_uuid=project_uuid,
+        scope_slug=args.get("project_id"),
+        types=args.get("type"),
+        top_k=top_k,
+        record_hits=True,
     )
     return [_memory_to_dict(h.memory, score=h.score) for h in hits]
 

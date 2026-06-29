@@ -5,7 +5,7 @@ import { NButton, NSpace, NText, NIcon } from 'naive-ui'
 import { useAppStore } from './stores/app.js'
 import {
   IconDatabase, IconFolder, IconLock, IconLogout, IconMoon, IconSettings,
-  IconSun, IconInfo,
+  IconSun, IconInfo, IconActivity,
 } from './icons.js'
 import BrandLogo from './BrandLogo.vue'
 
@@ -23,6 +23,7 @@ const { isDark, lang, t, toggleTheme, toggleLang } = app
 const navOptions = computed(() => [
   { label: t('Projects'), key: '/', iconComponent: IconFolder },
   { label: t('Memories'), key: '/memories', iconComponent: IconDatabase },
+  { label: t('Recall'), key: '/recall', iconComponent: IconActivity },
   { label: t('Tokens'), key: '/tokens', iconComponent: IconLock },
 ])
 

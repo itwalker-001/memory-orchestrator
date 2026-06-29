@@ -15,7 +15,6 @@ def test_runtime_schema_no_longer_requires_memory_links() -> None:
 def test_migration_scripts_no_longer_reference_memory_links() -> None:
     for rel_path in [
         "alembic/versions/0001_initial.py",
-        "alembic/versions/0010_age_extension.py",
         "tests/integration/conftest.py",
     ]:
         text = (_ROOT / rel_path).read_text(encoding="utf-8")

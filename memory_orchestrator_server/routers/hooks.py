@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from memory_orchestrator_server.auth_tokens import resolve_project_token
+from memory_orchestrator_server.auth_tokens import bearer_token, resolve_project_token
 from memory_orchestrator_server.ingestor import ingest_session
 from memory_orchestrator_server.models import Memory
 from memory_orchestrator_server.repository import MemoryRepository
@@ -22,27 +22,15 @@ class IngestRequest(BaseModel):
 
 
 async def _resolve_project_for_hook(
-    repo: MemoryRepository,
     session: AsyncSession,
     authorization: str | None,
-    slug: str | None,
 ) -> uuid.UUID | None:
-    """Resolve the project for an (unauthenticated) hook endpoint.
-
-    Token-first: a valid ``project_token`` binds the project directly. Falls back to a
-    **read-only** slug lookup for backward compatibility. Never creates a project, so
-    hooks no longer lazily register unknown repositories.
-    """
-    if authorization:
-        try:
-            _, project_uuid = await resolve_project_token(session=session, authorization=authorization)
-        except HTTPException:
-            project_uuid = None
-        if project_uuid is not None:
-            return project_uuid
-    if slug:
-        return await repo.slug_to_id(slug)
-    return None
+    if not bearer_token(authorization):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    _, project_uuid = await resolve_project_token(session=session, authorization=authorization)
+    if project_uuid is None:
+        raise HTTPException(status_code=401, detail="project token required; project is resolved from the bearer token")
+    return project_uuid
 
 
 
@@ -60,25 +48,38 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             db_ok = f"err:{e}"
         return {"db": db_ok, "embedder": "skipped" if skip_embedder else "ok", "version": read_version()}
 
-    @router.get("/context", summary="Build injected context", description="Returns markdown memory context for a project, truncated to the token budget. Called by the UserPromptSubmit hook. Project resolved from the bearer token; falls back to a read-only project_slug lookup.")
+    @router.get("/context", summary="Build injected context", description="Returns markdown memory context for the bearer token's project, truncated to the token budget. Called by the UserPromptSubmit hook.")
     async def context(
-        project_slug: str | None = None,
-        project_id: str | None = None,
         budget_tokens: int | None = None,
+        top_k: int | None = None,
+        node_id: uuid.UUID | None = None,
+        node_name: str | None = None,
+        parent_node: str | None = None,
+        include_descendants: bool = True,
         client: str | None = None,
         authorization: str | None = Header(default=None),
     ) -> Response:
-        slug = project_slug or project_id
-        log.info("context client=%s project=%s", client or "unknown", slug or "<token>")
+        log.info(
+            "context client=%s node_id=%s node_name=%s",
+            client or "unknown",
+            node_id,
+            node_name or "",
+        )
         async with maker() as s:
             repo = MemoryRepository(s)
             cfg = await repo.get_settings()
             effective_budget = budget_tokens or int(cfg.get("hook_budget_tokens") or 1500)
-            project_uuid = await _resolve_project_for_hook(repo, s, authorization, slug)
+            project_uuid = await _resolve_project_for_hook(s, authorization)
             await s.commit()
-            if project_uuid is None:
-                return Response(content="", media_type="text/markdown; charset=utf-8")
-            md = await repo.build_context(project_id=project_uuid, budget_tokens=effective_budget)
+            md = await repo.build_context(
+                project_id=project_uuid,
+                budget_tokens=effective_budget,
+                top_k=top_k,
+                node_id=node_id,
+                node_name=node_name,
+                parent_node=parent_node,
+                include_descendants=include_descendants,
+            )
         return Response(content=md, media_type="text/markdown; charset=utf-8")
 
     @router.get("/stats", summary="Memory counts", description="Total memory count and a per-type breakdown, optionally filtered to a single project.")
@@ -105,10 +106,7 @@ def make_hooks_router(*, engine: AsyncEngine, maker: async_sessionmaker, skip_em
             async with maker() as s:
                 try:
                     repo = MemoryRepository(s)
-                    project_uuid = await _resolve_project_for_hook(repo, s, authorization, req.project_slug or None)
-                    if project_uuid is None:
-                        log.info("ingest skipped: unresolved project (session=%s)", req.session_id)
-                        return
+                    project_uuid = await _resolve_project_for_hook(s, authorization)
                     await s.commit()
                     await ingest_session(
                         db=s,

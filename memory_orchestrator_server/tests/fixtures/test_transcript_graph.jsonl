@@ -1,6 +1,0 @@
-{"role": "user", "content": "我注意到 UI 上所有时间都显示的是 UTC，但用户其实在东八区，应该显示北京时间才对。"}
-{"role": "assistant", "content": "明白，需要把 UI 时间从 UTC 转换成用户本地时区，可以用 dayjs 加 timezone 插件处理。"}
-{"role": "user", "content": "对，而且要记住：时区偏好应该跟着浏览器走，不要硬编码 UTC+8，因为可能有海外用户。"}
-{"role": "assistant", "content": "好的，使用 Intl.DateTimeFormat 或 dayjs().local() 自动取浏览器时区，不硬编码。"}
-{"role": "user", "content": "另外关于数据库：我们在写集成测试时必须用真实的 PostgreSQL，不能用 SQLite 或者内存库，因为我们用了 pgvector 和 Apache AGE，这两个只有 PostgreSQL 支持。"}
-{"role": "assistant", "content": "记录：集成测试必须使用 PostgreSQL，理由是 pgvector 和 Apache AGE 扩展不兼容 SQLite/内存库。"}

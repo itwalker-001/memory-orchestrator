@@ -137,6 +137,35 @@ async def test_vector_search_updates_hit_count(session):
 
 
 @pytest.mark.asyncio
+async def test_vector_search_filters_by_final_score_threshold(session):
+    repo = MemoryRepository(session)
+    v1 = [1.0] + [0.0] * 1023
+    v2 = [0.0, 1.0] + [0.0] * 1022
+    await repo.save(
+        type="user", name="strong", description="x", content="x",
+        project_id="*", source="explicit", embedding=v1,
+    )
+    weak = await repo.save(
+        type="user", name="weak", description="x", content="x",
+        project_id="*", source="explicit", embedding=v2,
+    )
+    settings = {
+        "search_min_score": "0.6",
+        "score_cosine_weight": "1",
+        "score_importance_weight": "0",
+        "score_recency_weight": "0",
+        "bm25_enabled": "false",
+    }
+    with patch.object(repo, "get_settings", new=AsyncMock(return_value=settings)):
+        hits = await repo.search(
+            query_embedding=v1, project_ids=["*"], top_k=2, record_hits=True,
+        )
+    assert [h.memory.name for h in hits] == ["strong"]
+    after = await repo.get(weak.id)
+    assert after.hit_count == 0
+
+
+@pytest.mark.asyncio
 async def test_build_context_includes_global_user(session):
     repo = MemoryRepository(session)
     await repo.save(

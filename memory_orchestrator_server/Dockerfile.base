@@ -6,6 +6,7 @@
 
 FROM astral/uv:python3.13-bookworm-slim
 WORKDIR /app/memory_orchestrator_server
+ARG TORCH_INDEX=cpu
 
 RUN printf 'Acquire::AllowInsecureRepositories "true";\nAPT::Get::AllowUnauthenticated "true";\n' \
       > /etc/apt/apt.conf.d/99allow-unauth \
@@ -25,5 +26,15 @@ ENV UV_HTTP_TIMEOUT=300
 
 COPY pyproject.toml uv.lock ./
 RUN uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.txt \
- && uv pip install --system -r /tmp/requirements.txt
+ && grep -Ev '^(torch|triton|nvidia-)' /tmp/requirements.txt > /tmp/requirements-no-torch.txt \
+ && uv pip install --system -r /tmp/requirements-no-torch.txt \
+ && case "$TORCH_INDEX" in \
+      cpu) torch_index_url="https://mirrors.aliyun.com/pytorch-wheels/cpu/" ;; \
+      cu124) torch_index_url="https://mirrors.aliyun.com/pytorch-wheels/cu124/" ;; \
+      *) echo "unsupported TORCH_INDEX=$TORCH_INDEX (expected cpu or cu124)" >&2; exit 2 ;; \
+    esac \
+ && pip install --force-reinstall --no-cache-dir \
+      --index-url "$torch_index_url" \
+      --extra-index-url https://mirrors.ustc.edu.cn/pypi/simple/ \
+      torch==2.6.0
 

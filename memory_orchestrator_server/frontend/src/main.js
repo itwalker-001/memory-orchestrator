@@ -11,12 +11,14 @@ import SkeletonPage from './SkeletonPage.vue'
 import SettingsPage from './SettingsPage.vue'
 import HelpPage from './HelpPage.vue'
 import TokensPage from './TokensPage.vue'
+import RecallTestPage from './RecallTestPage.vue'
 
 const router = createRouter({
   history: createWebHistory('/ui/'),
   routes: [
     { path: '/', component: SkeletonPage },
     { path: '/memories', component: MemoriesPage },
+    { path: '/recall', component: RecallTestPage },
     { path: '/settings', component: SettingsPage },
     { path: '/help', component: HelpPage },
     { path: '/tokens', component: TokensPage },

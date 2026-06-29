@@ -16,6 +16,19 @@ def _app(engine):
     return create_app(engine_override=engine, skip_embedder=True)
 
 
+async def _project_auth_header(session, slug: str) -> dict[str, str]:
+    project_id = await MemoryRepository(session).ensure_project(slug)
+    token = f"test-token-{uuid.uuid4()}"
+    session.add(ApiToken(
+        name=f"token-{slug}",
+        kind="project_token",
+        token_hash=hash_token(token),
+        project_id=project_id,
+    ))
+    await session.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
 # ── hooks router ──────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -29,31 +42,66 @@ async def test_healthz_returns_ok(engine):
 @pytest.mark.asyncio
 async def test_context_returns_markdown(engine, session):
     repo = MemoryRepository(session)
+    project_id = await repo.ensure_project("github.com/a/b")
     await repo.save(type="user", name="role", description="Go dev",
-                    content="Go dev new to Python", project_id="*", source="explicit")
+                    content="Go dev new to Python", project_id=project_id, source="explicit")
     await session.commit()
+    headers = await _project_auth_header(session, "github.com/a/b")
     async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
-        r = await c.get("/context", params={"project_id": "github.com/a/b", "budget_tokens": 2000})
+        r = await c.get("/context", params={"budget_tokens": 2000}, headers=headers)
     assert r.status_code == 200
     assert "Go dev" in r.text
 
 
 @pytest.mark.asyncio
-async def test_context_accepts_project_slug_param(engine, session):
-    repo = MemoryRepository(session)
-    await repo.save(type="user", name="slug-role", description="slug test",
-                    content="slug param works", project_id="*", source="explicit")
-    await session.commit()
+async def test_context_requires_bearer_token(engine):
     async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
-        r = await c.get("/context", params={"project_slug": "github.com/slug/test"})
-    assert r.status_code == 200
+        r = await c.get("/context")
+    assert r.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_context_missing_project_returns_422(engine):
+async def test_context_filters_by_skeleton_node(engine, session):
+    repo = MemoryRepository(session)
+    project_id = await repo.ensure_project("github.com/ctx/node")
+    await repo.get_or_create_skeleton_node(project_id, "后端", None)
+    await repo.get_or_create_skeleton_node(project_id, "前端", None)
+    backend_node = await repo.get_or_create_skeleton_node(project_id, "功能实现", "后端")
+    frontend_node = await repo.get_or_create_skeleton_node(project_id, "问题记录", "前端")
+    backend_mem = await repo.save(type="project", name="backend-mem", description="backend",
+                                  content="backend context", project_id=project_id, source="explicit")
+    frontend_mem = await repo.save(type="project", name="frontend-mem", description="frontend",
+                                   content="frontend context", project_id=project_id, source="explicit")
+    await repo.add_memory_to_node(backend_node, backend_mem.id)
+    await repo.add_memory_to_node(frontend_node, frontend_mem.id)
+    await session.commit()
+    headers = await _project_auth_header(session, "github.com/ctx/node")
     async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
-        r = await c.get("/context")
-    assert r.status_code == 422
+        r = await c.get(
+            "/context",
+            params={"node_name": "功能实现", "parent_node": "后端"},
+            headers=headers,
+        )
+    assert r.status_code == 200
+    assert "backend-mem" in r.text
+    assert "frontend-mem" not in r.text
+
+
+@pytest.mark.asyncio
+async def test_context_honors_top_k(engine, session):
+    repo = MemoryRepository(session)
+    project_id = await repo.ensure_project("github.com/ctx/topk")
+    await repo.save(type="feedback", name="first", description="d", content="one",
+                    project_id=project_id, source="explicit", importance=5)
+    await repo.save(type="feedback", name="second", description="d", content="two",
+                    project_id=project_id, source="explicit", importance=4)
+    await session.commit()
+    headers = await _project_auth_header(session, "github.com/ctx/topk")
+    async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
+        r = await c.get("/context", params={"top_k": 1, "budget_tokens": 2000}, headers=headers)
+    assert r.status_code == 200
+    assert "first" in r.text
+    assert "second" not in r.text
 
 
 @pytest.mark.asyncio
@@ -84,14 +132,15 @@ async def test_stats_no_filter_returns_all(engine, session):
 
 
 @pytest.mark.asyncio
-async def test_ingest_returns_202_accepted(engine):
+async def test_ingest_returns_202_accepted(engine, session):
+    headers = await _project_auth_header(session, "github.com/a/b")
     async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
         r = await c.post("/ingest", json={
             "session_id": "test-session-001",
             "project_slug": "github.com/a/b",
             "transcript_path": "/nonexistent/path.jsonl",
             "client": "claude",
-        })
+        }, headers=headers)
     assert r.status_code == 202
     assert r.json()["accepted"] is True
 
@@ -395,18 +444,22 @@ async def test_get_settings_returns_defaults(engine):
     data = r.json()
     assert "dup_threshold" in data
     assert "search_top_k" in data
+    assert "search_min_score" in data
     assert data.get("extraction_api_key") in ("", "***")  # real key never returned
 
 
 @pytest.mark.asyncio
 async def test_patch_settings_persists(engine, session):
     async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
-        r = await c.patch("/api/settings", json={"search_top_k": "12", "dup_threshold": "0.88"})
+        r = await c.patch("/api/settings", json={
+            "search_top_k": "12", "search_min_score": "0.2", "dup_threshold": "0.88",
+        })
     assert r.status_code == 200
-    assert r.json()["saved"] == 2
+    assert r.json()["saved"] == 3
     async with AsyncClient(transport=ASGITransport(_app(engine)), base_url="http://t") as c:
         r2 = await c.get("/api/settings")
     assert r2.json()["search_top_k"] == "12"
+    assert r2.json()["search_min_score"] == "0.2"
     assert r2.json()["dup_threshold"] == "0.88"
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "memory-orchestrator-server"
-version = "1.0.2"
+version = "1.0.3"
 description = "Memory Orchestrator server: FastAPI, PostgreSQL, embedder, frontend"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,7 +16,7 @@ dependencies = [
     "click>=8.1",
     "pyarrow>=18",
     "transformers>=4.40",
-    "torch>=2.0",
+    "torch>=2.6.0,<2.7.0",
     "modelscope>=1.36.3",
     "python-multipart>=0.0.28",
     "cryptography>=43",

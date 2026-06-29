@@ -24,7 +24,7 @@ const isSaving = ref(false)
 const form = ref({
   extraction_base_url: '', extraction_model: '', extraction_api_key: '',
   hook_cooldown_sec: '', hook_min_turns: '', hook_budget_tokens: '',
-  search_top_k: '', dup_threshold: '',
+  search_top_k: '', search_min_score: '', dup_threshold: '',
   rerank_enabled: 'false', score_rerank_blend: '',
   score_cosine_weight: '', score_importance_weight: '', score_recency_weight: '',
   score_recency_half_life: '',
@@ -204,6 +204,9 @@ onMounted(() => { load() })
                 <div class="settings-field-row mcp-row">
                   <n-form-item :label="t('Search top_k')">
                     <n-input v-model:value="form.search_top_k" placeholder="3" />
+                  </n-form-item>
+                  <n-form-item :label="t('Search min score')">
+                    <n-input-number v-model:value="num.search_min_score" :min="0" :max="2" :step="0.01" placeholder="0.05" style="width:100%" />
                   </n-form-item>
                   <n-form-item :label="t('Dup threshold')">
                     <n-input v-model:value="form.dup_threshold" placeholder="0.92" />

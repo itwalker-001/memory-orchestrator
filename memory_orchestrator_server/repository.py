@@ -284,6 +284,7 @@ class MemoryRepository:
         recency_w = float(cfg.get("score_recency_weight", "0.1"))
         half_life = float(cfg.get("score_recency_half_life", "60"))
         rerank_blend = float(cfg.get("score_rerank_blend", "0.8"))
+        min_score = float(cfg.get("search_min_score", "0.05"))
         type_boosts = {
             "feedback":  float(cfg.get("score_type_feedback",  "1.2")),
             "project":   float(cfg.get("score_type_project",   "1.0")),
@@ -339,6 +340,8 @@ class MemoryRepository:
                 for h, final_s in sorted(blended, key=lambda x: -x[1])
             ]
 
+        if min_score > 0:
+            hits = [h for h in hits if h.score >= min_score]
         hits = hits[:top_k]
 
         if record_hits and hits:
@@ -359,18 +362,59 @@ class MemoryRepository:
         *,
         project_id: ProjectRef,
         budget_tokens: int = 1500,
+        top_k: int | None = None,
+        node_id: uuid.UUID | None = None,
+        node_name: str | None = None,
+        parent_node: str | None = None,
+        include_descendants: bool = True,
     ) -> str:
         resolved_project_id = await self._ensure_project_ref(project_id)
         stmt = select(Memory).where(
             Memory.superseded_by.is_(None),
             Memory.project_id == resolved_project_id,
-            or_(
-                Memory.type == "user",
-                (Memory.type == "feedback") & (Memory.importance >= 3),
-                (Memory.type == "project") & (Memory.updated_at >= utc_now() - timedelta(days=30)),
-                Memory.type == "reference",
-            ),
         )
+        has_node_filter = node_id is not None or node_name is not None
+        if has_node_filter:
+            resolved_node_id = node_id
+            if resolved_node_id is None and node_name:
+                node_stmt = select(ProjectSkeletonNode.id).where(
+                    ProjectSkeletonNode.project_id == resolved_project_id,
+                    ProjectSkeletonNode.name == node_name,
+                )
+                if parent_node:
+                    parent_id_stmt = select(ProjectSkeletonNode.id).where(
+                        ProjectSkeletonNode.project_id == resolved_project_id,
+                        ProjectSkeletonNode.name == parent_node,
+                        ProjectSkeletonNode.parent_id.is_(None),
+                    )
+                    parent_id = (await self.session.execute(parent_id_stmt)).scalar_one_or_none()
+                    if parent_id is None:
+                        return ""
+                    node_stmt = node_stmt.where(ProjectSkeletonNode.parent_id == parent_id)
+                else:
+                    node_stmt = node_stmt.where(ProjectSkeletonNode.parent_id.is_(None))
+                resolved_node_id = (await self.session.execute(node_stmt)).scalar_one_or_none()
+            if resolved_node_id is None:
+                return ""
+            node_ids = (
+                await self._descendant_node_ids(resolved_node_id)
+                if include_descendants
+                else [resolved_node_id]
+            )
+            stmt = (
+                stmt.join(SkeletonNodeMemory, SkeletonNodeMemory.memory_id == Memory.id)
+                .where(SkeletonNodeMemory.skeleton_node_id.in_(node_ids))
+                .distinct()
+            )
+        else:
+            stmt = stmt.where(
+                or_(
+                    Memory.type == "user",
+                    (Memory.type == "feedback") & (Memory.importance >= 3),
+                    (Memory.type == "project") & (Memory.updated_at >= utc_now() - timedelta(days=30)),
+                    Memory.type == "reference",
+                )
+            )
         result = await self.session.execute(stmt)
         mems = list(result.scalars().all())
 
@@ -382,6 +426,11 @@ class MemoryRepository:
              "tokens": estimate(m), "updated_at": m.updated_at}
             for m in mems
         ]
+        if top_k is not None and top_k >= 0:
+            items = sorted(
+                items,
+                key=lambda i: (-i["importance"], -i["updated_at"].timestamp()),
+            )[:top_k]
         kept = truncate_by_budget(items, budget=budget_tokens)
 
         if not kept:
