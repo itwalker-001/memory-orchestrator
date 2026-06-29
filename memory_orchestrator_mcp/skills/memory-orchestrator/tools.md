@@ -26,6 +26,17 @@ node_name    optional — skeleton leaf node name, e.g. "功能实现"
 parent_node  optional — parent node name, e.g. "后端" (disambiguates node_name)
 ```
 
+Parameter constraints:
+
+- `content` must contain the actual memory body, not just a label or short reminder.
+- For `project`, `reference`, and structured `feedback` memories, `content` should default to Markdown.
+- Recommended Markdown shape:
+  - short title or section heading when useful
+  - flat bullet lists for stacks, steps, rules, or decisions
+  - short concluding summary only when it adds retrieval value
+- `project_id` does not redirect the save target and should normally be omitted.
+- When routing into the tree, pass `parent_node` whenever `node_name` may exist under multiple branches.
+
 For `node_name` / `parent_node` routing, see `skeleton-nodes.md`.
 
 ## list_memories
@@ -57,6 +68,30 @@ transcript_path (required) absolute path to JSONL transcript
 project_id      optional slug override
 ```
 Extracts memories automatically from a conversation transcript via LLM.
+
+## Hook context parameters
+
+`UserPromptSubmit` hook context is fetched from `GET /context` using the Bearer token from
+`.mcp.json`. The hook should not rely on `project_slug` / `project_id` query params to select the
+project.
+
+Supported context-shaping params:
+
+```text
+budget_tokens       optional total context budget
+top_k               optional max number of injected memories
+node_id             optional exact skeleton node id
+node_name           optional node name
+parent_node         optional parent name to disambiguate node_name
+include_descendants optional bool, default true
+client              optional client name, e.g. codex / claude
+```
+
+Guidance:
+
+- Prefer `node_id` when the active node is known exactly.
+- Otherwise pass `node_name` + `parent_node`.
+- Use `top_k` and `budget_tokens` together when you need both count and size bounds.
 
 ## Importance Scale
 

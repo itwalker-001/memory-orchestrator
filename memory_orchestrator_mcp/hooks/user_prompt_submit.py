@@ -12,7 +12,27 @@ _DEFAULT_BASE_URL = "http://localhost:8765"
 _TIMEOUT = 2.0
 
 
-def _base_url() -> str:
+def _read_base_url(cwd: str) -> str | None:
+    try:
+        p = Path(cwd) / ".mcp.json"
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            url = (data.get("mcpServers", {})
+                       .get("memory-orchestrator", {})
+                       .get("env", {})
+                       .get("MO_HTTP_BASE_URL", ""))
+            if url:
+                return url.strip().rstrip("/")
+    except Exception:
+        pass
+    return None
+
+
+def _base_url(cwd: str = "") -> str:
+    if cwd:
+        from_mcp = _read_base_url(cwd)
+        if from_mcp:
+            return from_mcp
     if "--base-url" in sys.argv:
         idx = sys.argv.index("--base-url")
         if idx + 1 < len(sys.argv):
@@ -109,7 +129,7 @@ def main() -> int:
     event = _read_event()
     cwd = _event_cwd(event)
     token = _read_token(cwd)
-    url = f"{_base_url()}/context?client={_client_name()}"
+    url = f"{_base_url(cwd)}/context?client={_client_name()}"
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         req = urllib.request.Request(url, headers=headers)

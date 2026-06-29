@@ -7,13 +7,13 @@ memories across all projects via MCP and HTTP API.
 
 | Package | Directory | Description | Docs |
 |---------|-----------|-------------|------|
-| `memory-orchestrator-server` | `memory_orchestrator_server/` | FastAPI server, PostgreSQL + pgvector + Apache AGE, embedder, frontend, MCP bridge | [README](memory_orchestrator_server/README.md) · [CLAUDE](memory_orchestrator_server/CLAUDE.md) |
+| `memory-orchestrator-server` | `memory_orchestrator_server/` | FastAPI server, PostgreSQL + pgvector + pg_search (BM25), embedder, frontend, MCP bridge | [README](memory_orchestrator_server/README.md) · [CLAUDE](memory_orchestrator_server/CLAUDE.md) |
 | `memory-orchestrator-mcp` | `memory_orchestrator_mcp/` | Hooks, client rules, agent/skill instructions (zero heavy deps) | [README](memory_orchestrator_mcp/README.md) · [CLAUDE](memory_orchestrator_mcp/CLAUDE.md) |
 
 ## Quickstart
 
 ```bash
-# 1. Ensure PostgreSQL 16 (+ pgvector + Apache AGE) is running
+# 1. Ensure PostgreSQL 16 (+ pgvector + pg_search) is running
 #    Default DSN: localhost:5433, user postgres, db memory_orchestrator
 
 # 2. Install and start the server
@@ -180,7 +180,5 @@ uv run python scripts/smoke_ingest.py
 
 ## Docs
 
-- AGE Graph Design: `docs/superpowers/specs/2026-05-11-apache-age-graph-reasoning-design.md`
-- AGE Graph Plan: `docs/superpowers/plans/2026-05-11-apache-age-graph-reasoning.md`
 - Knowledge Tree UI Design: `memory_orchestrator_server/docs/superpowers/specs/2026-05-14-knowledge-tree-ui-design.md`
 - Knowledge Tree UI Plan: `memory_orchestrator_server/docs/superpowers/plans/2026-05-14-knowledge-tree-ui.md`

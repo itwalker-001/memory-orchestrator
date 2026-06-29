@@ -14,7 +14,27 @@ _COOLDOWN_SEC = 300
 _MIN_TURNS = 1
 
 
-def _base_url() -> str:
+def _read_base_url(cwd: str) -> str | None:
+    try:
+        p = Path(cwd) / ".mcp.json"
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            url = (data.get("mcpServers", {})
+                       .get("memory-orchestrator", {})
+                       .get("env", {})
+                       .get("MO_HTTP_BASE_URL", ""))
+            if url:
+                return url.strip().rstrip("/")
+    except Exception:
+        pass
+    return None
+
+
+def _base_url(cwd: str = "") -> str:
+    if cwd:
+        from_mcp = _read_base_url(cwd)
+        if from_mcp:
+            return from_mcp
     if "--base-url" in sys.argv:
         idx = sys.argv.index("--base-url")
         if idx + 1 < len(sys.argv):
@@ -157,7 +177,7 @@ def main() -> int:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
-        f"{_base_url()}/ingest",
+        f"{_base_url(cwd)}/ingest",
         data=body,
         headers=headers,
         method="POST",

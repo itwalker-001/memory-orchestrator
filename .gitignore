@@ -26,6 +26,9 @@ build/
 # Environment secrets
 .env
 
+# 113 deployment archive (host-specific GPU config + secrets, never commit)
+deploy-113/
+
 # IDE
 .vscode/
 
@@ -40,3 +43,4 @@ mo-server.out.log
 
 # Vite cache
 memory_orchestrator_server/frontend/.vite/
+node_modules/*

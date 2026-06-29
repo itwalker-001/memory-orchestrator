@@ -30,7 +30,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "uv run --no-sync --project {project_dir}/memory_orchestrator_mcp python {project_dir}/memory_orchestrator_mcp/hooks/user_prompt_submit.py --client codex --base-url {base_url}"
+              "command": "uv run --no-sync --project {project_dir}/memory_orchestrator_mcp python {project_dir}/memory_orchestrator_mcp/hooks/user_prompt_submit.py --client codex"
             }
           ]
         }
@@ -40,7 +40,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "uv run --no-sync --project {project_dir}/memory_orchestrator_mcp python {project_dir}/memory_orchestrator_mcp/hooks/stop.py --client codex --base-url {base_url}"
+              "command": "uv run --no-sync --project {project_dir}/memory_orchestrator_mcp python {project_dir}/memory_orchestrator_mcp/hooks/stop.py --client codex"
             }
           ]
         }

@@ -49,8 +49,18 @@ services:
       MO_EXTRACTION_MODEL: ${MO_EXTRACTION_MODEL}
       MO_EXTRACTION_API_KEY: ${MO_EXTRACTION_API_KEY}
       MO_TOKEN_SECRET_KEY: ${MO_TOKEN_SECRET_KEY}
+      CUDA_VISIBLE_DEVICES: "0"
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
     volumes:
       - ${MO_MODELS_DIR}:/app/memory_orchestrator_server/models
+      - ${MO_NVIDIA_LIBCUDA:-/dev/null}:/usr/lib/x86_64-linux-gnu/libcuda.so.1:ro
+      - ${MO_NVIDIA_LIBNVML:-/dev/null}:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro
+      - ${MO_NVIDIA_LIBPTXJIT:-/dev/null}:/usr/lib/x86_64-linux-gnu/libnvidia-ptxjitcompiler.so.1:ro
+      - ${MO_NVIDIA_LIBNVVM:-/dev/null}:/usr/lib/x86_64-linux-gnu/libnvidia-nvvm.so.4:ro
     depends_on:
       db:
         condition: service_healthy

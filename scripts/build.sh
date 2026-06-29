@@ -47,6 +47,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 cd "$server_root"
+env_file="$repo_root/.env"
 
 # Build the mo-mcp client wheel and stage it under downloads/ so the server image
 # (Dockerfile `COPY . …`) bundles it; the Help page serves it via /api/downloads.
@@ -72,8 +73,32 @@ for file in $hash_files; do
   fi
 done
 
+requested_torch_index="${TORCH_INDEX:-}"
+if [ -z "$requested_torch_index" ] && [ -f "$env_file" ]; then
+  requested_torch_index="$(grep '^TORCH_INDEX=' "$env_file" | tail -n 1 | cut -d= -f2- || true)"
+fi
+requested_torch_index="${requested_torch_index:-auto}"
+case "$requested_torch_index" in
+  ""|auto)
+    if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+      TORCH_INDEX="cu124"
+    else
+      TORCH_INDEX="cpu"
+    fi
+    ;;
+  cpu|cu124)
+    TORCH_INDEX="$requested_torch_index"
+    ;;
+  *)
+    echo "unsupported TORCH_INDEX=$requested_torch_index (expected auto, cpu, or cu124)" >&2
+    exit 2
+    ;;
+esac
+export TORCH_INDEX
+echo "TORCH_INDEX=$TORCH_INDEX"
+
 hash="$(
-  sha256sum $hash_files \
+  { sha256sum $hash_files; printf 'TORCH_INDEX=%s\n' "$TORCH_INDEX"; } \
     | sha256sum \
     | awk '{print substr($1, 1, 12)}'
 )"
@@ -82,7 +107,12 @@ tag="${image}:${hash}"
 if [ "$force" -eq 0 ] && docker image inspect "$tag" >/dev/null 2>&1; then
   echo "Base image already exists: $tag"
 else
-  docker build -f Dockerfile.base -t "$tag" -t "${image}:latest" .
+  docker build \
+    --build-arg "TORCH_INDEX=$TORCH_INDEX" \
+    -f Dockerfile.base \
+    -t "$tag" \
+    -t "${image}:latest" \
+    .
 fi
 
 echo "MO_BASE_IMAGE=$tag"
@@ -105,7 +135,6 @@ fi
 echo "MO_DB_IMAGE=$db_tag"
 
 # Write computed image tags back to .env (upsert: replace if exists, append if missing)
-env_file="$repo_root/.env"
 set_env() {
   key="$1" val="$2"
   tmp="$(mktemp)"
@@ -148,10 +177,17 @@ esac
 mkdir -p "$pgdata"
 echo "Postgres data dir: $pgdata"
 
-compose_cmd="${COMPOSE_CMD:-docker-compose}"
 # --force also passes --no-cache to compose so the app layer is rebuilt without Docker cache
 compose_build_opts=""
 [ "$force" -eq 1 ] && compose_build_opts="--no-cache"
+
+if [ -n "${COMPOSE_CMD:-}" ]; then
+  compose_fn() { $COMPOSE_CMD "$@"; }
+elif docker compose version >/dev/null 2>&1; then
+  compose_fn() { docker compose "$@"; }
+else
+  compose_fn() { docker-compose "$@"; }
+fi
 echo "Deploying services with MO_BASE_IMAGE=$tag MO_DB_IMAGE=$db_tag"
 
 # wait_healthy <container> <max_seconds> <interval_seconds> <label>
@@ -184,36 +220,36 @@ wait_healthy() {
 # 1. Start (and build) the database
 #    NOTE: --no-cache is a `build` flag, not an `up` flag; only apply it to the
 #    explicit `build` step below (server). The db image is selected by hash tag.
-"$compose_cmd" --env-file "$env_file" up -d --build db
+compose_fn --env-file "$env_file" up -d --build db
 
 # 2. Wait for database to become healthy
-wait_healthy memory-orchestrator-db 90 1 "Database" || { "$compose_cmd" ps; exit 1; }
+wait_healthy memory-orchestrator-db 90 1 "Database" || { compose_fn ps; exit 1; }
 
 # 3. Build server image first — migrations run with the NEW code, not the previous image.
 #    CACHE_BUST forces the app layer to always recompile.
 cache_bust="$(date +%s)"
 # shellcheck disable=SC2086
-"$compose_cmd" --env-file "$env_file" build $compose_build_opts \
+compose_fn --env-file "$env_file" build $compose_build_opts \
   --build-arg "CACHE_BUST=${cache_bust}" \
   server
 
 # 4. Run database migrations using the freshly built image
 echo "Running database migrations..."
-"$compose_cmd" --env-file "$env_file" run --rm \
+compose_fn --env-file "$env_file" run --rm \
   server \
   sh -c "cd /app/memory_orchestrator_server && alembic upgrade head"
 
 # 5. Start server
-"$compose_cmd" --env-file "$env_file" up -d server
+compose_fn --env-file "$env_file" up -d server
 
 # 6. Wait for server healthy
-wait_healthy memory-orchestrator-server 450 2 "Service" || "$compose_cmd" ps
+wait_healthy memory-orchestrator-server 450 2 "Service" || compose_fn ps
 
 if [ "$skip_token" -eq 1 ]; then
   echo "Skipping token creation (--skip-token)."
 else
   token_output="$(
-    "$compose_cmd" exec -T server \
+    compose_fn exec -T server \
       mo-server token create --kind ui_admin --name "$admin_token_name"
   )"
   echo

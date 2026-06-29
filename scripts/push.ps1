@@ -20,6 +20,7 @@ param(
         Read-Host "Password for ${User}@${Server}"
     }),
     [string]$Remote   = "/opt/memory-orchestrator",
+    [string]$HostKey  = "",   # e.g. "SHA256:abc..." — bypasses host-key cache prompt
 
     [switch]$NoRebuild,
     [switch]$Force,
@@ -32,6 +33,9 @@ $TAR   = "$env:SystemRoot\System32\tar.exe"
 $PLINK = "C:\Program Files\PuTTY\plink.exe"
 $PSCP  = "C:\Program Files\PuTTY\pscp.exe"
 $LOCAL = Split-Path $PSScriptRoot -Parent
+
+$PlinkExtra = if ($HostKey) { @("-hostkey", $HostKey) } else { @() }
+$PscpExtra  = if ($HostKey) { @("-hostkey", $HostKey) } else { @() }
 
 Write-Host "=== Syncing source to ${User}@${Server}:${Remote} ==="
 
@@ -65,11 +69,12 @@ try {
     # Clear stale wheels on the remote before extracting: tar is additive, so an
     # older mo-mcp wheel left from a prior deploy would otherwise survive and get
     # listed alongside the current one on the Help page.
-    & $PLINK -pw $Password -batch "${User}@${Server}" `
+    & $PLINK @PlinkExtra -pw $Password -batch "${User}@${Server}" `
         "rm -f $Remote/memory_orchestrator_server/downloads/*.whl"
 
+    $hostKeyFlag = if ($HostKey) { " -hostkey `"$HostKey`"" } else { "" }
     $bat = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "mo-push-$(Get-Random).bat")
-    "@echo off`n`"$PLINK`" -batch -pw $Password ${User}@${Server} `"tar -xf - -C $Remote`" < `"$tmpTar`"" |
+    "@echo off`n`"$PLINK`"$hostKeyFlag -batch -pw $Password ${User}@${Server} `"tar -xf - -C $Remote`" < `"$tmpTar`"" |
         Out-File $bat -Encoding ASCII
     try {
         cmd /c $bat
@@ -92,9 +97,9 @@ $wheel = Get-ChildItem "$LOCAL\memory_orchestrator_mcp\dist\*.whl" -ErrorAction 
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($wheel) {
     Write-Host "  Uploading built wheel: $($wheel.Name)"
-    & $PLINK -pw $Password -batch "${User}@${Server}" `
+    & $PLINK @PlinkExtra -pw $Password -batch "${User}@${Server}" `
         "mkdir -p $Remote/memory_orchestrator_server/downloads"
-    & $PSCP -pw $Password -batch $wheel.FullName `
+    & $PSCP @PscpExtra -pw $Password -batch $wheel.FullName `
         "${User}@${Server}:$Remote/memory_orchestrator_server/downloads/"
     if ($LASTEXITCODE -ne 0) { throw "pscp wheel upload failed (exit $LASTEXITCODE)" }
 } else {
@@ -103,7 +108,7 @@ if ($wheel) {
 
 # Fix CRLF on all uploaded .sh files
 Write-Host "  Fixing line endings on remote .sh files..."
-& $PLINK -pw $Password -batch "${User}@${Server}" `
+& $PLINK @PlinkExtra -pw $Password -batch "${User}@${Server}" `
     "find $Remote/scripts -name '*.sh' -exec sed -i 's/\r//' {} \; && chmod +x $Remote/scripts/*.sh"
 
 if ($NoRebuild) {
@@ -118,5 +123,5 @@ $buildArgsStr = if ($buildArgs.Count -gt 0) { " " + ($buildArgs -join " ") } els
 
 Write-Host ""
 Write-Host "=== Rebuilding on server ==="
-& $PLINK -pw $Password -batch "${User}@${Server}" `
+& $PLINK @PlinkExtra -pw $Password -batch "${User}@${Server}" `
     "cd $Remote && ./scripts/build.sh$buildArgsStr"
