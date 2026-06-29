@@ -28,8 +28,11 @@ uv run pytest
 
 # --- Wire a project (run from the project directory) ---
 # Create a project_token first via UI: http://localhost:8765/ui → Admin → Tokens
-mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>               # Claude Code
+mo-mcp setup --global-only --base-url http://127.0.0.1:8765          # global hooks + skill only (one-time)
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>               # Claude Code (full)
 mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token> --client codex  # Codex
+mo-mcp setup --skill-only                                             # re-sync skill only
+mo-mcp update                                                         # download + install latest from server
 mo-mcp doctor
 
 # --- MCP client package (run from memory_orchestrator_mcp/) ---
@@ -63,20 +66,20 @@ memory_orchestrator_server  (FastAPI + PostgreSQL + ML)
 
 ```
 UserPromptSubmit hook  →  GET /context        →  repo.build_context()  →  inject markdown
-Stop hook              →  POST /hooks/ingest  →  ingestor.py           →  LLM extract → repo.save()
+Stop hook              →  POST /ingest        →  ingestor.py           →  LLM extract → repo.save()
 Claude/Codex MCP call  →  stdio MCP (mo-mcp)  →  POST /mcp/tools/call  →  repo.*()
 ```
 
 ### Server router layout
 
 ```
-/healthz  /context  /hooks/ingest   →  routers/hooks.py
+/healthz  /context  /stats  /ingest   →  routers/hooks.py
 /mcp/tools/*  /mcp/resources/*      →  routers/mcp.py   →  mcp_core.py
 /ui/*  /api/*                       →  routers/ui.py
                                             │
                                       repository.py
                                             │
-                              PostgreSQL + pgvector + Apache AGE
+                              PostgreSQL + pgvector + pg_search (BM25)
 ```
 
 → Module detail: [`memory_orchestrator_server/CLAUDE.md § Key modules`](memory_orchestrator_server/CLAUDE.md)
@@ -125,8 +128,12 @@ Editable at `/ui` → Settings without restart.
 | `embed_dim` | Embedding vector dimension (default: 1024) |
 | `rerank_enabled` | Enable BGE reranker after vector search |
 | `rerank_model` | HuggingFace reranker model path |
-| `graph_enabled` | Enable Apache AGE graph reasoning |
-| `graph_hop_depth` | Max hops in graph traversal |
+| `score_rerank_blend` | Blend weight between rerank score and hybrid score |
+| `bm25_enabled` | Enable BM25 (pg_search + jieba) keyword recall, fused into hybrid score |
+| `score_bm25_weight` | Weight of the min-max-normalized BM25 score in fusion |
+| `score_cosine_weight` / `score_importance_weight` / `score_recency_weight` | Hybrid score weights (cosine + importance + recency) |
+| `score_recency_half_life` | Recency decay half-life in days (default: 60) |
+| `score_type_feedback` / `score_type_project` / `score_type_user` / `score_type_reference` | Per-type score multipliers |
 
 ## Tests
 
@@ -146,7 +153,7 @@ Override test DB: `MO_TEST_DB_DSN=postgresql+asyncpg://...`
 
 ## Database
 
-PostgreSQL 16 + pgvector + Apache AGE on port 5433.
+PostgreSQL 16 + pgvector + pg_search (BM25) on port 5433.
 
 ```bash
 # Local dev — after creating DB and enabling extensions:
@@ -168,7 +175,7 @@ Root-level Docker files and the compose entry point:
 |---|---|
 | `docker-compose.yml` | Compose file for `db`, `migrate`, `server` |
 | `.env` | Compose environment file |
-| `Dockerfile.db` | pgvector PostgreSQL 16 + Apache AGE image |
+| `Dockerfile.db` | ParadeDB PostgreSQL 16 (pgvector + pg_search/BM25) image |
 | `scripts/build.sh` | Full deployment entrypoint |
 | `memory_orchestrator_server/Dockerfile.base` | Heavy base: apt deps, Python deps, BGE models |
 | `memory_orchestrator_server/Dockerfile` | App image: frontend build, source, entry points |
