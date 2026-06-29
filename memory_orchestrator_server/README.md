@@ -6,7 +6,7 @@ for Claude Code and Codex via HTTP API, MCP bridge, and a web UI.
 ## Requirements
 
 - Python ≥ 3.11
-- PostgreSQL 16 with `pgvector` and `Apache AGE` extensions
+- PostgreSQL 16 with `pgvector` and `pg_search` (BM25) extensions
 - `uv` package manager
 
 ## Installation
@@ -55,13 +55,16 @@ Server starts on `http://127.0.0.1:8765` by default.
 Create a `project_token` via the UI at `http://127.0.0.1:8765/ui` (Admin → Tokens), then run from the project directory:
 
 ```bash
-# Claude Code
-mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>
+# One-time global setup (hooks + skill, no token needed)
+mo-mcp setup --global-only --base-url http://127.0.0.1:8765
+
+# Per-project: register .mcp.json with project token
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token>            # Claude Code
+mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token> --client codex  # Codex
 mo-mcp doctor
 
-# Codex
-mo-mcp setup --base-url http://127.0.0.1:8765 --project-token <token> --client codex
-mo-mcp doctor
+# Update client to the latest version from server
+mo-mcp update
 ```
 
 ## Configuration
@@ -82,8 +85,8 @@ Environment variables prefixed `MO_`, or a `.env` file next to the server direct
 | `MO_LOG_LEVEL` | `DEBUG` | Python log level |
 | `MO_LOG_DIR` | `./logs` | Rotating log file directory |
 
-Runtime parameters (search weights, cooldown, graph depth, etc.) are stored in the
-`system_settings` table and can be changed via the UI without restarting the server.
+Runtime parameters (hybrid score weights, BM25 toggle/weight, cooldown, rerank toggle, etc.)
+are stored in the `system_settings` table and can be changed via the UI without restarting the server.
 
 ## Authentication
 
@@ -108,7 +111,9 @@ Set `MO_UI_TOKEN` / `MO_MCP_TOKEN` as env vars to bypass the DB token check duri
 |---|---|---|---|
 | `GET` | `/healthz` | none | Liveness check |
 | `GET` | `/context` | none | Fetch memory context for a project (used by hooks) |
-| `POST` | `/hooks/ingest` | none | Trigger session transcript ingestion |
+| `POST` | `/ingest` | none | Trigger session transcript ingestion |
+| `GET` | `/api/mcp-package` | none | Latest MCP client version info (filename, size) |
+| `GET` | `/api/mcp-package/wheel` | none | Download latest MCP client wheel |
 | `POST` | `/mcp/tools/call` | `project_token` | MCP tool call |
 | `POST` | `/mcp/resources/read` | `project_token` | MCP resource read |
 | `GET` | `/api/memories` | `ui_admin` | List/search memories |
