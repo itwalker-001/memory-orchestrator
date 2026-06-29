@@ -25,9 +25,17 @@ uv sync
 
 Via the server UI at `http://<server>:8765/ui` → Admin → Tokens (select kind `project_token` and bind to a project), or call `POST /api/register` (localhost-only, no auth required).
 
-### 2. Configure the current project
+### 2. Global one-time setup (hooks + skill)
 
-Run from the project root directory:
+Run once — installs hooks and skill globally, no token needed:
+
+```bash
+mo-mcp setup --global-only --base-url http://<server>:8765
+```
+
+### 3. Per-project: register token
+
+Run from each project root to write `.mcp.json`:
 
 ```bash
 # Claude Code
@@ -35,21 +43,28 @@ mo-mcp setup --base-url http://<server>:8765 --project-token <TOKEN>
 
 # Codex
 mo-mcp setup --client codex --base-url http://<server>:8765 --project-token <TOKEN>
-
-# Without flags — interactive prompts
-mo-mcp setup
 ```
 
-### 3. Verify
+### 4. Verify
 
 ```bash
 mo-mcp doctor
 ```
 
+### Update (self-upgrade)
+
+Download and install the latest version from the server, then sync skill files:
+
+```bash
+mo-mcp update
+```
+
+No config is touched — only the package and skill files are updated.
+
 ### Teardown
 
 ```bash
-mo-mcp teardown               # Claude (default)
+mo-mcp teardown               # Claude (default) — removes global hooks, skill, project .mcp.json
 mo-mcp teardown --client codex
 ```
 
@@ -57,11 +72,15 @@ mo-mcp teardown --client codex
 
 ### Claude Code (`--client claude`)
 
+Full setup (`--base-url` + `--project-token`):
+
 | Location | Content |
 |---|---|
 | `<project>/.mcp.json` | MCP server entry + `MO_MCP_TOKEN`, `MO_HTTP_BASE_URL` (add to `.gitignore`) |
-| `<project>/.claude/settings.json` | `UserPromptSubmit` + `Stop` hooks |
-| `<project>/.claude/skills/memory-orchestrator/SKILL.md` | Memory tool usage guide |
+| `~/.claude/settings.json` | `UserPromptSubmit` + `Stop` hooks (global) |
+| `~/.claude/skills/memory-orchestrator/` | Memory tool usage guide (global) |
+
+`--global-only` skips `.mcp.json`; installs only hooks and skill (no token needed).
 
 `claude mcp add --scope project -e MO_MCP_TOKEN=... -e MO_HTTP_BASE_URL=...` writes `.mcp.json`.
 
